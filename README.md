@@ -14,9 +14,9 @@ YYReader 是一款以正文为中心的原生 macOS 小说阅读器。粘贴小�
 
 ## 安装 v1.0.0
 
-YYReader 1.0.0 仅支持 Apple 芯片和 macOS 15 或更高版本。
+YYReader 1.0.0 支持 Apple 芯片和 Intel Mac，要求 macOS 15 或更高版本。
 
-1. 从 [GitHub Releases](https://github.com/YangChen-cn/YYReader/releases/latest) 下载 `YYReader-1.0.0-arm64.dmg`。
+1. 从 [GitHub Releases](https://github.com/YangChen-cn/YYReader/releases/latest) 下载对应架构的 DMG：Apple 芯片选择 `YYReader-1.0.0-arm64.dmg`，Intel Mac 选择 `YYReader-1.0.0-x86_64.dmg`。
 2. 打开 DMG，将 `YYReader` 拖入 `Applications`。
 3. 本版本使用 ad-hoc 签名且未经过 Apple 公证；首次启动时请在 Finder 中右键应用并选择“打开”，再确认启动。
 
@@ -58,7 +58,7 @@ xcodebuild test \
   -derivedDataPath DerivedData
 ```
 
-生成 ad-hoc 签名的 arm64 Release、ZIP 和 DMG：
+生成 ad-hoc 签名的 arm64 和 Intel x86_64 Release DMG：
 
 ```bash
 ./script/package_release.sh
@@ -66,11 +66,10 @@ xcodebuild test \
 
 产物位于：
 
-- `dist/YYReader.app`
-- `dist/YYReader-1.0.0-arm64.zip`
 - `dist/YYReader-1.0.0-arm64.dmg`
+- `dist/YYReader-1.0.0-x86_64.dmg`
 
-构建脚本会移除调试记录和绝对 RPATH，并检查 App 与 DMG 内不包含开发机 `/Users/...` 路径。
+构建脚本会分别编译两个架构，移除调试记录和绝对 RPATH，并检查挂载后的 DMG 内不包含开发机 `/Users/...` 路径。发布产物只包含 DMG，不生成 ZIP。
 
 ## 技术结构
 

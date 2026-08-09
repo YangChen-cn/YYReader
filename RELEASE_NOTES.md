@@ -1,6 +1,6 @@
 # YYReader 1.0.0
 
-首个公开版本。YYReader 是一款仅面向 Apple 芯片、以正文为中心的原生 macOS 小说阅读器。
+首个公开版本。YYReader 是一款支持 Apple 芯片和 Intel Mac、以正文为中心的原生 macOS 小说阅读器。
 
 ## 主要功能
 
@@ -30,7 +30,7 @@
 ## 系统要求与安装说明
 
 - macOS 15.0 或更高版本。
-- Apple 芯片 Mac，仅提供 arm64 构建。
+- Apple 芯片 Mac 使用 arm64 构建，Intel Mac 使用 x86_64 构建。
 - 本版本使用 ad-hoc 签名，未经过 Apple Developer ID 签名或公证。首次启动时可能需要在 Finder 中右键 YYReader 并选择“打开”。
 
 ## 已知限制
