@@ -13,7 +13,11 @@ struct BookSidebarView: View {
         .listStyle(.sidebar)
         .navigationTitle("书架")
         .onChange(of: store.selectedBookID) { _, newValue in
-            store.selectBook(newValue)
+            Task { @MainActor in
+                await Task.yield()
+                guard store.selectedBookID == newValue else { return }
+                store.selectBook(newValue)
+            }
         }
         .overlay {
             if store.books.isEmpty {

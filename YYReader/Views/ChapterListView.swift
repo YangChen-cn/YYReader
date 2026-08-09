@@ -18,7 +18,11 @@ struct ChapterListView: View {
         .navigationTitle(store.selectedBook?.title ?? "目录")
         .searchable(text: $searchText, prompt: "搜索章节")
         .onChange(of: store.selectedChapterID) { _, newValue in
-            store.selectChapter(newValue)
+            Task { @MainActor in
+                await Task.yield()
+                guard store.selectedChapterID == newValue else { return }
+                store.selectChapter(newValue)
+            }
         }
         .overlay {
             if store.selectedBook == nil {

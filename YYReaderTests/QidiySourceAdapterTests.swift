@@ -38,7 +38,30 @@ struct QidiySourceAdapterTests {
 
         #expect(catalog.title == "测试小说")
         #expect(catalog.author == "测试作者")
-        #expect(catalog.chapters.map(\.sortIndex) == [1, 2, 4])
+        #expect(catalog.chapters.map(\.sortIndex) == [1, 2])
         #expect(catalog.nextPageURL?.absoluteString == "https://www.qidiy.com/book/100_2/")
+    }
+
+    @Test
+    func preservesCatalogOrderWhenExtraChaptersRestartAtOne() throws {
+        let url = try #require(URL(string: "https://www.qidiy.com/book/100_2/"))
+        let document = LoadedHTML(
+            requestedURL: url,
+            finalURL: url,
+            html: """
+                <h1>测试小说</h1><p>作者：测试作者</p>
+                <ul class="section-list">
+                    <li><a href="/book/100/20.html">第20章 正文结尾</a></li>
+                    <li><a href="/book/100/extra-1.html">第1章 番外开始</a></li>
+                    <li><a href="/book/100/extra-2.html">第2章 番外继续</a></li>
+                </ul>
+                """,
+            retrievalKind: .urlSession
+        )
+
+        let catalog = try adapter.parseCatalogPage(document)
+
+        #expect(catalog.chapters.map(\.title) == ["第20章 正文结尾", "第1章 番外开始", "第2章 番外继续"])
+        #expect(catalog.chapters.map(\.sortIndex) == [1, 2, 3])
     }
 }

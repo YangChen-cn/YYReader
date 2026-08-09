@@ -66,6 +66,7 @@
 		EB3FB3B318FABA961EEAFB48 /* MockHTMLLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A84805A6C3E6F8B7D1A31E1A /* MockHTMLLoader.swift */; };
 		ECB480AE20FB7F05887E9B93 /* YYReaderUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58D088BCD41C64F65513CCF /* YYReaderUITests.swift */; };
 		EFF2EDE24E5FCB974A3AE051 /* NovelParserRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6199C6EE07E4B8E958A72431 /* NovelParserRegistry.swift */; };
+		F01DFEDC5F5467EBD4C160AE /* LibraryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CE1ABD9F8C197D6EBAFE21F /* LibraryStoreTests.swift */; };
 		F4DD90DCB55EB006E7D3A609 /* HTMLParsingSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99E73C0A377606B7AE3D2441 /* HTMLParsingSupport.swift */; };
 		F68A7482CDF738D05A945712 /* GenericNovelAdapterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D0924EC2E290CCE9F260E5C /* GenericNovelAdapterTests.swift */; };
 		F711029E67DE635F87ABB740 /* NovelImportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3787AFBE8EAC539387F397DA /* NovelImportCoordinator.swift */; };
@@ -128,6 +129,7 @@
 		78AF145EE46E35499D1F81E3 /* YYReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YYReaderApp.swift; sourceTree = "<group>"; };
 		7D0924EC2E290CCE9F260E5C /* GenericNovelAdapterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenericNovelAdapterTests.swift; sourceTree = "<group>"; };
 		8082FDBBCD83433CA69E01B1 /* WebVerificationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebVerificationSheet.swift; sourceTree = "<group>"; };
+		8CE1ABD9F8C197D6EBAFE21F /* LibraryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStoreTests.swift; sourceTree = "<group>"; };
 		8D2E26E4BA7E1FFC85D45EDC /* ReaderFontFamily.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderFontFamily.swift; sourceTree = "<group>"; };
 		8EF1291F4E27B8B4FE509C2E /* BookSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookSidebarView.swift; sourceTree = "<group>"; };
 		8F23556879F40202C55A5AE2 /* QidiySourceAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QidiySourceAdapter.swift; sourceTree = "<group>"; };
@@ -330,6 +332,7 @@
 				7D0924EC2E290CCE9F260E5C /* GenericNovelAdapterTests.swift */,
 				D0D3F63E9E08B35BA3ACB1BD /* HostRateLimiterTests.swift */,
 				766B2107CD7A9B981E5514CB /* HybridHTMLLoaderTests.swift */,
+				8CE1ABD9F8C197D6EBAFE21F /* LibraryStoreTests.swift */,
 				A84805A6C3E6F8B7D1A31E1A /* MockHTMLLoader.swift */,
 				CBF8749F98DE0A2712F05A9D /* NovelImportCoordinatorTests.swift */,
 				1C5A87FBAE440CB90C20C7D6 /* PersistenceTests.swift */,
@@ -469,6 +472,7 @@
 				F68A7482CDF738D05A945712 /* GenericNovelAdapterTests.swift in Sources */,
 				93A7A3D4FD59AAACA61D7F81 /* HostRateLimiterTests.swift in Sources */,
 				E74DEFD9BA19EB08A1F270C6 /* HybridHTMLLoaderTests.swift in Sources */,
+				F01DFEDC5F5467EBD4C160AE /* LibraryStoreTests.swift in Sources */,
 				EB3FB3B318FABA961EEAFB48 /* MockHTMLLoader.swift in Sources */,
 				3EB8F85FEFE6756D0F74B607 /* NovelImportCoordinatorTests.swift in Sources */,
 				004D8A78B0B7231D2B0AE54E /* PersistenceTests.swift in Sources */,

@@ -61,7 +61,7 @@ struct NovelImportCoordinatorTests {
 
         #expect(result.bookTitle == "测试小说")
         #expect(result.author == "测试作者")
-        #expect(result.catalog.map(\.sortIndex) == [1, 2, 4])
+        #expect(result.catalog.map(\.sortIndex) == [1, 2])
         #expect(!result.catalogIsComplete)
         #expect(result.bodyText.contains("第一段测试文字。"))
         #expect(result.bodyText.contains("第四段测试文字。"))
@@ -92,6 +92,38 @@ struct NovelImportCoordinatorTests {
         #expect(result.bodyText == "已经成功取得的当前章节正文。")
         #expect(result.catalog.map(\.url) == [chapter])
         #expect(!result.catalogIsComplete)
+    }
+
+    @Test
+    func fullCatalogAssignsGlobalOrderWhenExtrasRestartChapterNumbers() async throws {
+        let catalog1 = try #require(URL(string: "https://www.qidiy.com/book/200/"))
+        let catalog2 = try #require(URL(string: "https://www.qidiy.com/book/200_2/"))
+        let loader = MockHTMLLoader(documents: [
+            catalog1: """
+                <h1>长篇测试</h1><p>作者：测试作者</p>
+                <ul class="section-list">
+                    <li><a href="/book/200/1.html">第1章 正文一</a></li>
+                    <li><a href="/book/200/2.html">第2章 正文二</a></li>
+                </ul>
+                <a href="/book/200_2/">下一页</a>
+                """,
+            catalog2: """
+                <h1>长篇测试</h1><p>作者：测试作者</p>
+                <ul class="section-list">
+                    <li><a href="/book/200/3.html">第3章 正文三</a></li>
+                    <li><a href="/book/200/extra-1.html">第1章 番外一</a></li>
+                    <li><a href="/book/200/extra-2.html">第2章 番外二</a></li>
+                </ul>
+                """
+        ])
+        let coordinator = NovelImportCoordinator(loader: loader)
+
+        let catalog = try await coordinator.refreshCatalog(from: catalog1)
+
+        #expect(catalog.chapters.map(\.title) == [
+            "第1章 正文一", "第2章 正文二", "第3章 正文三", "第1章 番外一", "第2章 番外二"
+        ])
+        #expect(catalog.chapters.map(\.sortIndex) == [1, 2, 3, 4, 5])
     }
 
     @Test

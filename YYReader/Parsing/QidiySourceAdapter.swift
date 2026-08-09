@@ -80,18 +80,10 @@ struct QidiySourceAdapter: NovelSourceAdapter {
             .map { HTMLParsingSupport.replacingRegex("^作者[：:]\\s*", in: $0, with: "") }
             ?? "未知作者"
 
-        var seen = Set<String>()
-        var chapters: [ChapterSeed] = []
-        for anchor in try document.select("ul.section-list a").array() {
-            let chapterTitle = try anchor.text().trimmingCharacters(in: .whitespacesAndNewlines)
-            guard chapterTitle.range(of: "第.+[章回节]", options: .regularExpression) != nil,
-                  let url = HTMLParsingSupport.absoluteURL(for: anchor, relativeTo: loaded.finalURL),
-                  seen.insert(url.absoluteString).inserted else {
-                continue
-            }
-            let index = HTMLParsingSupport.chapterNumber(in: chapterTitle) ?? (chapters.count + 1)
-            chapters.append(ChapterSeed(title: chapterTitle, url: url, sortIndex: index))
-        }
+        let catalogSections = try document.select("ul.section-list").array()
+            .map { try chapterSeeds(in: $0, baseURL: loaded.finalURL) }
+            .filter { !$0.isEmpty }
+        let chapters = catalogSections.max(by: isLessLikelyCatalogSection) ?? []
 
         let nextPage = try HTMLParsingSupport.link(
             in: document,
@@ -102,12 +94,34 @@ struct QidiySourceAdapter: NovelSourceAdapter {
         return ParsedBookCatalog(
             title: title,
             author: author,
-            chapters: chapters.sorted { lhs, rhs in
-                if lhs.sortIndex == rhs.sortIndex { lhs.url.absoluteString < rhs.url.absoluteString }
-                else { lhs.sortIndex < rhs.sortIndex }
-            },
+            chapters: chapters,
             nextPageURL: nextPage
         )
+    }
+
+    private func chapterSeeds(in section: Element, baseURL: URL) throws -> [ChapterSeed] {
+        var seen = Set<String>()
+        var chapters: [ChapterSeed] = []
+        for anchor in try section.select("a").array() {
+            let chapterTitle = try anchor.text().trimmingCharacters(in: .whitespacesAndNewlines)
+            guard chapterTitle.range(of: "第.+[章回节]", options: .regularExpression) != nil,
+                  let url = HTMLParsingSupport.absoluteURL(for: anchor, relativeTo: baseURL),
+                  seen.insert(url.absoluteString).inserted else {
+                continue
+            }
+            // Volumes such as extras can restart their displayed chapter number at 1.
+            // The catalog's DOM order is the only unambiguous order within a page.
+            let index = chapters.count + 1
+            chapters.append(ChapterSeed(title: chapterTitle, url: url, sortIndex: index))
+        }
+        return chapters
+    }
+
+    private func isLessLikelyCatalogSection(_ lhs: [ChapterSeed], _ rhs: [ChapterSeed]) -> Bool {
+        if lhs.count != rhs.count { return lhs.count < rhs.count }
+        let lhsFirst = lhs.compactMap { HTMLParsingSupport.chapterNumber(in: $0.title) }.min() ?? .max
+        let rhsFirst = rhs.compactMap { HTMLParsingSupport.chapterNumber(in: $0.title) }.min() ?? .max
+        return lhsFirst > rhsFirst
     }
 
     private func cleanChapterParagraphs(_ paragraphs: [String], title: String) -> [String] {

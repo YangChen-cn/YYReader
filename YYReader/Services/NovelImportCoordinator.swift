@@ -122,13 +122,14 @@ final class NovelImportCoordinator {
             nextURL = page.nextPageURL
         }
 
+        let orderedChapters = allChapters.enumerated().map { offset, seed in
+            ChapterSeed(title: seed.title, url: seed.url, sortIndex: offset + 1)
+        }
+
         return ParsedBookCatalog(
             title: bookTitle,
             author: author,
-            chapters: allChapters.sorted { lhs, rhs in
-                if lhs.sortIndex == rhs.sortIndex { lhs.url.absoluteString < rhs.url.absoluteString }
-                else { lhs.sortIndex < rhs.sortIndex }
-            },
+            chapters: orderedChapters,
             nextPageURL: nil
         )
     }

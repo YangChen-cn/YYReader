@@ -55,11 +55,12 @@ final class LibraryStore {
     }
 
     func selectChapter(_ id: UUID?) {
+        prefetchTask?.cancel()
+        prefetchTask = nil
         selectedChapterID = id
         guard let chapter = selectedChapter else { return }
         selectedBook?.currentChapterID = chapter.id
         try? modelContext.save()
-        Task { await ensureChapterLoaded(chapter) }
     }
 
     func startImportURL(_ input: String) {
@@ -143,7 +144,38 @@ final class LibraryStore {
 
     private func refreshBooks() {
         let descriptor = FetchDescriptor<Book>(sortBy: [SortDescriptor(\Book.updatedAt, order: .reverse)])
-        books = (try? modelContext.fetch(descriptor)) ?? []
+        let fetchedBooks = (try? modelContext.fetch(descriptor)) ?? []
+        var removedLegacyEntries = false
+        for book in fetchedBooks where removeLegacyLatestChapterEntries(from: book) {
+            removedLegacyEntries = true
+        }
+        if removedLegacyEntries { try? modelContext.save() }
+        books = fetchedBooks
+    }
+
+    private func removeLegacyLatestChapterEntries(from book: Book) -> Bool {
+        let ordered = book.chapters.sorted { $0.sortIndex < $1.sortIndex }
+        guard ordered.count >= 11, ordered.first?.sortIndex == 1 else { return false }
+
+        var prefixEnd = 1
+        for chapter in ordered.dropFirst() {
+            guard chapter.sortIndex == prefixEnd + 1 else { break }
+            prefixEnd = chapter.sortIndex
+        }
+
+        let tail = ordered.filter { $0.sortIndex > prefixEnd }
+        guard prefixEnd >= 10,
+              (5...20).contains(tail.count),
+              let firstTail = tail.first,
+              firstTail.sortIndex > prefixEnd + 20,
+              tail.allSatisfy({ !$0.isCached && $0.id != book.currentChapterID }) else {
+            return false
+        }
+
+        let tailIDs = Set(tail.map(\.id))
+        book.chapters.removeAll { tailIDs.contains($0.id) }
+        for chapter in tail { modelContext.delete(chapter) }
+        return true
     }
 
     private func ensureChapterLoaded(_ chapter: Chapter) async {
@@ -221,7 +253,9 @@ final class LibraryStore {
 
         book.title = result.bookTitle
         book.author = result.author
-        book.catalogFetchedAt = result.catalogIsComplete ? .now : nil
+        // The initial catalog page is a successful refresh even when more pages exist.
+        // Recording it prevents book selection from immediately downloading the full catalog.
+        book.catalogFetchedAt = .now
         book.updatedAt = .now
         upsertCatalog(
             ParsedBookCatalog(title: result.bookTitle, author: result.author, chapters: result.catalog, nextPageURL: nil),
@@ -233,7 +267,9 @@ final class LibraryStore {
             ?? Chapter(
                 sourceURL: source,
                 title: result.chapterTitle,
-                sortIndex: HTMLParsingSupport.chapterNumber(in: result.chapterTitle) ?? book.chapters.count + 1,
+                // A separately imported extra may also be titled "第1章". Until a full
+                // catalog refresh supplies its exact position, keep it after known entries.
+                sortIndex: (book.chapters.map(\.sortIndex).max() ?? 0) + 1,
                 book: nil
             )
         if chapter.modelContext == nil {
@@ -290,7 +326,6 @@ final class LibraryStore {
         let preferred = preferredID.flatMap { id in book.chapters.first { $0.id == id } }
         let current = book.currentChapterID.flatMap { id in book.chapters.first { $0.id == id } }
         selectedChapterID = (preferred ?? current ?? book.chapters.min { $0.sortIndex < $1.sortIndex })?.id
-        if let chapter = selectedChapter { Task { await ensureChapterLoaded(chapter) } }
     }
 
     private func normalizedURL(from input: String) -> URL? {
