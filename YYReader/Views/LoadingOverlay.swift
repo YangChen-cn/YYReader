@@ -10,7 +10,7 @@ struct LoadingOverlay: View {
             Text(message)
                 .font(.headline)
             if let onCancel {
-                Button("停止导入", role: .cancel, action: onCancel)
+                Button("停止操作", role: .cancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
             }
         }

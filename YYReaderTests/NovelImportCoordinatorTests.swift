@@ -68,8 +68,12 @@ struct NovelImportCoordinatorTests {
         #expect(!result.bodyText.contains("第1/2页"))
         #expect(result.nextChapterURL?.absoluteString == "https://www.qidiy.com/book/100/2.html")
 
-        let refreshed = try await coordinator.refreshCatalog(from: catalog1)
+        var startedPages: [Int] = []
+        let refreshed = try await coordinator.refreshCatalog(from: catalog1) { pageNumber in
+            startedPages.append(pageNumber)
+        }
         #expect(refreshed.chapters.map(\.sortIndex) == [1, 2, 3, 4])
+        #expect(startedPages == [1, 2])
     }
 
     @Test
@@ -138,6 +142,35 @@ struct NovelImportCoordinatorTests {
 
         await #expect(throws: NovelParsingError.self) {
             try await coordinator.loadChapterContent(from: chapter)
+        }
+    }
+
+    @Test
+    func catalogRefreshStopsAfterOverallDeadline() async throws {
+        let catalog = try #require(URL(string: "https://www.qidiy.com/book/400/"))
+        let loader = MockHTMLLoader(
+            documents: [
+                catalog: """
+                    <h1>超时测试</h1><p>作者：测试作者</p>
+                    <ul class="section-list">
+                        <li><a href="/book/400/1.html">第1章 测试</a></li>
+                    </ul>
+                    """
+            ],
+            delay: .milliseconds(30)
+        )
+        let coordinator = NovelImportCoordinator(
+            loader: loader,
+            catalogRefreshTimeout: .milliseconds(10)
+        )
+
+        do {
+            _ = try await coordinator.refreshCatalog(from: catalog)
+            Issue.record("目录刷新超过截止时间后应抛出超时错误")
+        } catch NovelParsingError.catalogRefreshTimedOut {
+            // Expected.
+        } catch {
+            Issue.record("收到非预期错误：\(error)")
         }
     }
 }

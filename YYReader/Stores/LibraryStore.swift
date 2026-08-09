@@ -9,6 +9,7 @@ final class LibraryStore {
     private let coordinator: NovelImportCoordinator
     private var prefetchTask: Task<Void, Never>?
     private var importTask: Task<Void, Never>?
+    private var catalogRefreshTask: Task<Void, Never>?
 
     private(set) var books: [Book] = []
     var selectedBookID: UUID?
@@ -38,7 +39,7 @@ final class LibraryStore {
         } ?? []
     }
 
-    var canCancelLoading: Bool { importTask != nil }
+    var canCancelLoading: Bool { importTask != nil || catalogRefreshTask != nil }
 
     func restoreSelection(bookID: UUID?, chapterID: UUID?) {
         selectedBookID = books.contains { $0.id == bookID } ? bookID : books.first?.id
@@ -50,7 +51,7 @@ final class LibraryStore {
         selectInitialChapter(preferredID: nil)
         if let book = selectedBook,
            book.catalogFetchedAt.map({ Date.now.timeIntervalSince($0) > 21_600 }) ?? true {
-            Task { await refreshSelectedCatalog() }
+            startRefreshSelectedCatalog()
         }
     }
 
@@ -75,6 +76,8 @@ final class LibraryStore {
     func cancelLoading() {
         importTask?.cancel()
         importTask = nil
+        catalogRefreshTask?.cancel()
+        catalogRefreshTask = nil
     }
 
     private func importURL(_ input: String) async {
@@ -94,7 +97,9 @@ final class LibraryStore {
     func refreshSelectedCatalog() async {
         guard let book = selectedBook, let url = URL(string: book.catalogURL) else { return }
         await performLoading("正在刷新目录…") {
-            let catalog = try await coordinator.refreshCatalog(from: url)
+            let catalog = try await coordinator.refreshCatalog(from: url) { [weak self] pageNumber in
+                self?.loadingMessage = "正在刷新目录…（第 \(pageNumber) 页）"
+            }
             upsertCatalog(catalog, into: book)
             book.title = catalog.title
             book.author = catalog.author
@@ -102,6 +107,15 @@ final class LibraryStore {
             book.updatedAt = .now
             try modelContext.save()
             refreshBooks()
+        }
+    }
+
+    func startRefreshSelectedCatalog() {
+        guard !isLoading else { return }
+        catalogRefreshTask = Task { [weak self] in
+            guard let self else { return }
+            await refreshSelectedCatalog()
+            catalogRefreshTask = nil
         }
     }
 

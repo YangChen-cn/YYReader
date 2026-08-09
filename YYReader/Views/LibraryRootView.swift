@@ -69,5 +69,5 @@ struct LibraryRootView: View {
     private func showAddURL() { showingAddURL = true }
     private func confirmDelete() { confirmingDelete = true }
     private func toggleAppearance() { showingAppearance.toggle() }
-    private func refreshCatalog() { Task { await store.refreshSelectedCatalog() } }
+    private func refreshCatalog() { store.startRefreshSelectedCatalog() }
 }

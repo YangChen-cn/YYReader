@@ -7,6 +7,7 @@ import Observation
 final class WebKitHostSession: NSObject {
     let host: String
     let webView: WKWebView
+    private let loadTimeout: Duration
     private(set) var status = "等待浏览器请求…"
     private(set) var failureMessage: String?
 
@@ -21,12 +22,24 @@ final class WebKitHostSession: NSObject {
     private var activeLoad: QueuedLoad?
     @ObservationIgnored
     private var activeNavigation: WKNavigation?
+    @ObservationIgnored
+    private var activeTimeoutTask: Task<Void, Never>?
 
-    init(host: String, websiteDataStore: WKWebsiteDataStore = .default()) {
+    init(
+        host: String,
+        websiteDataStore: WKWebsiteDataStore = .default(),
+        loadTimeout: Duration = .seconds(30),
+        webView suppliedWebView: WKWebView? = nil
+    ) {
         self.host = host.lowercased()
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = websiteDataStore
-        webView = WKWebView(frame: .zero, configuration: configuration)
+        self.loadTimeout = loadTimeout
+        if let suppliedWebView {
+            webView = suppliedWebView
+        } else {
+            let configuration = WKWebViewConfiguration()
+            configuration.websiteDataStore = websiteDataStore
+            webView = WKWebView(frame: .zero, configuration: configuration)
+        }
         super.init()
         webView.navigationDelegate = self
     }
@@ -50,12 +63,14 @@ final class WebKitHostSession: NSObject {
         status = "正在重新载入验证页面…"
         if let url = activeLoad?.url {
             activeNavigation = webView.load(URLRequest(url: url))
+            scheduleTimeout(for: activeLoad?.id)
         }
     }
 
     func cancelCurrentLoad() {
         guard let activeLoad else { return }
         webView.stopLoading()
+        cancelActiveTimeout()
         self.activeLoad = nil
         activeNavigation = nil
         activeLoad.continuation.resume(throwing: HTMLLoadError.cancelled)
@@ -65,6 +80,7 @@ final class WebKitHostSession: NSObject {
     func failCurrentLoad(_ error: any Error) {
         guard let activeLoad else { return }
         webView.stopLoading()
+        cancelActiveTimeout()
         self.activeLoad = nil
         activeNavigation = nil
         failureMessage = error.localizedDescription
@@ -79,6 +95,7 @@ final class WebKitHostSession: NSObject {
         failureMessage = nil
         status = "正在通过浏览器载入网页…"
         activeNavigation = webView.load(URLRequest(url: next.url))
+        scheduleTimeout(for: next.id)
     }
 
     private func cancelLoad(id: UUID) {
@@ -99,6 +116,7 @@ final class WebKitHostSession: NSObject {
                 throw HTMLLoadError.invalidResponse
             }
             if HTMLChallengeDetector.isChallenge(html) {
+                cancelActiveTimeout()
                 status = "网站要求人工验证，请在验证窗口中完成操作…"
                 onVerificationRequired?(self, finalURL)
                 return
@@ -106,6 +124,7 @@ final class WebKitHostSession: NSObject {
 
             await synchronizeCookies(for: finalURL)
             onVerificationCompleted?(self)
+            cancelActiveTimeout()
             self.activeLoad = nil
             activeNavigation = nil
             status = "网页载入完成"
@@ -142,6 +161,26 @@ final class WebKitHostSession: NSObject {
             .trimmingCharacters(in: CharacterSet(charactersIn: "."))
             .lowercased()
         return host == cookieDomain || host.hasSuffix(".\(cookieDomain)")
+    }
+
+    private func scheduleTimeout(for loadID: UUID?) {
+        cancelActiveTimeout()
+        guard let loadID else { return }
+        activeTimeoutTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await Task.sleep(for: loadTimeout)
+            } catch {
+                return
+            }
+            guard activeLoad?.id == loadID else { return }
+            failCurrentLoad(HTMLLoadError.requestTimedOut)
+        }
+    }
+
+    private func cancelActiveTimeout() {
+        activeTimeoutTask?.cancel()
+        activeTimeoutTask = nil
     }
 }
 

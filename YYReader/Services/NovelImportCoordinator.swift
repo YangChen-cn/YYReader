@@ -4,10 +4,16 @@ import Foundation
 final class NovelImportCoordinator {
     private let loader: any HTMLDocumentLoading
     private let parser: NovelParserRegistry
+    private let catalogRefreshTimeout: Duration
 
-    init(loader: any HTMLDocumentLoading, parser: NovelParserRegistry = NovelParserRegistry()) {
+    init(
+        loader: any HTMLDocumentLoading,
+        parser: NovelParserRegistry = NovelParserRegistry(),
+        catalogRefreshTimeout: Duration = .seconds(180)
+    ) {
         self.loader = loader
         self.parser = parser
+        self.catalogRefreshTimeout = catalogRefreshTimeout
     }
 
     func importNovel(from inputURL: URL) async throws -> NovelImportResult {
@@ -90,9 +96,12 @@ final class NovelImportCoordinator {
         )
     }
 
-    func refreshCatalog(from catalogURL: URL) async throws -> ParsedBookCatalog {
+    func refreshCatalog(
+        from catalogURL: URL,
+        onPageStarted: ((Int) -> Void)? = nil
+    ) async throws -> ParsedBookCatalog {
         loader.beginOperation()
-        return try await loadCatalog(startingAt: catalogURL)
+        return try await loadCatalog(startingAt: catalogURL, onPageStarted: onPageStarted)
     }
 
     private func loadCatalogPage(at url: URL) async throws -> ParsedBookCatalog {
@@ -100,7 +109,12 @@ final class NovelImportCoordinator {
         return try await parser.parseCatalogPage(document)
     }
 
-    private func loadCatalog(startingAt url: URL) async throws -> ParsedBookCatalog {
+    private func loadCatalog(
+        startingAt url: URL,
+        onPageStarted: ((Int) -> Void)?
+    ) async throws -> ParsedBookCatalog {
+        let clock = ContinuousClock()
+        let startedAt = clock.now
         var nextURL: URL? = url
         var visited = Set<URL>()
         var allChapters: [ChapterSeed] = []
@@ -109,10 +123,13 @@ final class NovelImportCoordinator {
         var author = "未知作者"
 
         while let pageURL = nextURL {
+            try checkCatalogDeadline(startedAt: startedAt, clock: clock)
             guard visited.count < 200 else { throw NovelParsingError.paginationLimit }
             guard HTMLParsingSupport.isSameOrigin(pageURL, as: url) else { break }
             guard visited.insert(pageURL).inserted else { throw NovelParsingError.paginationLoop }
+            onPageStarted?(visited.count)
             let document = try await loader.load(pageURL)
+            try checkCatalogDeadline(startedAt: startedAt, clock: clock)
             let page = try await parser.parseCatalogPage(document)
             if bookTitle.isEmpty { bookTitle = page.title }
             if author == "未知作者" { author = page.author }
@@ -132,6 +149,12 @@ final class NovelImportCoordinator {
             chapters: orderedChapters,
             nextPageURL: nil
         )
+    }
+
+    private func checkCatalogDeadline(startedAt: ContinuousClock.Instant, clock: ContinuousClock) throws {
+        if startedAt.duration(to: clock.now) >= catalogRefreshTimeout {
+            throw NovelParsingError.catalogRefreshTimedOut
+        }
     }
 
     private func appendWithoutBoundaryDuplicate(_ newParagraphs: [String], to paragraphs: inout [String]) {

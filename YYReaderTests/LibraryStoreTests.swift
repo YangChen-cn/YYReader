@@ -209,4 +209,53 @@ struct LibraryStoreTests {
         ])
         #expect(store.sortedChapters.map(\.sortIndex) == [1, 2, 3, 4])
     }
+
+    @Test
+    func catalogRefreshCanBeCancelledFromLoadingOverlay() async throws {
+        let catalogURL = try #require(URL(string: "https://www.qidiy.com/book/500/"))
+        let loader = MockHTMLLoader(
+            documents: [
+                catalogURL: """
+                    <h1>取消测试</h1><p>作者：测试作者</p>
+                    <ul class="section-list">
+                        <li><a href="/book/500/1.html">第1章 测试</a></li>
+                    </ul>
+                    """
+            ],
+            delay: .seconds(5)
+        )
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        let book = Book(
+            title: "取消测试",
+            author: "测试作者",
+            sourceHost: "www.qidiy.com",
+            catalogURL: catalogURL.absoluteString,
+            catalogFetchedAt: .now
+        )
+        context.insert(book)
+        try context.save()
+        let store = LibraryStore(
+            modelContext: context,
+            coordinator: NovelImportCoordinator(loader: loader)
+        )
+        store.selectBook(book.id)
+
+        store.startRefreshSelectedCatalog()
+        while !store.isLoading {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(store.canCancelLoading)
+        #expect(store.loadingMessage == "正在刷新目录…（第 1 页）")
+
+        store.cancelLoading()
+        while store.isLoading {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+
+        #expect(!store.canCancelLoading)
+        #expect(store.presentedError == nil)
+        #expect(loader.requestedURLs == [catalogURL])
+    }
 }

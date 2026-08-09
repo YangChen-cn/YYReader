@@ -7,6 +7,7 @@ enum HTMLLoadError: LocalizedError, Sendable {
     case verificationRequired
     case verificationFailed(String)
     case verificationTimedOut
+    case requestTimedOut
     case undecodableText
     case cancelled
 
@@ -23,6 +24,7 @@ enum HTMLLoadError: LocalizedError, Sendable {
         case .verificationRequired: "网站要求完成浏览器验证。"
         case let .verificationFailed(message): "网站验证失败：\(message)"
         case .verificationTimedOut: "网站验证等待超时，导入已停止。请稍后重试。"
+        case .requestTimedOut: "网页长时间没有完成加载，操作已停止。请稍后重试。"
         case .undecodableText: "无法识别网页的文字编码。"
         case .cancelled: "已取消网页验证。"
         }
