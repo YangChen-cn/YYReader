@@ -10,28 +10,28 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .system: "跟随系统"
-        case .light: "浅色"
-        case .sepia: "米色"
-        case .dark: "深色"
+        case .system: "系统"
+        case .light: "白色"
+        case .sepia: "纸张"
+        case .dark: "夜间"
         }
     }
 
     var background: Color {
         switch self {
         case .system: Color(nsColor: .textBackgroundColor)
-        case .light: Color(red: 0.97, green: 0.97, blue: 0.95)
-        case .sepia: Color(red: 0.93, green: 0.88, blue: 0.76)
-        case .dark: Color(red: 0.10, green: 0.11, blue: 0.12)
+        case .light: Color(red: 0.985, green: 0.982, blue: 0.972)
+        case .sepia: Color(red: 0.955, green: 0.938, blue: 0.90)
+        case .dark: Color(red: 0.105, green: 0.11, blue: 0.12)
         }
     }
 
     var foreground: Color {
         switch self {
         case .system: .primary
-        case .light: Color(red: 0.12, green: 0.12, blue: 0.11)
-        case .sepia: Color(red: 0.20, green: 0.16, blue: 0.10)
-        case .dark: Color(red: 0.88, green: 0.88, blue: 0.86)
+        case .light: Color(red: 0.13, green: 0.13, blue: 0.12)
+        case .sepia: Color(red: 0.20, green: 0.18, blue: 0.14)
+        case .dark: Color(red: 0.89, green: 0.89, blue: 0.87)
         }
     }
 }

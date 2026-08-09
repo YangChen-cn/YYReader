@@ -3,8 +3,8 @@ import SwiftUI
 enum ReaderFontFamily: String, CaseIterable, Identifiable {
     case system
     case serif
-    case rounded
     case kaiti
+    case rounded
 
     var id: String { rawValue }
 

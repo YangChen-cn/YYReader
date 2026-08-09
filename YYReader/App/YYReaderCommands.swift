@@ -25,6 +25,10 @@ struct YYReaderCommands: Commands {
 
             Divider()
 
+            Button("显示或隐藏目录", action: toggleCatalog)
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+                .disabled(actions == nil)
+
             Button("阅读外观", action: toggleAppearance)
                 .keyboardShortcut("a", modifiers: [.command, .option])
                 .disabled(actions == nil)
@@ -35,5 +39,6 @@ struct YYReaderCommands: Commands {
     private func refreshCatalog() { actions?.refreshCatalog() }
     private func previousChapter() { actions?.previousChapter() }
     private func nextChapter() { actions?.nextChapter() }
+    private func toggleCatalog() { actions?.toggleCatalog() }
     private func toggleAppearance() { actions?.toggleAppearance() }
 }

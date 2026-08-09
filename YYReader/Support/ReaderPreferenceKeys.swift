@@ -6,5 +6,6 @@ enum ReaderPreferenceKeys {
     static let contentWidth = "reader.contentWidth"
     static let horizontalPadding = "reader.horizontalPadding"
     static let theme = "reader.theme"
+    static let paragraphIndent = "reader.paragraphIndent"
     static let prefetchNext = "reader.prefetchNext"
 }

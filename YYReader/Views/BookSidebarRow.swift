@@ -17,5 +17,6 @@ struct BookSidebarRow: View {
             Image(systemName: "book.closed")
                 .foregroundStyle(.secondary)
         }
+        .padding(.vertical, 2)
     }
 }

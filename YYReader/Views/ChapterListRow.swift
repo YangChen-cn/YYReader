@@ -5,11 +5,18 @@ struct ChapterListRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: chapter.isCached ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(chapter.isCached ? Color.green : Color.secondary)
-                .accessibilityLabel(chapter.isCached ? "已缓存" : "未缓存")
             Text(chapter.title)
                 .lineLimit(2)
+
+            Spacer(minLength: 6)
+
+            if chapter.isCached {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("已缓存")
+            }
         }
+        .padding(.vertical, 3)
     }
 }

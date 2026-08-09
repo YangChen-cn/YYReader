@@ -26,7 +26,7 @@ struct SettingsView: View {
                 .padding()
             }
         }
-        .frame(width: 520, height: 440)
+        .frame(width: 540, height: 620)
     }
 
     private func clearWebsiteData() {

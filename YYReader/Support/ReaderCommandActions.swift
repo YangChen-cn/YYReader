@@ -5,6 +5,7 @@ struct ReaderCommandActions {
     let refreshCatalog: @MainActor () -> Void
     let previousChapter: @MainActor () -> Void
     let nextChapter: @MainActor () -> Void
+    let toggleCatalog: @MainActor () -> Void
     let toggleAppearance: @MainActor () -> Void
 }
 
