@@ -34,4 +34,12 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
         case .dark: Color(red: 0.89, green: 0.89, blue: 0.87)
         }
     }
+
+    var preferredColorScheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light, .sepia: .light
+        case .dark: .dark
+        }
+    }
 }

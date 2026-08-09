@@ -4,6 +4,7 @@ import SwiftUI
 struct LibrarySceneView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppServices.self) private var services
+    @Environment(\.scenePhase) private var scenePhase
     @SceneStorage("selection.bookID") private var storedBookID = ""
     @SceneStorage("selection.chapterID") private var storedChapterID = ""
     @State private var store: LibraryStore?
@@ -23,6 +24,14 @@ struct LibrarySceneView: View {
             }
         }
         .task(initializeStore)
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase != .active {
+                store?.flushPendingProgress()
+            }
+        }
+        .onDisappear {
+            store?.flushPendingProgress()
+        }
         .sheet(item: verificationRequestBinding) { request in
             WebVerificationSheet(request: request, store: services.verificationStore)
         }

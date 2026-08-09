@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LibraryRootView: View {
     @Bindable var store: LibraryStore
+    @AppStorage(ReaderPreferenceKeys.theme) private var themeName = ReaderTheme.system.rawValue
     @State private var libraryColumnVisibility: NavigationSplitViewVisibility = .all
     @State private var readerColumnVisibility: NavigationSplitViewVisibility = .detailOnly
     @State private var isReading = false
@@ -39,7 +40,7 @@ struct LibraryRootView: View {
                     isLoading: store.isLoading,
                     toggleBookSidebar: toggleBookSidebar,
                     addURL: showAddURL,
-                    continueReading: enterReader
+                    continueReading: continueReading
                 )
             }
         }
@@ -61,20 +62,19 @@ struct LibraryRootView: View {
             Alert(title: Text("操作失败"), message: Text(error.message), dismissButton: .default(Text("好")))
         }
         .confirmationDialog("确定删除这本小说及其离线缓存吗？", isPresented: $confirmingDelete) {
-            Button("删除", role: .destructive, action: store.deleteSelectedBook)
-        }
-        .onChange(of: store.selectedBookID) { oldValue, newValue in
-            guard oldValue != newValue, newValue != nil, !isReading else { return }
-            enterReader()
-        }
-        .onChange(of: store.selectedChapterID) { oldValue, newValue in
-            guard oldValue != newValue, newValue != nil, !isReading else { return }
-            enterReader()
+            Button("删除", role: .destructive, action: deleteSelectedBook)
         }
         .onChange(of: store.books.isEmpty) { _, isEmpty in
             if isEmpty { showLibrary() }
         }
+        .preferredColorScheme(isReading ? readerTheme.preferredColorScheme : nil)
         .focusedSceneValue(\.readerCommandActions, ReaderCommandActions(
+            canAddURL: !store.isLoading,
+            canRefreshCatalog: store.selectedBook != nil && !store.isLoading,
+            canNavigatePreviousChapter: isReading && store.chapterNavigationSnapshot.hasPrevious && !store.isLoading,
+            canNavigateNextChapter: isReading && store.chapterNavigationSnapshot.hasNext && !store.isLoading,
+            canToggleCatalog: isReading,
+            canChangeAppearance: isReading,
             addURL: showAddURL,
             refreshCatalog: refreshCatalog,
             previousChapter: store.goToPreviousChapter,
@@ -86,16 +86,35 @@ struct LibraryRootView: View {
 
     private func showAddURL() { showingAddURL = true }
     private func confirmDelete() { confirmingDelete = true }
+    private var readerTheme: ReaderTheme { ReaderTheme(rawValue: themeName) ?? .system }
+
+    private func continueReading() {
+        store.requestReaderScroll(.restore)
+        enterReader()
+    }
+
+    private func activateChapter(_ chapterID: UUID) {
+        store.selectChapter(chapterID, scrollIntent: .chapterTop)
+        enterReader()
+    }
+
     private func enterReader() {
         guard store.selectedChapter != nil else { return }
         readerColumnVisibility = .detailOnly
         isReading = true
     }
     private func showLibrary() {
+        store.flushPendingProgress()
         libraryColumnVisibility = .all
         isReading = false
         showingAppearancePopover = false
         showingAppearanceInspector = false
+    }
+    private func deleteSelectedBook() {
+        let wasReading = isReading
+        if store.deleteSelectedBook(), wasReading {
+            showLibrary()
+        }
     }
     private func toggleCatalog() {
         guard isReading else { return }
@@ -124,17 +143,29 @@ struct LibraryRootView: View {
             BookSidebarView(store: store)
                 .navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 300)
         } content: {
-            ChapterListView(store: store)
+            ChapterListView(
+                store: store,
+                selectionScrollIntent: nil,
+                activateChapter: activateChapter
+            )
                 .navigationSplitViewColumnWidth(min: 230, ideal: 280, max: 380)
         } detail: {
-            readerDetail
+            LibrarySelectionDetailView(
+                bookTitle: store.selectedBook?.title,
+                chapterTitle: store.selectedChapter?.title,
+                continueReading: continueReading
+            )
         }
         .navigationSplitViewStyle(.balanced)
     }
 
     private var readerNavigation: some View {
         NavigationSplitView(columnVisibility: $readerColumnVisibility) {
-            ChapterListView(store: store)
+            ChapterListView(
+                store: store,
+                selectionScrollIntent: .chapterTop,
+                activateChapter: activateChapter
+            )
                 .navigationSplitViewColumnWidth(min: 230, ideal: 280, max: 380)
         } detail: {
             readerDetail

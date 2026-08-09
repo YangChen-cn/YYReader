@@ -5,7 +5,7 @@ struct AppearanceInspectorView: View {
     @AppStorage(ReaderPreferenceKeys.fontSize) private var fontSize = 20.0
     @AppStorage(ReaderPreferenceKeys.lineSpacing) private var lineSpacing = 8.0
     @AppStorage(ReaderPreferenceKeys.paragraphSpacing) private var paragraphSpacing = 12.0
-    @AppStorage(ReaderPreferenceKeys.contentWidth) private var contentWidth = 680.0
+    @AppStorage(ReaderPreferenceKeys.contentWidth) private var contentWidth = ReaderViewportLayout.defaultPreferredWidth
     @AppStorage(ReaderPreferenceKeys.theme) private var theme = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.paragraphIndent) private var paragraphIndent = true
 
@@ -52,7 +52,11 @@ struct AppearanceInspectorView: View {
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
-                Slider(value: $contentWidth, in: 560...800, step: 20)
+                Slider(
+                    value: $contentWidth,
+                    in: ReaderViewportLayout.minimumPreferredWidth...ReaderViewportLayout.maximumPreferredWidth,
+                    step: 20
+                )
 
                 Toggle("段首缩进 2 字符", isOn: $paragraphIndent)
             }

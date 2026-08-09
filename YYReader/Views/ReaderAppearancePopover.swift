@@ -4,7 +4,7 @@ struct ReaderAppearancePopover: View {
     @AppStorage(ReaderPreferenceKeys.fontFamily) private var fontFamily = ReaderFontFamily.serif.rawValue
     @AppStorage(ReaderPreferenceKeys.fontSize) private var fontSize = 20.0
     @AppStorage(ReaderPreferenceKeys.lineSpacing) private var lineSpacing = 8.0
-    @AppStorage(ReaderPreferenceKeys.contentWidth) private var contentWidth = 680.0
+    @AppStorage(ReaderPreferenceKeys.contentWidth) private var contentWidth = ReaderViewportLayout.defaultPreferredWidth
     @AppStorage(ReaderPreferenceKeys.theme) private var theme = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.paragraphIndent) private var paragraphIndent = true
 
@@ -48,9 +48,9 @@ struct ReaderAppearancePopover: View {
             }
 
             preferenceSection("行距") {
-                Picker("行距", selection: $lineSpacing) {
+                Picker("行距", selection: lineSpacingPreset) {
                     ForEach(ReaderLineSpacingPreset.allCases) { preset in
-                        Text(preset.title).tag(preset.value)
+                        Text(preset.title).tag(preset)
                     }
                 }
                 .labelsHidden()
@@ -58,9 +58,9 @@ struct ReaderAppearancePopover: View {
             }
 
             preferenceSection("正文宽度") {
-                Picker("正文宽度", selection: $contentWidth) {
+                Picker("正文宽度", selection: contentWidthPreset) {
                     ForEach(ReaderContentWidthPreset.allCases) { preset in
-                        Text(preset.title).tag(preset.value)
+                        Text(preset.title).tag(preset)
                     }
                 }
                 .labelsHidden()
@@ -76,6 +76,20 @@ struct ReaderAppearancePopover: View {
         }
         .padding(16)
         .frame(width: 320)
+    }
+
+    private var lineSpacingPreset: Binding<ReaderLineSpacingPreset> {
+        Binding(
+            get: { ReaderLineSpacingPreset.closest(to: lineSpacing) },
+            set: { lineSpacing = $0.value }
+        )
+    }
+
+    private var contentWidthPreset: Binding<ReaderContentWidthPreset> {
+        Binding(
+            get: { ReaderContentWidthPreset.closest(to: contentWidth) },
+            set: { contentWidth = $0.value }
+        )
     }
 
     private func preferenceSection<Content: View>(

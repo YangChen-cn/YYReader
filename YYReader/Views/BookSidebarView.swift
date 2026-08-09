@@ -12,11 +12,11 @@ struct BookSidebarView: View {
         }
         .listStyle(.sidebar)
         .navigationTitle("书架")
-        .onChange(of: store.selectedBookID) { _, newValue in
+        .onChange(of: store.selectedBookID) { oldValue, newValue in
             Task { @MainActor in
                 await Task.yield()
                 guard store.selectedBookID == newValue else { return }
-                store.selectBook(newValue)
+                store.reconcileBookSelection(newValue, previousID: oldValue)
             }
         }
         .overlay {

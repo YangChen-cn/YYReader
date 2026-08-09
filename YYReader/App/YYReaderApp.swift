@@ -7,6 +7,7 @@ struct YYReaderApp: App {
     @State private var services: AppServices
 
     init() {
+        ReaderPreferenceMigration.migrateIfNeeded()
         let inMemory = ProcessInfo.processInfo.arguments.contains("--ui-testing")
         let configuration = ModelConfiguration(isStoredInMemoryOnly: inMemory)
         do {

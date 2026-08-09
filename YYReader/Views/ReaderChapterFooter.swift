@@ -1,15 +1,14 @@
 import SwiftUI
 
 struct ReaderChapterFooter: View {
-    let chapter: Chapter
-    let store: LibraryStore
+    let snapshot: ReaderChapterNavigationSnapshot
+    let previousChapter: () -> Void
+    let nextChapter: () -> Void
 
     var body: some View {
         VStack(spacing: 28) {
             HStack {
-                Text(chapterPositionText)
-                Spacer()
-                Text("本章阅读 \(progressPercent)%")
+                Text(snapshot.positionText)
             }
             .font(.caption.monospacedDigit())
             .foregroundStyle(.secondary)
@@ -18,8 +17,8 @@ struct ReaderChapterFooter: View {
                 ReaderChapterNavigationButton(
                     title: "上一章",
                     systemImage: "arrow.left",
-                    isEnabled: hasPreviousChapter,
-                    action: store.goToPreviousChapter
+                    isEnabled: snapshot.hasPrevious,
+                    action: previousChapter
                 )
 
                 Spacer()
@@ -28,8 +27,8 @@ struct ReaderChapterFooter: View {
                     title: "下一章",
                     systemImage: "arrow.right",
                     imageOnTrailingEdge: true,
-                    isEnabled: hasNextChapter,
-                    action: store.goToNextChapter
+                    isEnabled: snapshot.hasNext,
+                    action: nextChapter
                 )
             }
         }
@@ -37,28 +36,6 @@ struct ReaderChapterFooter: View {
         .padding(.bottom, 88)
     }
 
-    private var selectedIndex: Int? {
-        store.sortedChapters.firstIndex { $0.id == chapter.id }
-    }
-
-    private var chapterPositionText: String {
-        guard let selectedIndex else { return "共 \(store.sortedChapters.count) 章" }
-        return "第 \(selectedIndex + 1) / \(store.sortedChapters.count) 章"
-    }
-
-    private var progressPercent: Int {
-        Int((min(max(chapter.readingProgress, 0), 1) * 100).rounded())
-    }
-
-    private var hasPreviousChapter: Bool {
-        chapter.previousURL != nil || (selectedIndex ?? 0) > 0
-    }
-
-    private var hasNextChapter: Bool {
-        if chapter.nextURL != nil { return true }
-        guard let selectedIndex else { return false }
-        return selectedIndex + 1 < store.sortedChapters.count
-    }
 }
 
 private struct ReaderChapterNavigationButton: View {

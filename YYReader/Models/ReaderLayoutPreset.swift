@@ -45,9 +45,9 @@ enum ReaderContentWidthPreset: String, CaseIterable, Identifiable {
 
     var value: Double {
         switch self {
-        case .narrow: 620
-        case .medium: 680
-        case .wide: 760
+        case .narrow: 720
+        case .medium: 880
+        case .wide: 1_040
         }
     }
 

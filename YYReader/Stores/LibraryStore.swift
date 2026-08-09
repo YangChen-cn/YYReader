@@ -7,20 +7,31 @@ import SwiftData
 final class LibraryStore {
     private let modelContext: ModelContext
     private let coordinator: NovelImportCoordinator
+    private let progressSaveDelay: Duration
     private var prefetchTask: Task<Void, Never>?
     private var importTask: Task<Void, Never>?
     private var catalogRefreshTask: Task<Void, Never>?
+    private var progressSaveTask: Task<Void, Never>?
+    private var hasPendingProgressChanges = false
 
     private(set) var books: [Book] = []
+    private(set) var sortedChapters: [Chapter] = []
+    private(set) var chapterNavigationSnapshot = ReaderChapterNavigationSnapshot.empty
+    private(set) var readerScrollRequest: ReaderScrollRequest?
     var selectedBookID: UUID?
     var selectedChapterID: UUID?
     private(set) var isLoading = false
     private(set) var loadingMessage = ""
     var presentedError: PresentedError?
 
-    init(modelContext: ModelContext, coordinator: NovelImportCoordinator) {
+    init(
+        modelContext: ModelContext,
+        coordinator: NovelImportCoordinator,
+        progressSaveDelay: Duration = .milliseconds(600)
+    ) {
         self.modelContext = modelContext
         self.coordinator = coordinator
+        self.progressSaveDelay = progressSaveDelay
         refreshBooks()
     }
 
@@ -32,22 +43,30 @@ final class LibraryStore {
         selectedBook?.chapters.first { $0.id == selectedChapterID }
     }
 
-    var sortedChapters: [Chapter] {
-        selectedBook?.chapters.sorted { lhs, rhs in
-            if lhs.sortIndex == rhs.sortIndex { lhs.title < rhs.title }
-            else { lhs.sortIndex < rhs.sortIndex }
-        } ?? []
-    }
-
     var canCancelLoading: Bool { importTask != nil || catalogRefreshTask != nil }
 
     func restoreSelection(bookID: UUID?, chapterID: UUID?) {
         selectedBookID = books.contains { $0.id == bookID } ? bookID : books.first?.id
+        rebuildSelectedBookChapters()
         selectInitialChapter(preferredID: chapterID)
+        requestReaderScroll(.restore)
     }
 
     func selectBook(_ id: UUID?) {
+        applyBookSelection(id, restoringOnFailure: selectedBookID)
+    }
+
+    func reconcileBookSelection(_ id: UUID?, previousID: UUID?) {
+        applyBookSelection(id, restoringOnFailure: previousID)
+    }
+
+    private func applyBookSelection(_ id: UUID?, restoringOnFailure previousID: UUID?) {
+        guard flushPendingProgress() else {
+            selectedBookID = previousID
+            return
+        }
         selectedBookID = id
+        rebuildSelectedBookChapters()
         selectInitialChapter(preferredID: nil)
         if let book = selectedBook,
            book.catalogFetchedAt.map({ Date.now.timeIntervalSince($0) > 21_600 }) ?? true {
@@ -55,13 +74,50 @@ final class LibraryStore {
         }
     }
 
-    func selectChapter(_ id: UUID?) {
+    func selectChapter(_ id: UUID?, scrollIntent: ReaderScrollIntent? = nil) {
+        applyChapterSelection(id, scrollIntent: scrollIntent, restoringOnFailure: selectedChapterID)
+    }
+
+    func reconcileChapterSelection(
+        _ id: UUID?,
+        previousID: UUID?,
+        scrollIntent: ReaderScrollIntent? = nil
+    ) {
+        applyChapterSelection(id, scrollIntent: scrollIntent, restoringOnFailure: previousID)
+    }
+
+    private func applyChapterSelection(
+        _ id: UUID?,
+        scrollIntent: ReaderScrollIntent?,
+        restoringOnFailure previousID: UUID?
+    ) {
+        guard flushPendingProgress() else {
+            selectedChapterID = previousID
+            return
+        }
         prefetchTask?.cancel()
         prefetchTask = nil
         selectedChapterID = id
-        guard let chapter = selectedChapter else { return }
+        guard let chapter = selectedChapter else {
+            updateChapterNavigationSnapshot()
+            return
+        }
         selectedBook?.currentChapterID = chapter.id
-        try? modelContext.save()
+        updateChapterNavigationSnapshot()
+        if let scrollIntent {
+            requestReaderScroll(scrollIntent)
+        }
+        saveChanges(failureMessage: "保存当前章节失败")
+    }
+
+    func requestReaderScroll(_ intent: ReaderScrollIntent) {
+        guard let chapterID = selectedChapterID else { return }
+        readerScrollRequest = ReaderScrollRequest(chapterID: chapterID, intent: intent)
+    }
+
+    func consumeReaderScrollRequest(_ requestID: UUID) {
+        guard readerScrollRequest?.id == requestID else { return }
+        readerScrollRequest = nil
     }
 
     func startImportURL(_ input: String) {
@@ -87,10 +143,14 @@ final class LibraryStore {
         }
         await performLoading("正在下载并识别小说…") {
             let result = try await coordinator.importNovel(from: url)
+            guard flushPendingProgress() else { return }
             let chapter = try upsert(result)
             refreshBooks()
             selectedBookID = chapter.book?.id
+            rebuildSelectedBookChapters()
             selectedChapterID = chapter.id
+            updateChapterNavigationSnapshot()
+            requestReaderScroll(.chapterTop)
         }
     }
 
@@ -107,6 +167,8 @@ final class LibraryStore {
             book.updatedAt = .now
             try modelContext.save()
             refreshBooks()
+            rebuildSelectedBookChapters()
+            updateChapterNavigationSnapshot()
         }
     }
 
@@ -132,24 +194,43 @@ final class LibraryStore {
         navigate(to: selectedChapter?.nextURL, fallbackOffset: 1)
     }
 
-    func updateProgress(paragraphIndex: Int, total: Int) {
-        guard let chapter = selectedChapter else { return }
+    func updateProgress(chapterID: UUID, paragraphIndex: Int, total: Int) {
+        guard paragraphIndex >= 0,
+              let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }) else { return }
         chapter.topParagraphIndex = max(0, paragraphIndex)
         chapter.readingProgress = total > 1
             ? min(max(Double(paragraphIndex) / Double(total - 1), 0), 1)
             : 0
         chapter.lastReadAt = .now
         chapter.book?.currentChapterID = chapter.id
-        try? modelContext.save()
+        scheduleProgressSave()
     }
 
-    func deleteSelectedBook() {
-        guard let book = selectedBook else { return }
+    @discardableResult
+    func flushPendingProgress() -> Bool {
+        progressSaveTask?.cancel()
+        progressSaveTask = nil
+        return persistPendingProgress()
+    }
+
+    @discardableResult
+    func deleteSelectedBook() -> Bool {
+        guard let book = selectedBook else { return false }
+        guard flushPendingProgress() else { return false }
+        readerScrollRequest = nil
         modelContext.delete(book)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            presentedError = PresentedError(message: "删除小说失败：\(error.localizedDescription)")
+            return false
+        }
         refreshBooks()
         selectedBookID = books.first?.id
+        rebuildSelectedBookChapters()
         selectInitialChapter(preferredID: nil)
+        return true
     }
 
     func dismissError() {
@@ -198,6 +279,7 @@ final class LibraryStore {
             let result = try await coordinator.loadChapterContent(from: url)
             apply(result, to: chapter)
             try modelContext.save()
+            updateChapterNavigationSnapshot()
             schedulePrefetch(after: chapter)
         }
     }
@@ -223,7 +305,7 @@ final class LibraryStore {
 
     private func navigate(to urlString: String?, fallbackOffset: Int) {
         if let chapter = chapterForURL(urlString) {
-            selectChapter(chapter.id)
+            selectChapter(chapter.id, scrollIntent: .chapterTop)
             return
         }
         if let urlString, let selectedBook, let selectedChapter {
@@ -236,15 +318,17 @@ final class LibraryStore {
             modelContext.insert(chapter)
             selectedBook.chapters.append(chapter)
             chapter.book = selectedBook
-            try? modelContext.save()
-            selectChapter(chapter.id)
+            rebuildSelectedBookChapters()
+            saveChanges(failureMessage: "保存章节失败")
+            selectChapter(chapter.id, scrollIntent: .chapterTop)
             return
         }
+        let chapters = sortedChapters
         guard let selectedChapter,
-              let index = sortedChapters.firstIndex(where: { $0.id == selectedChapter.id }) else { return }
+              let index = chapters.firstIndex(where: { $0.id == selectedChapter.id }) else { return }
         let nextIndex = index + fallbackOffset
-        guard sortedChapters.indices.contains(nextIndex) else { return }
-        selectChapter(sortedChapters[nextIndex].id)
+        guard chapters.indices.contains(nextIndex) else { return }
+        selectChapter(chapters[nextIndex].id, scrollIntent: .chapterTop)
     }
 
     private func chapterForURL(_ urlString: String?) -> Chapter? {
@@ -335,11 +419,81 @@ final class LibraryStore {
     private func selectInitialChapter(preferredID: UUID?) {
         guard let book = selectedBook else {
             selectedChapterID = nil
+            updateChapterNavigationSnapshot()
             return
         }
         let preferred = preferredID.flatMap { id in book.chapters.first { $0.id == id } }
         let current = book.currentChapterID.flatMap { id in book.chapters.first { $0.id == id } }
-        selectedChapterID = (preferred ?? current ?? book.chapters.min { $0.sortIndex < $1.sortIndex })?.id
+        selectedChapterID = (preferred ?? current ?? sortedChapters.first)?.id
+        updateChapterNavigationSnapshot()
+    }
+
+    private func rebuildSelectedBookChapters() {
+        sortedChapters = selectedBook?.chapters.sorted { lhs, rhs in
+            if lhs.sortIndex == rhs.sortIndex { return lhs.title < rhs.title }
+            return lhs.sortIndex < rhs.sortIndex
+        } ?? []
+    }
+
+    private func updateChapterNavigationSnapshot() {
+        guard let chapter = selectedChapter else {
+            chapterNavigationSnapshot = ReaderChapterNavigationSnapshot(
+                chapterID: nil,
+                index: nil,
+                totalCount: sortedChapters.count,
+                hasPrevious: false,
+                hasNext: false
+            )
+            return
+        }
+
+        let index = sortedChapters.firstIndex { $0.id == chapter.id }
+        chapterNavigationSnapshot = ReaderChapterNavigationSnapshot(
+            chapterID: chapter.id,
+            index: index,
+            totalCount: sortedChapters.count,
+            hasPrevious: chapter.previousURL != nil || (index ?? 0) > 0,
+            hasNext: chapter.nextURL != nil || index.map { $0 + 1 < sortedChapters.count } == true
+        )
+    }
+
+    private func scheduleProgressSave() {
+        hasPendingProgressChanges = true
+        progressSaveTask?.cancel()
+        let delay = progressSaveDelay
+        progressSaveTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: delay)
+            } catch is CancellationError {
+                return
+            } catch {
+                self?.presentedError = PresentedError(message: "安排阅读进度保存失败：\(error.localizedDescription)")
+                return
+            }
+            guard let self else { return }
+            self.progressSaveTask = nil
+            _ = self.persistPendingProgress()
+        }
+    }
+
+    private func persistPendingProgress() -> Bool {
+        guard hasPendingProgressChanges else { return true }
+        do {
+            try modelContext.save()
+            hasPendingProgressChanges = false
+            return true
+        } catch {
+            presentedError = PresentedError(message: "保存阅读进度失败：\(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private func saveChanges(failureMessage: String) {
+        do {
+            try modelContext.save()
+        } catch {
+            presentedError = PresentedError(message: "\(failureMessage)：\(error.localizedDescription)")
+        }
     }
 
     private func normalizedURL(from input: String) -> URL? {

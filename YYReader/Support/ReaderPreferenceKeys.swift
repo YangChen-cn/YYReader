@@ -1,4 +1,5 @@
 enum ReaderPreferenceKeys {
+    static let preferenceVersion = "reader.preferenceVersion"
     static let fontFamily = "reader.fontFamily"
     static let fontSize = "reader.fontSize"
     static let lineSpacing = "reader.lineSpacing"
