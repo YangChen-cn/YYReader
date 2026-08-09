@@ -33,6 +33,11 @@
 - Apple 芯片 Mac 使用 arm64 构建，Intel Mac 使用 x86_64 构建。
 - 本版本使用 ad-hoc 签名，未经过 Apple Developer ID 签名或公证。首次启动时可能需要在 Finder 中右键 YYReader 并选择“打开”。
 
+## 下载
+
+- `YYReader-1.0.0-arm64.dmg`：Apple 芯片 Mac。
+- `YYReader-1.0.0-x86_64.dmg`：Intel Mac。
+
 ## 已知限制
 
 - 不自动解决 CAPTCHA，不绕过登录、付费墙或网站访问控制。
