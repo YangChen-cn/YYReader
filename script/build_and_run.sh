@@ -12,7 +12,13 @@ APP_BINARY="$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 cd "$ROOT_DIR"
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 xcodegen generate
-xcodebuild -project YYReader.xcodeproj -scheme YYReader -configuration Debug -derivedDataPath "$DERIVED_DATA" build
+xcodebuild \
+  -project YYReader.xcodeproj \
+  -scheme YYReader \
+  -configuration Debug \
+  -destination "platform=macOS,arch=arm64" \
+  -derivedDataPath "$DERIVED_DATA" \
+  build
 
 open_app() {
   /usr/bin/open -n "$APP_BUNDLE"

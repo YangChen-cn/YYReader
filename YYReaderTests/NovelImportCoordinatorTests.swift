@@ -44,7 +44,7 @@ struct NovelImportCoordinatorTests {
     }
 
     @Test
-    func mergesChapterPagesAndAllCatalogPages() async throws {
+    func mergesChapterPagesAndLoadsOnlyFirstCatalogPageDuringImport() async throws {
         let chapter1 = try #require(URL(string: "https://www.qidiy.com/book/100/1.html"))
         let chapter2 = try #require(URL(string: "https://www.qidiy.com/book/100/1/2.html"))
         let catalog1 = try #require(URL(string: "https://www.qidiy.com/book/100/"))
@@ -61,11 +61,37 @@ struct NovelImportCoordinatorTests {
 
         #expect(result.bookTitle == "测试小说")
         #expect(result.author == "测试作者")
-        #expect(result.catalog.map(\.sortIndex) == [1, 2, 3, 4])
+        #expect(result.catalog.map(\.sortIndex) == [1, 2, 4])
+        #expect(!result.catalogIsComplete)
         #expect(result.bodyText.contains("第一段测试文字。"))
         #expect(result.bodyText.contains("第四段测试文字。"))
         #expect(!result.bodyText.contains("第1/2页"))
         #expect(result.nextChapterURL?.absoluteString == "https://www.qidiy.com/book/100/2.html")
+
+        let refreshed = try await coordinator.refreshCatalog(from: catalog1)
+        #expect(refreshed.chapters.map(\.sortIndex) == [1, 2, 3, 4])
+    }
+
+    @Test
+    func catalogFailureDoesNotDiscardLoadedChapter() async throws {
+        let chapter = try #require(URL(string: "https://www.qidiy.com/book/100/1.html"))
+        let loader = MockHTMLLoader(documents: [
+            chapter: """
+            <a href="/book/100/">测试小说</a>
+            <h1 class="title">第1章 起点</h1>
+            <div id="content">已经成功取得的当前章节正文。</div>
+            <a href="/book/100/">章节列表</a>
+            <a href="/book/100/2.html">下一章</a>
+            """
+        ])
+        let coordinator = NovelImportCoordinator(loader: loader)
+
+        let result = try await coordinator.importNovel(from: chapter)
+
+        #expect(result.bookTitle == "测试小说")
+        #expect(result.bodyText == "已经成功取得的当前章节正文。")
+        #expect(result.catalog.map(\.url) == [chapter])
+        #expect(!result.catalogIsComplete)
     }
 
     @Test

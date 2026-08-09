@@ -5,49 +5,32 @@ import Observation
 @Observable
 final class WebVerificationStore {
     var request: VerificationRequest?
-    private var continuation: CheckedContinuation<LoadedHTML, any Error>?
-    private var userAgentsByHost: [String: String] = [:]
 
-    func load(_ url: URL) async throws -> LoadedHTML {
-        guard request == nil else { throw HTMLLoadError.invalidResponse }
-        let id = UUID()
-        request = VerificationRequest(id: id, url: url)
-        return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                self.continuation = continuation
-            }
-        } onCancel: {
-            Task { @MainActor in
-                self.cancel()
-            }
+    func present(session: WebKitHostSession, url: URL) -> Bool {
+        if request?.session === session { return false }
+        guard request == nil else {
+            session.failCurrentLoad(HTMLLoadError.verificationFailed(
+                "另一个网站验证仍在进行，请完成或取消后重试。"
+            ))
+            return false
         }
+        request = VerificationRequest(id: UUID(), url: url, session: session)
+        return true
     }
 
-    func complete(html: String, finalURL: URL, userAgent: String) {
-        guard let request, let continuation else { return }
-        if let host = finalURL.host?.lowercased(), !userAgent.isEmpty {
-            userAgentsByHost[host] = userAgent
-        }
-        self.request = nil
-        self.continuation = nil
-        continuation.resume(returning: LoadedHTML(
-            requestedURL: request.url,
-            finalURL: finalURL,
-            html: html,
-            retrievalKind: .webKit
-        ))
+    func complete(session: WebKitHostSession) {
+        guard request?.session === session else { return }
+        request = nil
     }
 
-    func userAgent(for url: URL) -> String? {
-        guard let host = url.host?.lowercased() else { return nil }
-        return userAgentsByHost[host]
+    func retry() {
+        request?.session.reloadForVerification()
     }
 
     func fail(_ error: HTMLLoadError) {
-        request = nil
-        let pending = continuation
-        continuation = nil
-        pending?.resume(throwing: error)
+        guard let request else { return }
+        self.request = nil
+        request.session.failCurrentLoad(error)
     }
 
     func cancel() {

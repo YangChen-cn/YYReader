@@ -3,9 +3,6 @@ import SwiftUI
 struct WebVerificationSheet: View {
     let request: VerificationRequest
     let store: WebVerificationStore
-    @State private var status = "正在载入网站验证页面…"
-    @State private var failureMessage: String?
-    @State private var reloadToken = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,29 +15,25 @@ struct WebVerificationSheet: View {
             .padding()
             .background(.bar)
 
-            WebVerificationWebView(
-                request: request,
-                reloadToken: reloadToken,
-                onStatus: updateStatus,
-                onFailure: showFailure,
-                onHTMLReady: finish
-            )
-            .overlay(alignment: .bottom) {
-                HStack(spacing: 10) {
-                    if failureMessage == nil { ProgressView().controlSize(.small) }
-                    Text(failureMessage ?? status)
-                        .foregroundStyle(failureMessage == nil ? Color.secondary : Color.red)
-                    Spacer()
-                    if failureMessage != nil {
-                        Button("重试") {
-                            failureMessage = nil
-                            reloadToken += 1
+            WebVerificationWebView(session: request.session)
+                .overlay(alignment: .bottom) {
+                    HStack(spacing: 10) {
+                        if request.session.failureMessage == nil {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Text(request.session.failureMessage ?? request.session.status)
+                            .foregroundStyle(
+                                request.session.failureMessage == nil ? Color.secondary : Color.red
+                            )
+                        Spacer()
+                        if request.session.failureMessage != nil {
+                            Button("重试", action: store.retry)
                         }
                     }
+                    .padding(12)
+                    .background(.bar)
                 }
-                .padding(12)
-                .background(.bar)
-            }
         }
         .frame(minWidth: 760, minHeight: 560)
         .interactiveDismissDisabled()
@@ -49,21 +42,8 @@ struct WebVerificationSheet: View {
                 try await Task.sleep(for: .seconds(90))
                 store.fail(.verificationTimedOut)
             } catch {
-                // The sheet disappeared because verification completed or was cancelled.
+                // Closing the sheet cancels its timeout task.
             }
         }
-    }
-
-    private func finish(html: String, url: URL, userAgent: String) {
-        store.complete(html: html, finalURL: url, userAgent: userAgent)
-    }
-
-    private func updateStatus(_ message: String) {
-        failureMessage = nil
-        status = message
-    }
-
-    private func showFailure(_ message: String) {
-        failureMessage = message
     }
 }

@@ -2,34 +2,35 @@ import Foundation
 
 @MainActor
 final class HybridHTMLLoader: HTMLDocumentLoading {
-    private let staticLoader: URLSessionHTMLLoader
-    private let verificationStore: WebVerificationStore
-    private var verifiedHostsThisOperation: Set<String> = []
+    private let staticLoader: any StaticHTMLLoading
+    private let webKitLoader: any BrowserHTMLLoading
+    private(set) var browserPreferredHosts: Set<String> = []
 
-    init(staticLoader: URLSessionHTMLLoader, verificationStore: WebVerificationStore) {
+    init(staticLoader: any StaticHTMLLoading, webKitLoader: any BrowserHTMLLoading) {
         self.staticLoader = staticLoader
-        self.verificationStore = verificationStore
+        self.webKitLoader = webKitLoader
     }
 
     func beginOperation() {
-        verifiedHostsThisOperation.removeAll()
+        webKitLoader.beginOperation()
     }
 
     func load(_ url: URL) async throws -> LoadedHTML {
+        guard let host = url.host?.lowercased(), !host.isEmpty else {
+            throw NovelParsingError.unsupportedURL
+        }
+        if browserPreferredHosts.contains(host) {
+            return try await webKitLoader.load(url)
+        }
         do {
             return try await staticLoader.load(url)
         } catch HTMLLoadError.verificationRequired {
-            let host = url.host?.lowercased() ?? ""
-            guard !verifiedHostsThisOperation.contains(host) else {
-                throw HTMLLoadError.verificationFailed("验证信息未被网站接受，本次导入已停止，请稍后重试。")
-            }
-            let document = try await verificationStore.load(url)
-            verifiedHostsThisOperation.insert(host)
-            if let host = document.finalURL.host,
-               let userAgent = verificationStore.userAgent(for: document.finalURL) {
-                await staticLoader.useVerifiedUserAgent(userAgent, forHost: host)
-            }
-            return document
+            browserPreferredHosts.insert(host)
+            return try await webKitLoader.load(url)
         }
+    }
+
+    func isBrowserPreferred(_ host: String) -> Bool {
+        browserPreferredHosts.contains(host.lowercased())
     }
 }

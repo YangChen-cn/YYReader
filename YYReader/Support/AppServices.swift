@@ -9,9 +9,18 @@ final class AppServices {
     init() {
         let verificationStore = WebVerificationStore()
         let staticLoader = URLSessionHTMLLoader()
+        let webKitLoader = WebKitHTMLLoader()
+        webKitLoader.configureVerification(
+            presenter: { session, url in
+                verificationStore.present(session: session, url: url)
+            },
+            completion: { session in
+                verificationStore.complete(session: session)
+            }
+        )
         let hybridLoader = HybridHTMLLoader(
             staticLoader: staticLoader,
-            verificationStore: verificationStore
+            webKitLoader: webKitLoader
         )
         self.verificationStore = verificationStore
         self.importCoordinator = NovelImportCoordinator(loader: hybridLoader)

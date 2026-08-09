@@ -180,6 +180,20 @@ final class LibraryStore {
             selectChapter(chapter.id)
             return
         }
+        if let urlString, let selectedBook, let selectedChapter {
+            let chapter = Chapter(
+                sourceURL: urlString,
+                title: fallbackOffset < 0 ? "上一章" : "下一章",
+                sortIndex: selectedChapter.sortIndex + fallbackOffset,
+                book: nil
+            )
+            modelContext.insert(chapter)
+            selectedBook.chapters.append(chapter)
+            chapter.book = selectedBook
+            try? modelContext.save()
+            selectChapter(chapter.id)
+            return
+        }
         guard let selectedChapter,
               let index = sortedChapters.firstIndex(where: { $0.id == selectedChapter.id }) else { return }
         let nextIndex = index + fallbackOffset
@@ -207,7 +221,7 @@ final class LibraryStore {
 
         book.title = result.bookTitle
         book.author = result.author
-        book.catalogFetchedAt = .now
+        book.catalogFetchedAt = result.catalogIsComplete ? .now : nil
         book.updatedAt = .now
         upsertCatalog(
             ParsedBookCatalog(title: result.bookTitle, author: result.author, chapters: result.catalog, nextPageURL: nil),
@@ -291,7 +305,11 @@ final class LibraryStore {
 
     private func canonicalURLString(_ value: String) -> String {
         guard let url = URL(string: value) else { return value }
-        let path = HTMLParsingSupport.replacingRegex("/\\d+\\.html$", in: url.path, with: ".html")
+        let path = HTMLParsingSupport.replacingRegex(
+            "/(\\d+)/(\\d+)/(\\d+)\\.html$",
+            in: url.path,
+            with: "/$1/$2.html"
+        )
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return value }
         components.path = path
         components.fragment = nil

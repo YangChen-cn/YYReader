@@ -14,13 +14,31 @@ final class NovelImportCoordinator {
         loader.beginOperation()
         let chapter = try await loadChapterContentWithoutReset(from: inputURL)
         guard let catalogURL = chapter.catalogURL else { throw NovelParsingError.missingCatalog }
-        let catalog = try await loadCatalog(startingAt: catalogURL)
+        let initialCatalog: ParsedBookCatalog?
+        do {
+            initialCatalog = try await loadCatalogPage(at: catalogURL)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch HTMLLoadError.cancelled {
+            throw HTMLLoadError.cancelled
+        } catch {
+            initialCatalog = nil
+        }
+
+        let chapterSeed = ChapterSeed(
+            title: chapter.title,
+            url: chapter.chapterURL,
+            sortIndex: HTMLParsingSupport.chapterNumber(in: chapter.title) ?? 1
+        )
+        let catalog = initialCatalog?.chapters ?? [chapterSeed]
+        let catalogTitle = initialCatalog?.title ?? ""
 
         return NovelImportResult(
-            bookTitle: catalog.title.isEmpty ? (chapter.bookTitle ?? "未命名小说") : catalog.title,
-            author: catalog.author,
+            bookTitle: catalogTitle.isEmpty ? (chapter.bookTitle ?? "未命名小说") : catalogTitle,
+            author: initialCatalog?.author ?? "未知作者",
             catalogURL: catalogURL,
-            catalog: catalog.chapters,
+            catalog: catalog,
+            catalogIsComplete: initialCatalog?.nextPageURL == nil && initialCatalog != nil,
             chapterTitle: chapter.title,
             chapterURL: chapter.chapterURL,
             bodyText: chapter.bodyText,
@@ -77,6 +95,11 @@ final class NovelImportCoordinator {
         return try await loadCatalog(startingAt: catalogURL)
     }
 
+    private func loadCatalogPage(at url: URL) async throws -> ParsedBookCatalog {
+        let document = try await loader.load(url)
+        return try await parser.parseCatalogPage(document)
+    }
+
     private func loadCatalog(startingAt url: URL) async throws -> ParsedBookCatalog {
         var nextURL: URL? = url
         var visited = Set<URL>()
@@ -120,7 +143,11 @@ final class NovelImportCoordinator {
     }
 
     private func canonicalChapterURL(_ url: URL) -> URL {
-        let path = HTMLParsingSupport.replacingRegex("/\\d+\\.html$", in: url.path, with: ".html")
+        let path = HTMLParsingSupport.replacingRegex(
+            "/(\\d+)/(\\d+)/(\\d+)\\.html$",
+            in: url.path,
+            with: "/$1/$2.html"
+        )
         guard path != url.path, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return url
         }
