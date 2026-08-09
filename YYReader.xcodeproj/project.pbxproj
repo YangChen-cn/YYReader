@@ -87,7 +87,6 @@
 		FB802AA6FCCD1B9DEDD2B993 /* StaticHTMLLoading.swift in Sources */ = {isa = PBXBuildFile; fileRef = A754BF62E89043E19297471E /* StaticHTMLLoading.swift */; };
 		FBC706AB0EC52F83781B8F3A /* ReaderChapterHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18BD4265501668198E65C51D /* ReaderChapterHeader.swift */; };
 		FD6174CB2225418AA2DBFF31 /* HostRateLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504AAFA49956B2F19B107A79 /* HostRateLimiter.swift */; };
-		FE1B568F49589ABF44F59D80 /* LibrarySelectionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15466744AB8C3432B1305AFA /* LibrarySelectionDetailView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -112,7 +111,6 @@
 		07CC7883179C338CD1A43211 /* BookSidebarRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookSidebarRow.swift; sourceTree = "<group>"; };
 		08C25A3B8B6503DA98B7E3EE /* ReaderContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderContentView.swift; sourceTree = "<group>"; };
 		0A0C2BF6B6A3928A55288E00 /* NovelImportResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelImportResult.swift; sourceTree = "<group>"; };
-		15466744AB8C3432B1305AFA /* LibrarySelectionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySelectionDetailView.swift; sourceTree = "<group>"; };
 		16962E22CE775BEF29CF2B36 /* WebVerificationWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebVerificationWebView.swift; sourceTree = "<group>"; };
 		182A4EBB62150B0C78F8376C /* ReaderPreferenceMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderPreferenceMigration.swift; sourceTree = "<group>"; };
 		18BD4265501668198E65C51D /* ReaderChapterHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderChapterHeader.swift; sourceTree = "<group>"; };
@@ -300,7 +298,6 @@
 				D8C34013BDE6587DD61D4B05 /* ChapterListView.swift */,
 				58D98DA5F300CC42310CE160 /* LibraryRootView.swift */,
 				2AE4AD03CC4FBB18CCF6CA46 /* LibrarySceneView.swift */,
-				15466744AB8C3432B1305AFA /* LibrarySelectionDetailView.swift */,
 				7B748293BFBD97A13118EEF9 /* LibraryToolbar.swift */,
 				6A953173EF20ADE8253E9B38 /* LoadingOverlay.swift */,
 				F753F3B2FB9E56A81FECC3ED /* ReaderAppearancePopover.swift */,
@@ -551,7 +548,6 @@
 				CE5AE74C60CF5809DA06DF84 /* HybridHTMLLoader.swift in Sources */,
 				009BFDC795B37B6DB640CD1A /* LibraryRootView.swift in Sources */,
 				6C48C46340A504942D277BCC /* LibrarySceneView.swift in Sources */,
-				FE1B568F49589ABF44F59D80 /* LibrarySelectionDetailView.swift in Sources */,
 				674DF86A39674877000083F4 /* LibraryStore.swift in Sources */,
 				CF68CAB5AB6AC9BB13472DC4 /* LibraryToolbar.swift in Sources */,
 				6952C68CD9E68046BE1293C0 /* LoadedHTML.swift in Sources */,
@@ -704,6 +700,7 @@
 				CODE_SIGN_ENTITLEMENTS = YYReader/YYReader.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YYReader/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = YYReader;
@@ -713,6 +710,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yyreader.app;
 				PRODUCT_NAME = YYReader;
 				SDKROOT = macosx;
@@ -842,6 +840,7 @@
 				CODE_SIGN_ENTITLEMENTS = YYReader/YYReader.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YYReader/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = YYReader;
@@ -851,6 +850,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yyreader.app;
 				PRODUCT_NAME = YYReader;
 				SDKROOT = macosx;

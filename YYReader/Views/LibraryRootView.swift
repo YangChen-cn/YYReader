@@ -23,12 +23,10 @@ struct LibraryRootView: View {
         .toolbar {
             if isReading {
                 ReaderToolbar(
-                    bookTitle: store.selectedBook?.title ?? "YYReader",
                     showingAppearancePopover: $showingAppearancePopover,
                     canManageBook: store.selectedBook != nil,
                     isLoading: store.isLoading,
                     returnToLibrary: showLibrary,
-                    toggleCatalog: toggleCatalog,
                     showAdvancedAppearance: showAdvancedAppearance,
                     addURL: showAddURL,
                     refreshCatalog: refreshCatalog,
@@ -150,11 +148,7 @@ struct LibraryRootView: View {
             )
                 .navigationSplitViewColumnWidth(min: 230, ideal: 280, max: 380)
         } detail: {
-            LibrarySelectionDetailView(
-                bookTitle: store.selectedBook?.title,
-                chapterTitle: store.selectedChapter?.title,
-                continueReading: continueReading
-            )
+            readerDetail
         }
         .navigationSplitViewStyle(.balanced)
     }

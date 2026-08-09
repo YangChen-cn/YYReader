@@ -66,7 +66,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
             seeds.append(ChapterSeed(
                 title: anchorTitle,
                 url: url,
-                sortIndex: HTMLParsingSupport.chapterNumber(in: anchorTitle) ?? seeds.count + 1
+                sortIndex: seeds.count + 1
             ))
         }
         guard !seeds.isEmpty else { throw NovelParsingError.missingCatalog }
@@ -74,7 +74,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         return ParsedBookCatalog(
             title: title,
             author: metadata.author ?? "未知作者",
-            chapters: seeds.sorted { $0.sortIndex < $1.sortIndex },
+            chapters: seeds,
             nextPageURL: try navigationURL(
                 in: document,
                 labels: ["下一页", "下页"],

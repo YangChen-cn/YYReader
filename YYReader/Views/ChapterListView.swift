@@ -11,20 +11,36 @@ struct ChapterListView: View {
             ? store.sortedChapters
             : store.sortedChapters.filter { $0.title.localizedStandardContains(searchText) }
 
-        List(selection: $store.selectedChapterID) {
-            ForEach(chapters) { chapter in
-                ChapterListRow(chapter: chapter)
-                    .tag(chapter.id)
-                    .onTapGesture(count: 2) {
-                        activateChapter(chapter.id)
-                    }
-                    .accessibilityAction(named: "打开章节") {
-                        activateChapter(chapter.id)
-                    }
+        VStack(spacing: 0) {
+            TextField("搜索章节", text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel("搜索章节")
+                .padding(.horizontal, 8)
+                .padding(.vertical, 7)
+
+            List(selection: $store.selectedChapterID) {
+                ForEach(chapters) { chapter in
+                    ChapterListRow(chapter: chapter)
+                        .tag(chapter.id)
+                        .onTapGesture(count: 2) {
+                            activateChapter(chapter.id)
+                        }
+                        .accessibilityAction(named: "打开章节") {
+                            activateChapter(chapter.id)
+                        }
+                }
+            }
+            .overlay {
+                if store.selectedBook == nil {
+                    ContentUnavailableView("请选择小说", systemImage: "book")
+                } else if chapters.isEmpty, !searchText.isEmpty {
+                    ContentUnavailableView.search
+                } else if chapters.isEmpty {
+                    ContentUnavailableView("没有识别到章节", systemImage: "list.bullet")
+                }
             }
         }
         .navigationTitle(store.selectedBook?.title ?? "目录")
-        .searchable(text: $searchText, prompt: "搜索章节")
         .onChange(of: store.selectedChapterID) { oldValue, newValue in
             Task { @MainActor in
                 await Task.yield()
@@ -40,15 +56,6 @@ struct ChapterListView: View {
             guard let chapterID = store.selectedChapterID else { return .ignored }
             activateChapter(chapterID)
             return .handled
-        }
-        .overlay {
-            if store.selectedBook == nil {
-                ContentUnavailableView("请选择小说", systemImage: "book")
-            } else if chapters.isEmpty, !searchText.isEmpty {
-                ContentUnavailableView.search
-            } else if chapters.isEmpty {
-                ContentUnavailableView("没有识别到章节", systemImage: "list.bullet")
-            }
         }
     }
 }
