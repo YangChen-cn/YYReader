@@ -17,7 +17,11 @@ struct ReaderContinuationBoundary: View {
                 Button("加载下一章失败，重试", systemImage: "arrow.clockwise", action: retry)
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
-            case .ready, .unavailable:
+            case .ready:
+                Color.clear
+                    .frame(height: 1)
+                    .onAppear(perform: prefetch)
+            case .unavailable:
                 EmptyView()
             }
         }

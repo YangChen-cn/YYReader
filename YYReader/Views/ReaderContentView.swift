@@ -78,6 +78,7 @@ struct ReaderContentView: View {
                 .contentMargins(.vertical, 0, for: .scrollContent)
                 .textSelection(.enabled)
                 .focusable()
+                .focusEffectDisabled()
                 .focused($isReaderFocused)
                 .onKeyPress(.upArrow) {
                     moveScrollPosition(by: -1, entries: entries, proxy: scrollProxy)
@@ -94,8 +95,8 @@ struct ReaderContentView: View {
         .task {
             await prepareContinuousReading()
         }
-        .onChange(of: continuousReading) { _, isEnabled in
-            store.configureContinuousReading(isEnabled)
+        .task(id: continuousReading) {
+            store.configureContinuousReading(continuousReading)
         }
         .task(id: store.readerScrollRequest?.id) {
             await applyPendingScrollRequest()
