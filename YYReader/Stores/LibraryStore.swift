@@ -69,10 +69,6 @@ final class LibraryStore {
         selectedBookID = id
         rebuildSelectedBookChapters()
         selectInitialChapter(preferredID: nil)
-        if let book = selectedBook,
-           book.catalogFetchedAt.map({ Date.now.timeIntervalSince($0) > 21_600 }) ?? true {
-            startRefreshSelectedCatalog()
-        }
     }
 
     func selectChapter(_ id: UUID?, scrollIntent: ReaderScrollIntent? = nil) {
@@ -344,13 +340,13 @@ final class LibraryStore {
     }
 
     private func upsert(_ result: NovelImportResult) throws -> Chapter {
-        let catalogString = result.catalogURL.absoluteString
-        let descriptor = FetchDescriptor<Book>(predicate: #Predicate { $0.catalogURL == catalogString })
+        let sourceBookURL = result.sourceBookURL.absoluteString
+        let descriptor = FetchDescriptor<Book>(predicate: #Predicate { $0.catalogURL == sourceBookURL })
         let book = try modelContext.fetch(descriptor).first ?? Book(
             title: result.bookTitle,
             author: result.author,
-            sourceHost: result.catalogURL.host ?? "",
-            catalogURL: catalogString
+            sourceHost: result.sourceBookURL.host ?? "",
+            catalogURL: sourceBookURL
         )
         if book.modelContext == nil { modelContext.insert(book) }
 

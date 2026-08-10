@@ -17,6 +17,10 @@ final class Book {
     @Relationship(deleteRule: .cascade, inverse: \Chapter.book)
     var chapters: [Chapter]
 
+    /// `catalogURL` is also the persisted book identity for catalog-less sources.
+    /// `hasCatalog` distinguishes an actual catalog URL from a derived source-book URL.
+    var sourceBookURL: String { catalogURL }
+
     init(
         id: UUID = UUID(),
         title: String,

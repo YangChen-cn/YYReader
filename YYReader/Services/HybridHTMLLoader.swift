@@ -35,11 +35,14 @@ final class HybridHTMLLoader: RenderedDOMFallbackLoading {
     }
 
     func loadRenderedDOM(_ url: URL) async throws -> LoadedHTML {
-        guard let host = url.host?.lowercased(), !host.isEmpty else {
+        guard url.host?.isEmpty == false else {
             throw NovelParsingError.unsupportedURL
         }
-        // A rendered retry means this host needs JavaScript for the remainder of this operation.
-        browserPreferredHosts.insert(host)
         return try await webKitLoader.load(url)
+    }
+
+    func promoteRenderedDOMHost(for url: URL) {
+        guard let host = url.host?.lowercased(), !host.isEmpty else { return }
+        browserPreferredHosts.insert(host)
     }
 }

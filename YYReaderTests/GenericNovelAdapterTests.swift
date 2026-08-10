@@ -53,4 +53,38 @@ struct GenericNovelAdapterTests {
         ])
         #expect(result.chapters.map(\.sortIndex) == [1, 2, 3, 4])
     }
+
+    @Test
+    func catalogCombinesSiblingVolumesInDOMOrder() throws {
+        let url = try #require(URL(string: "https://example.com/book/"))
+        let document = LoadedHTML(
+            requestedURL: url,
+            finalURL: url,
+            html: """
+            <h1>多卷测试</h1>
+            <section class="volume-list">
+                <h2>第一卷</h2>
+                <ul>
+                    <li><a href="v1-1.html">第1章 第一卷一</a></li>
+                    <li><a href="v1-2.html">第2章 第一卷二</a></li>
+                </ul>
+            </section>
+            <section class="volume-list">
+                <h2>第二卷</h2>
+                <ul>
+                    <li><a href="v2-1.html">第1章 第二卷一</a></li>
+                    <li><a href="v2-2.html">第2章 第二卷二</a></li>
+                </ul>
+            </section>
+            """,
+            retrievalKind: .urlSession
+        )
+
+        let result = try GenericNovelAdapter().parseCatalogPage(document)
+
+        #expect(result.chapters.map(\.title) == [
+            "第1章 第一卷一", "第2章 第一卷二", "第1章 第二卷一", "第2章 第二卷二"
+        ])
+        #expect(result.chapters.map(\.sortIndex) == [1, 2, 3, 4])
+    }
 }

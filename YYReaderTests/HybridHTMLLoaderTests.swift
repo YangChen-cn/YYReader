@@ -40,7 +40,7 @@ struct HybridHTMLLoaderTests {
     }
 
     @Test
-    func renderedDOMRetryPromotesHostAndUsesPersistentBrowser() async throws {
+    func renderedDOMLoadDoesNotPromoteHostUntilParsingSucceeds() async throws {
         let url = try #require(URL(string: "https://novel.example/book/1.html"))
         let staticLoader = StaticLoaderSpy(results: [:])
         let browserLoader = BrowserLoaderSpy()
@@ -49,9 +49,12 @@ struct HybridHTMLLoaderTests {
         let document = try await loader.loadRenderedDOM(url)
 
         #expect(document.retrievalKind == .webKit)
-        #expect(loader.isBrowserPreferred("novel.example"))
+        #expect(!loader.isBrowserPreferred("novel.example"))
         #expect(await staticLoader.requestedURLs().isEmpty)
         #expect(browserLoader.urls == [url])
+
+        loader.promoteRenderedDOMHost(for: url)
+        #expect(loader.isBrowserPreferred("novel.example"))
     }
 
     @Test

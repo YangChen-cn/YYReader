@@ -120,6 +120,30 @@ struct NovelImportCoordinatorTests {
     }
 
     @Test
+    func readableChapterWithSidebarLinksIsNotImportedAsCatalog() async throws {
+        let chapter = try #require(URL(string: "https://example.com/serial/bright-moon/3.html"))
+        let loader = MockHTMLLoader(documents: [
+            chapter: """
+            <h1>第3章 正文优先</h1>
+            <article>这是高置信度章节正文，用来验证即使页面侧栏列出了多个章节链接，也不会将当前章节误判成目录。这里继续补充自造段落，使正文长度明显高于目录探测的阈值。读者应该始终看到当前章节内容，而不是被跳转到侧栏中排列的第一章。为了覆盖较长正文的情形，再补充几句完全虚构的文字，说明章节页和目录页必须以正文质量区分。最后一段继续强调，这些文本不来自任何第三方小说。继续补充一段完整的自造正文，描述读者在夜色中翻开这一章、逐段阅读并保留进度的场景。这个额外段落只用于让 fixture 的正文长度跨过高置信度阈值，避免测试依赖某个恰好接近阈值的字符串长度。</article>
+            <aside class="chapter-list">
+                <a href="/serial/bright-moon/1.html">第1章 侧栏章节</a>
+                <a href="/serial/bright-moon/2.html">第2章 侧栏章节</a>
+                <a href="/serial/bright-moon/4.html">第4章 侧栏章节</a>
+            </aside>
+            """
+        ])
+        let coordinator = NovelImportCoordinator(loader: loader)
+
+        let result = try await coordinator.importNovel(from: chapter)
+
+        #expect(!result.hasCatalog)
+        #expect(result.chapterURL == chapter)
+        #expect(result.chapterTitle == "第3章 正文优先")
+        #expect(result.bodyText.contains("高置信度章节正文"))
+    }
+
+    @Test
     func importsFromAGenericCatalogPageAndLoadsItsFirstChapter() async throws {
         let catalog = try #require(URL(string: "https://www.longwangxs.com/book/552/"))
         let chapter = try #require(URL(string: "https://www.longwangxs.com/book/552/prologue.html"))
@@ -177,6 +201,23 @@ struct NovelImportCoordinatorTests {
         #expect(result.bodyText == "由渲染 DOM 提供的可阅读测试正文。")
         #expect(loader.staticURLs == [chapter])
         #expect(loader.renderedURLs == [chapter])
+        #expect(loader.promotedURLs == [chapter])
+    }
+
+    @Test
+    func failedRenderedDOMDoesNotPromoteHost() async throws {
+        let chapter = try #require(URL(string: "https://www.qidiy.com/book/100/1.html"))
+        let loader = RenderedDOMFallbackLoader(
+            staticDocuments: [chapter: "<h1>静态加载页</h1>"],
+            renderedDocuments: [chapter: "<h1>渲染后仍无正文</h1>"]
+        )
+        let coordinator = NovelImportCoordinator(loader: loader)
+
+        await #expect(throws: NovelParsingError.self) {
+            try await coordinator.loadChapterContent(from: chapter)
+        }
+
+        #expect(loader.promotedURLs.isEmpty)
     }
 
     @Test
@@ -262,6 +303,7 @@ private final class RenderedDOMFallbackLoader: RenderedDOMFallbackLoading {
     private let renderedDocuments: [URL: String]
     private(set) var staticURLs: [URL] = []
     private(set) var renderedURLs: [URL] = []
+    private(set) var promotedURLs: [URL] = []
 
     init(staticDocuments: [URL: String], renderedDocuments: [URL: String]) {
         self.staticDocuments = staticDocuments
@@ -278,5 +320,9 @@ private final class RenderedDOMFallbackLoader: RenderedDOMFallbackLoading {
         renderedURLs.append(url)
         guard let html = renderedDocuments[url] else { throw HTMLLoadError.httpStatus(404) }
         return LoadedHTML(requestedURL: url, finalURL: url, html: html, retrievalKind: .webKit)
+    }
+
+    func promoteRenderedDOMHost(for url: URL) {
+        promotedURLs.append(url)
     }
 }

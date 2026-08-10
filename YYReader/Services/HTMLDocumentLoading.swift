@@ -10,6 +10,7 @@ protocol HTMLDocumentLoading {
 @MainActor
 protocol RenderedDOMFallbackLoading: HTMLDocumentLoading {
     func loadRenderedDOM(_ url: URL) async throws -> LoadedHTML
+    func promoteRenderedDOMHost(for url: URL)
 }
 
 extension HTMLDocumentLoading {

@@ -125,9 +125,18 @@ struct GenericNovelAdapter: NovelSourceAdapter {
             "ul", "ol"
         ]
         let containers = try selectors.flatMap { try document.select($0).array() }
-        let candidates = try containers.map { try chapterSeeds(in: $0, baseURL: baseURL) }
-        if let best = candidates.max(by: { $0.count < $1.count }), !best.isEmpty {
-            return best
+        let chapterURLs = try Set(
+            containers
+                .map { try chapterSeeds(in: $0, baseURL: baseURL) }
+                .filter { $0.count >= 2 }
+                .flatMap { $0.map { $0.url.absoluteString } }
+        )
+        if !chapterURLs.isEmpty {
+            return try chapterSeeds(
+                from: document.select("a").array(),
+                baseURL: baseURL,
+                restrictingTo: chapterURLs
+            )
         }
         return try chapterSeeds(from: document.select("a").array(), baseURL: baseURL)
     }
@@ -136,7 +145,11 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         try chapterSeeds(from: container.select("a").array(), baseURL: baseURL)
     }
 
-    private func chapterSeeds(from anchors: [Element], baseURL: URL) throws -> [ChapterSeed] {
+    private func chapterSeeds(
+        from anchors: [Element],
+        baseURL: URL,
+        restrictingTo allowedURLs: Set<String>? = nil
+    ) throws -> [ChapterSeed] {
         var seen = Set<String>()
         var seeds: [ChapterSeed] = []
         for anchor in anchors {
@@ -144,6 +157,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
             guard isLikelyChapterTitle(chapterTitle),
                   let url = HTMLParsingSupport.absoluteURL(for: anchor, relativeTo: baseURL),
                   HTMLParsingSupport.isSameOrigin(url, as: baseURL),
+                  allowedURLs?.contains(url.absoluteString) ?? true,
                   seen.insert(url.absoluteString).inserted else {
                 continue
             }

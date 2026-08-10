@@ -6,6 +6,34 @@ import Testing
 @MainActor
 struct LibraryStoreTests {
     @Test
+    func cataloglessChaptersFromTheSameSourceBookShareOneBook() async throws {
+        let first = try #require(URL(string: "https://example.com/serial/stable-book/1.html"))
+        let second = try #require(URL(string: "https://example.com/serial/stable-book/2.html"))
+        let loader = MockHTMLLoader(documents: [
+            first: genericCataloglessChapter(title: "第1章 开始", body: "第一章"),
+            second: genericCataloglessChapter(title: "第2章 继续", body: "第二章")
+        ])
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let store = LibraryStore(
+            modelContext: container.mainContext,
+            coordinator: NovelImportCoordinator(loader: loader)
+        )
+
+        store.startImportURL(first.absoluteString)
+        try await waitForImport(store)
+        store.startImportURL(second.absoluteString)
+        try await waitForImport(store)
+
+        #expect(store.books.count == 1)
+        let book = try #require(store.books.first)
+        #expect(!book.hasCatalog)
+        #expect(book.sourceBookURL == "https://example.com/serial/stable-book/")
+        #expect(book.author == "测试作者")
+        #expect(book.chapters.count == 2)
+    }
+
+    @Test
     func initialCatalogPageDoesNotImmediatelyTriggerFullRefresh() async throws {
         let chapter1 = try #require(URL(string: "https://www.qidiy.com/book/100/1.html"))
         let chapter2 = try #require(URL(string: "https://www.qidiy.com/book/100/1/2.html"))
@@ -36,6 +64,53 @@ struct LibraryStoreTests {
         #expect(loader.requestedURLs == [chapter1, chapter2, catalog])
         #expect(!store.isLoading)
         _ = container
+    }
+
+    @Test
+    func selectingBookDoesNotRefreshAnExpiredCatalog() async throws {
+        let catalogURL = try #require(URL(string: "https://example.com/book/slow-catalog/"))
+        let loader = MockHTMLLoader(documents: [
+            catalogURL: """
+            <h1>测试小说</h1>
+            <ul>
+              <li><a href="/book/slow-catalog/1.html">第1章 开始</a></li>
+              <li><a href="/book/slow-catalog/2.html">第2章 继续</a></li>
+            </ul>
+            """
+        ])
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        let firstBook = Book(
+            title: "已选书籍",
+            author: "测试作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/book/current/",
+            catalogFetchedAt: .now
+        )
+        let expiredBook = Book(
+            title: "大目录书籍",
+            author: "测试作者",
+            sourceHost: "example.com",
+            catalogURL: catalogURL.absoluteString,
+            catalogFetchedAt: .distantPast
+        )
+        context.insert(firstBook)
+        context.insert(expiredBook)
+        try context.save()
+
+        let store = LibraryStore(
+            modelContext: context,
+            coordinator: NovelImportCoordinator(loader: loader)
+        )
+        store.restoreSelection(bookID: firstBook.id, chapterID: nil)
+        store.selectBook(expiredBook.id)
+        try await Task.sleep(for: .milliseconds(50))
+
+        #expect(store.selectedBook?.id == expiredBook.id)
+        #expect(loader.requestedURLs.isEmpty)
+        #expect(!store.isLoading)
+        #expect(!store.canCancelLoading)
     }
 
     @Test
@@ -357,4 +432,20 @@ struct LibraryStoreTests {
         #expect(!context.hasChanges)
         #expect(store.presentedError == nil)
     }
+}
+
+@MainActor
+private func waitForImport(_ store: LibraryStore) async throws {
+    await Task.yield()
+    while store.isLoading || store.canCancelLoading {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+}
+
+private func genericCataloglessChapter(title: String, body: String) -> String {
+    """
+    <meta name="author" content="测试作者">
+    <h1>\(title)</h1>
+    <article><p>\(body)的自造测试正文用于验证无目录书籍身份。这里继续补充足够的内容，使通用解析器可以确认这是章节而不是导航区域。所有文字均为测试用途，不包含第三方小说内容。</p><p>第二段继续说明，这两个章节地址共享同一个书籍级父路径，因此导入协调器必须产生完全一致的 sourceBookURL。这样既不会使用当前章节地址作为身份，也不会在第二次导入时创建重复书籍。</p></article>
+    """
 }

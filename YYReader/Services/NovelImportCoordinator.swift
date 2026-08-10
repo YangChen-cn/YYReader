@@ -59,7 +59,8 @@ final class NovelImportCoordinator {
 
         return NovelImportResult(
             bookTitle: catalogTitle.isEmpty ? (chapter.bookTitle ?? "未命名小说") : catalogTitle,
-            author: initialCatalog?.author ?? "未知作者",
+            author: initialCatalog?.author ?? chapter.author ?? "未知作者",
+            sourceBookURL: chapter.catalogURL ?? sourceBookURL(for: chapter),
             catalogURL: chapter.catalogURL ?? chapter.chapterURL,
             hasCatalog: chapter.catalogURL != nil,
             catalog: catalog,
@@ -89,6 +90,7 @@ final class NovelImportCoordinator {
         return NovelImportResult(
             bookTitle: catalog.title,
             author: catalog.author,
+            sourceBookURL: document.finalURL,
             catalogURL: document.finalURL,
             hasCatalog: true,
             catalog: catalog.chapters,
@@ -140,6 +142,7 @@ final class NovelImportCoordinator {
         return ChapterLoadResult(
             title: firstPage.title,
             bookTitle: firstPage.bookTitle,
+            author: firstPage.author,
             catalogURL: firstPage.catalogURL,
             chapterURL: chapterURL,
             bodyText: paragraphs.joined(separator: "\n\n"),
@@ -226,6 +229,9 @@ final class NovelImportCoordinator {
     }
 
     private func staticCatalog(in document: LoadedHTML) async throws -> ParsedBookCatalog? {
+        if try await hasHighConfidenceChapterContent(in: document) {
+            return nil
+        }
         do {
             let catalog = try await parser.parseCatalogPage(document)
             // Two or more chapter entries distinguish a catalog from a chapter page's navigation links.
@@ -234,6 +240,17 @@ final class NovelImportCoordinator {
             throw CancellationError()
         } catch {
             return nil
+        }
+    }
+
+    private func hasHighConfidenceChapterContent(in document: LoadedHTML) async throws -> Bool {
+        do {
+            let chapter = try await parser.parseChapterPage(document)
+            return chapter.paragraphs.joined().count >= 180
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            return false
         }
     }
 
@@ -246,7 +263,9 @@ final class NovelImportCoordinator {
             throw originalError
         }
         let renderedDocument = try await fallbackLoader.loadRenderedDOM(document.finalURL)
-        return try await parser.parseChapterPage(renderedDocument)
+        let page = try await parser.parseChapterPage(renderedDocument)
+        fallbackLoader.promoteRenderedDOMHost(for: renderedDocument.finalURL)
+        return page
     }
 
     private func retryCatalogParsingWithRenderedDOM(
@@ -258,7 +277,9 @@ final class NovelImportCoordinator {
             throw originalError
         }
         let renderedDocument = try await fallbackLoader.loadRenderedDOM(document.finalURL)
-        return try await parser.parseCatalogPage(renderedDocument)
+        let catalog = try await parser.parseCatalogPage(renderedDocument)
+        fallbackLoader.promoteRenderedDOMHost(for: renderedDocument.finalURL)
+        return catalog
     }
 
     private func appendWithoutBoundaryDuplicate(_ newParagraphs: [String], to paragraphs: inout [String]) {
@@ -281,5 +302,23 @@ final class NovelImportCoordinator {
         }
         components.path = path
         return components.url ?? url
+    }
+
+    private func sourceBookURL(for chapter: ChapterLoadResult) -> URL {
+        let chapterURL = chapter.chapterURL
+        let pathComponents = chapterURL.path.split(separator: "/", omittingEmptySubsequences: true)
+        if pathComponents.count >= 2,
+           var components = URLComponents(url: chapterURL, resolvingAgainstBaseURL: false) {
+            components.path = "/" + pathComponents.dropLast().joined(separator: "/") + "/"
+            components.query = nil
+            components.fragment = nil
+            if let url = components.url { return url }
+        }
+
+        var components = URLComponents()
+        components.scheme = "yyreader-book"
+        components.host = chapterURL.host?.lowercased() ?? "unknown-source"
+        components.path = "/" + (chapter.bookTitle ?? chapter.title)
+        return components.url ?? chapterURL
     }
 }
