@@ -2,11 +2,12 @@ import SwiftUI
 
 struct ReaderReadingProgressFooter: View {
     let text: String
+    let foreground: Color
 
     var body: some View {
         Text(text)
             .font(.caption.monospacedDigit())
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(foreground)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .allowsHitTesting(false)

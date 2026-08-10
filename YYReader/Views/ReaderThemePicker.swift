@@ -4,7 +4,11 @@ struct ReaderThemePicker: View {
     @Binding var selection: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
+            alignment: .leading,
+            spacing: 12
+        ) {
             ForEach(ReaderTheme.allCases) { theme in
                 Button {
                     selection = theme.rawValue
@@ -18,9 +22,16 @@ struct ReaderThemePicker: View {
                             .overlay {
                                 RoundedRectangle(cornerRadius: 6)
                                     .stroke(
-                                        selection == theme.rawValue ? Color.accentColor : Color.secondary.opacity(0.24),
+                                        selection == theme.rawValue ? Color.accentColor : theme.separator,
                                         lineWidth: selection == theme.rawValue ? 2 : 1
                                     )
+                            }
+                            .overlay(alignment: .topTrailing) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .symbolRenderingMode(.palette)
+                                    .foregroundStyle(Color.white, Color.accentColor)
+                                    .padding(3)
+                                    .opacity(selection == theme.rawValue ? 1 : 0)
                             }
 
                         Text(theme.title)

@@ -12,8 +12,8 @@ struct ReaderContentView: View {
     @AppStorage(ReaderPreferenceKeys.paragraphIndent) private var paragraphIndent = true
     @AppStorage(ReaderPreferenceKeys.continuousReading) private var continuousReading = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var topVisibleTarget: ReaderScrollTarget?
-    @State private var keyboardTargets: [ReaderScrollTarget] = []
+    @State private var scrollPosition = ScrollPosition(idType: ReaderScrollTarget.self)
+    @State private var scrollState = ReaderScrollState()
     @State private var hasAppliedInitialScroll = false
     @FocusState private var isReaderFocused: Bool
 
@@ -53,6 +53,8 @@ struct ReaderContentView: View {
                                 status: entry.id == lastEntryID
                                     ? store.continuationStatus(after: entry.chapter.id)
                                     : .attached,
+                                secondaryForeground: theme.secondaryForeground,
+                                tertiaryForeground: theme.tertiaryForeground,
                                 prepareAttachment: {
                                     store.prepareContinuousChapterAttachment(after: entry.chapter.id)
                                 },
@@ -64,6 +66,8 @@ struct ReaderContentView: View {
 
                     ReaderChapterFooter(
                         snapshot: store.chapterNavigationSnapshot,
+                        foreground: theme.foreground,
+                        secondaryForeground: theme.secondaryForeground,
                         previousChapter: store.goToPreviousChapter,
                         nextChapter: store.goToNextChapter
                     )
@@ -72,25 +76,38 @@ struct ReaderContentView: View {
                 .frame(width: effectiveWidth, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
-            .scrollPosition(id: $topVisibleTarget, anchor: .top)
-            .onScrollPhaseChange { oldPhase, newPhase, _ in
-                if newPhase.isScrolling, !oldPhase.isScrolling {
-                    store.beginReaderScrollTransaction()
-                } else if oldPhase.isScrolling, !newPhase.isScrolling {
-                    store.endReaderScrollTransaction(topVisibleChapterID: topVisibleTarget?.chapterID)
-                }
+            .scrollPosition($scrollPosition)
+            .onScrollGeometryChange(for: ReaderScrollMetrics.self) { geometry in
+                ReaderScrollMetrics(geometry: geometry)
+            } action: { _, metrics in
+                scrollState.update(metrics: metrics)
+                scheduleImmediateCommitIfNeeded()
+            }
+            .onScrollTargetVisibilityChange(idType: ReaderScrollTarget.self, threshold: 0.01) { targets in
+                scrollState.update(visibleTargets: targets)
+            }
+            .onScrollPhaseChange { oldPhase, newPhase, context in
+                handleScrollPhaseChange(oldPhase: oldPhase, newPhase: newPhase, context: context)
             }
             .contentMargins(.vertical, 0, for: .scrollContent)
             .textSelection(.enabled)
             .focusable()
             .focusEffectDisabled()
             .focused($isReaderFocused)
-            .onKeyPress(.upArrow) {
-                moveScrollPosition(by: -1)
+            .onKeyPress(.upArrow, phases: [.down, .repeat]) { press in
+                moveVertically(distance: -ReaderPageScroll.smallStep, isKeyRepeat: press.phase == .repeat)
                 return .handled
             }
-            .onKeyPress(.downArrow) {
-                moveScrollPosition(by: 1)
+            .onKeyPress(.downArrow, phases: [.down, .repeat]) { press in
+                moveVertically(distance: ReaderPageScroll.smallStep, isKeyRepeat: press.phase == .repeat)
+                return .handled
+            }
+            .onKeyPress(.leftArrow, phases: [.down, .repeat]) { press in
+                moveByPage(direction: -1, isKeyRepeat: press.phase == .repeat)
+                return .handled
+            }
+            .onKeyPress(.rightArrow, phases: [.down, .repeat]) { press in
+                moveByPage(direction: 1, isKeyRepeat: press.phase == .repeat)
                 return .handled
             }
         }
@@ -102,16 +119,8 @@ struct ReaderContentView: View {
         .task(id: continuousReading) {
             store.configureContinuousReading(continuousReading)
         }
-        .task(id: entries.map(\.id)) {
-            keyboardTargets = ReaderKeyboardScroll.paragraphTargets(
-                entries: entries.map { (chapterID: $0.chapter.id, paragraphs: $0.paragraphs) }
-            )
-        }
         .task(id: store.readerScrollRequest?.id) {
             await applyPendingScrollRequest()
-        }
-        .onChange(of: topVisibleTarget) { _, target in
-            handleScrollTarget(target)
         }
     }
 
@@ -128,20 +137,22 @@ struct ReaderContentView: View {
         await Task.yield()
         guard let chapter = store.selectedChapter else { return }
         if let request = store.readerScrollRequest, request.chapterID == chapter.id {
-            topVisibleTarget = .chapterHeader(chapter.id)
+            scrollPosition.scrollTo(id: ReaderScrollTarget.chapterHeader(chapter.id), anchor: .top)
             hasAppliedInitialScroll = true
             store.consumeReaderScrollRequest(request.id)
         } else if !hasAppliedInitialScroll {
-            topVisibleTarget = .paragraph(
-                chapterID: chapter.id,
-                index: min(max(chapter.topParagraphIndex, 0), max(chapter.paragraphs.count - 1, 0))
+            scrollPosition.scrollTo(
+                id: ReaderScrollTarget.paragraph(
+                    chapterID: chapter.id,
+                    index: min(max(chapter.topParagraphIndex, 0), max(chapter.paragraphs.count - 1, 0))
+                ),
+                anchor: .top
             )
             hasAppliedInitialScroll = true
         }
     }
 
-    private func handleScrollTarget(_ target: ReaderScrollTarget?) {
-        guard let target else { return }
+    private func commitVisibleTarget(_ target: ReaderScrollTarget) {
         switch target {
         case let .chapterHeader(chapterID):
             store.updateVisibleReaderPosition(chapterID: chapterID, paragraphIndex: 0, total: 1)
@@ -158,32 +169,68 @@ struct ReaderContentView: View {
         }
     }
 
-    private func moveScrollPosition(by offset: Int) {
-        guard let target = ReaderKeyboardScroll.nextTarget(
-            visibleTarget: topVisibleTarget,
-            selectedChapterID: store.selectedChapterID,
-            fallbackParagraphIndex: store.selectedChapter?.topParagraphIndex ?? 0,
-            targets: keyboardTargets,
-            offset: offset
-        ) else { return }
-        if reduceMotion {
-            topVisibleTarget = target
-        } else {
-            withAnimation(.easeOut(duration: 0.18)) {
-                topVisibleTarget = target
+    private func handleScrollPhaseChange(
+        oldPhase: ScrollPhase,
+        newPhase: ScrollPhase,
+        context: ScrollPhaseChangeContext
+    ) {
+        scrollState.update(metrics: ReaderScrollMetrics(geometry: context.geometry))
+        scrollState.update(phase: newPhase)
+
+        if newPhase == .tracking || newPhase == .interacting {
+            releaseProgrammaticScrollPosition()
+        }
+
+        if newPhase.isScrolling, !oldPhase.isScrolling {
+            store.beginReaderScrollTransaction()
+        }
+
+        if newPhase == .idle {
+            releaseProgrammaticScrollPosition()
+            commitVisiblePosition()
+            if oldPhase.isScrolling {
+                store.endReaderScrollTransaction(topVisibleChapterID: scrollState.topVisibleTarget?.chapterID)
             }
         }
     }
 
-}
+    private func commitVisiblePosition() {
+        guard let target = scrollState.consumeVisibleTargetForCommit() else { return }
+        commitVisibleTarget(target)
+    }
 
-private extension ReaderScrollTarget {
-    var chapterID: UUID {
-        switch self {
-        case let .chapterHeader(chapterID), let .chapterFooter(chapterID):
-            return chapterID
-        case let .paragraph(chapterID, _):
-            return chapterID
+    private func scheduleImmediateCommitIfNeeded() {
+        guard scrollState.hasImmediateCommitRequest else { return }
+        Task { @MainActor in
+            await Task.yield()
+            guard let target = scrollState.consumeImmediateCommitTarget() else { return }
+            commitVisibleTarget(target)
         }
+    }
+
+    private func moveVertically(distance: Double, isKeyRepeat: Bool) {
+        scroll(to: scrollState.destinationY(distance: distance), isKeyRepeat: isKeyRepeat)
+    }
+
+    private func moveByPage(direction: Double, isKeyRepeat: Bool) {
+        scroll(to: scrollState.pageDestinationY(direction: direction), isKeyRepeat: isKeyRepeat)
+    }
+
+    private func scroll(to destinationY: Double, isKeyRepeat: Bool) {
+        let destination = ScrollPosition(idType: ReaderScrollTarget.self, y: destinationY)
+        if ReaderPageScroll.shouldAnimate(reduceMotion: reduceMotion, isKeyRepeat: isKeyRepeat) {
+            withAnimation(.easeOut(duration: ReaderPageScroll.animationDuration)) {
+                scrollPosition = destination
+            }
+        } else {
+            scrollState.requestImmediateCommit()
+            scrollPosition = destination
+        }
+    }
+
+    private func releaseProgrammaticScrollPosition() {
+        guard !scrollPosition.isPositionedByUser else { return }
+        scrollPosition.isPositionedByUser = true
+        scrollState.releaseProgrammaticPosition()
     }
 }

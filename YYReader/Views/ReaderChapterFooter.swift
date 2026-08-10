@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ReaderChapterFooter: View {
     let snapshot: ReaderChapterNavigationSnapshot
+    let foreground: Color
+    let secondaryForeground: Color
     let previousChapter: () -> Void
     let nextChapter: () -> Void
 
@@ -11,13 +13,15 @@ struct ReaderChapterFooter: View {
                 Text(snapshot.positionText)
             }
             .font(.caption.monospacedDigit())
-            .foregroundStyle(.secondary)
+            .foregroundStyle(secondaryForeground)
 
             HStack {
                 ReaderChapterNavigationButton(
                     title: "上一章",
                     systemImage: "arrow.left",
                     isEnabled: snapshot.hasPrevious,
+                    foreground: foreground,
+                    secondaryForeground: secondaryForeground,
                     action: previousChapter
                 )
 
@@ -28,6 +32,8 @@ struct ReaderChapterFooter: View {
                     systemImage: "arrow.right",
                     imageOnTrailingEdge: true,
                     isEnabled: snapshot.hasNext,
+                    foreground: foreground,
+                    secondaryForeground: secondaryForeground,
                     action: nextChapter
                 )
             }
@@ -43,6 +49,8 @@ private struct ReaderChapterNavigationButton: View {
     let systemImage: String
     var imageOnTrailingEdge = false
     let isEnabled: Bool
+    let foreground: Color
+    let secondaryForeground: Color
     let action: () -> Void
     @State private var isHovered = false
 
@@ -57,7 +65,7 @@ private struct ReaderChapterNavigationButton: View {
                     Image(systemName: systemImage)
                 }
             }
-            .foregroundStyle(isHovered && isEnabled ? Color.primary : Color.secondary)
+            .foregroundStyle(isHovered && isEnabled ? foreground : secondaryForeground)
             .contentShape(.rect)
             .padding(.vertical, 4)
         }

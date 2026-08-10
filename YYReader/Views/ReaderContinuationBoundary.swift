@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ReaderContinuationBoundary: View {
     let status: ReaderContinuationStatus
+    let secondaryForeground: Color
+    let tertiaryForeground: Color
     let prepareAttachment: () -> Void
     let retry: () -> Void
 
@@ -9,19 +11,20 @@ struct ReaderContinuationBoundary: View {
         ZStack {
             Text("· · ·")
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(tertiaryForeground)
                 .accessibilityHidden(true)
 
             switch status {
             case .idle, .loading:
                 ProgressView()
                     .controlSize(.small)
+                    .tint(secondaryForeground)
                     .frame(maxWidth: .infinity, alignment: .trailing)
                     .accessibilityLabel("正在准备下一章")
             case .failed:
                 Button("加载下一章失败，重试", systemImage: "arrow.clockwise", action: retry)
                     .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(secondaryForeground)
             case .ready, .attached, .unavailable:
                 EmptyView()
             }

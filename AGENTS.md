@@ -55,13 +55,14 @@ xcodebuild test \
   -derivedDataPath DerivedData
 ```
 
-生成 arm64 Release：
+仅在用户明确要求发布新版本、制作安装包或校验发布流程时生成 arm64 Release：
 
 ```bash
 ./script/package_release.sh
 ```
 
-Release 产物位于 `dist/YYReader-<version>-arm64.dmg` ，不生成 ZIP。`DerivedData/` 与 `dist/` 不提交 Git。
+普通功能开发、修复、测试和 Debug 交付不得额外构建 Release，也不得生成 DMG。Release 产物位于
+`dist/YYReader-<version>-arm64.dmg`，不生成 ZIP。`DerivedData/` 与 `dist/` 不提交 Git。
 
 ## 目录与职责
 
@@ -173,16 +174,18 @@ Fixture 必须精简且使用自造段落，不提交完整版权章节内容。
 - 提交 `project.yml` 和重新生成的 `YYReader.xcodeproj`，保证仓库可直接打开。
 - 默认不执行破坏性 Git 命令，不使用 `git reset --hard` 或强制推送。
 - GitHub 发布前确认仓库可见性；未经用户明确要求不创建公开仓库。
-- Release 必须为 arm64、ad-hoc 签名，且通过 `codesign --verify --strict` 和 ZIP 完整性检查。
+- 仅在发布任务中执行 Release 验收；Release 必须为 arm64、ad-hoc 签名，并通过
+  `codesign --verify --strict` 和 DMG 完整性检查。
 
 ## 完成标准
 
 只有同时满足以下条件才视为完成：
 
 - XcodeGen 可重新生成工程。
-- Debug 和 Release 均能构建。
+- 日常开发和修复使用 `./script/build_and_run.sh run` 完成 Debug 构建与运行交付；只有发布任务才要求
+  Release 构建和 DMG 打包通过。
 - 相关测试全部通过。
-- Release 二进制仅包含要求的架构。
+- 发布任务中的 Release 二进制仅包含要求的架构；非发布任务不额外生成 Release 产物。
 - App Sandbox 权限正确。
 - App 图标和资源已进入 App 包。
 - 用户可随时停止导入，Cloudflare 和限流不会造成无限循环。

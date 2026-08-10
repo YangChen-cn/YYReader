@@ -31,7 +31,10 @@ struct ReaderView: View {
         }
         .overlay(alignment: .bottom) {
             if store.selectedChapter != nil {
-                ReaderReadingProgressFooter(text: store.readerProgressText)
+                ReaderReadingProgressFooter(
+                    text: store.readerProgressText,
+                    foreground: theme.tertiaryForeground
+                )
             }
         }
     }
