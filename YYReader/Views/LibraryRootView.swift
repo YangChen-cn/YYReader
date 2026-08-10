@@ -31,6 +31,13 @@ struct LibraryRootView: View {
                     showAdvancedAppearance: showAdvancedAppearance,
                     addURL: showAddURL,
                     refreshCatalog: refreshCatalog,
+                    downloadCurrentChapter: store.downloadCurrentChapter,
+                    downloadFollowingChapters: store.downloadFollowingChapters,
+                    downloadEntireBook: store.downloadEntireBook,
+                    cancelDownload: store.cancelOfflineDownload,
+                    deleteOfflineCache: store.deleteOfflineCache,
+                    canDownloadEntireBook: store.canDownloadEntireBook,
+                    isDownloading: store.offlineDownloads.isDownloading,
                     deleteBook: confirmDelete
                 )
             } else {
@@ -44,7 +51,11 @@ struct LibraryRootView: View {
             }
         }
         .overlay {
-            if store.isLoading, store.canCancelLoading || !isReading {
+            if store.offlineDownloads.isDownloading {
+                LoadingOverlay(message: store.offlineDownloads.progressMessage) {
+                    store.cancelOfflineDownload()
+                }
+            } else if store.isLoading, store.canCancelLoading || !isReading {
                 if store.canCancelLoading {
                     LoadingOverlay(message: store.loadingMessage) {
                         store.cancelLoading()
@@ -59,6 +70,10 @@ struct LibraryRootView: View {
         }
         .alert(item: $store.presentedError) { error in
             Alert(title: Text("操作失败"), message: Text(error.message), dismissButton: .default(Text("好")))
+        }
+        .onChange(of: store.offlineDownloads.failureMessage) { _, message in
+            guard let message else { return }
+            store.presentedError = PresentedError(message: message)
         }
         .confirmationDialog("确定删除这本小说及其离线缓存吗？", isPresented: $confirmingDelete) {
             Button("删除", role: .destructive, action: deleteSelectedBook)

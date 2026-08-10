@@ -13,7 +13,7 @@ struct ReaderView: View {
 
             Group {
                 if let chapter = store.selectedChapter, chapter.isCached {
-                    ReaderContentView(chapter: chapter, store: store)
+                    ReaderContentView(store: store)
                 } else if store.selectedChapter != nil {
                     ProgressView("正在准备章节…")
                         .task(id: store.selectedChapterID) {
@@ -28,6 +28,11 @@ struct ReaderView: View {
                 }
             }
             .foregroundStyle(theme.foreground)
+        }
+        .overlay(alignment: .bottom) {
+            if store.selectedChapter != nil {
+                ReaderReadingProgressFooter(text: store.readerProgressText)
+            }
         }
     }
 }

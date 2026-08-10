@@ -9,6 +9,13 @@ struct ReaderToolbar: ToolbarContent {
     let showAdvancedAppearance: () -> Void
     let addURL: () -> Void
     let refreshCatalog: () -> Void
+    let downloadCurrentChapter: () -> Void
+    let downloadFollowingChapters: () -> Void
+    let downloadEntireBook: () -> Void
+    let cancelDownload: () -> Void
+    let deleteOfflineCache: () -> Void
+    let canDownloadEntireBook: Bool
+    let isDownloading: Bool
     let deleteBook: () -> Void
 
     var body: some ToolbarContent {
@@ -31,6 +38,23 @@ struct ReaderToolbar: ToolbarContent {
                     .disabled(!canRefreshCatalog || isLoading)
                 Button("添加网页…", systemImage: "plus", action: addURL)
                     .disabled(isLoading)
+
+                Menu("下载到本地…", systemImage: "arrow.down.circle") {
+                    Button("下载当前章节", action: downloadCurrentChapter)
+                        .disabled(isDownloading)
+                    Button("下载后 20 章", action: downloadFollowingChapters)
+                        .disabled(!canDownloadEntireBook || isDownloading)
+                    Button("下载全部章节", action: downloadEntireBook)
+                        .disabled(!canDownloadEntireBook || isDownloading)
+                    if isDownloading {
+                        Divider()
+                        Button("取消下载", role: .cancel, action: cancelDownload)
+                    }
+                }
+                .disabled(isLoading)
+
+                Button("删除离线缓存", systemImage: "externaldrive.badge.xmark", action: deleteOfflineCache)
+                    .disabled(!canManageBook || isDownloading)
 
                 Divider()
 

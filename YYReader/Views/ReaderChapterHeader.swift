@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ReaderChapterHeader: View {
     let chapter: Chapter
+    let target: ReaderScrollTarget
 
     var body: some View {
         Text(chapter.title)
@@ -11,6 +12,6 @@ struct ReaderChapterHeader: View {
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.top, 92)
             .padding(.bottom, 36)
-        .id(-1)
+        .id(target)
     }
 }

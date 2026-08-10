@@ -12,8 +12,12 @@ final class LibraryStore {
     private var importTask: Task<Void, Never>?
     private var catalogRefreshTask: Task<Void, Never>?
     private var progressSaveTask: Task<Void, Never>?
+    private var continuousLoadTasks: [UUID: Task<Void, Never>] = [:]
+    private var continuousLoadFailures: Set<UUID> = []
     private var hasPendingProgressChanges = false
 
+    let readerSession = ContinuousReaderSession()
+    let offlineDownloads: OfflineDownloadManager
     private(set) var books: [Book] = []
     private(set) var sortedChapters: [Chapter] = []
     private(set) var chapterNavigationSnapshot = ReaderChapterNavigationSnapshot.empty
@@ -32,6 +36,7 @@ final class LibraryStore {
         self.modelContext = modelContext
         self.coordinator = coordinator
         self.progressSaveDelay = progressSaveDelay
+        self.offlineDownloads = OfflineDownloadManager(modelContext: modelContext, coordinator: coordinator)
         refreshBooks()
     }
 
@@ -45,11 +50,18 @@ final class LibraryStore {
 
     var canCancelLoading: Bool { importTask != nil || catalogRefreshTask != nil }
     var canRefreshSelectedCatalog: Bool { selectedBook?.hasCatalog == true }
+    var canDownloadEntireBook: Bool { selectedBook?.hasCatalog == true }
+    var readerProgressText: String {
+        let position = chapterNavigationSnapshot.positionText
+        let percentage = Int((selectedChapter?.readingProgress ?? 0) * 100)
+        return "\(position)　\(percentage)%"
+    }
 
     func restoreSelection(bookID: UUID?, chapterID: UUID?) {
         selectedBookID = books.contains { $0.id == bookID } ? bookID : books.first?.id
         rebuildSelectedBookChapters()
         selectInitialChapter(preferredID: chapterID)
+        refreshReaderSession()
         requestReaderScroll(.restore)
     }
 
@@ -69,6 +81,7 @@ final class LibraryStore {
         selectedBookID = id
         rebuildSelectedBookChapters()
         selectInitialChapter(preferredID: nil)
+        refreshReaderSession()
     }
 
     func selectChapter(_ id: UUID?, scrollIntent: ReaderScrollIntent? = nil) {
@@ -101,6 +114,7 @@ final class LibraryStore {
         }
         selectedBook?.currentChapterID = chapter.id
         updateChapterNavigationSnapshot()
+        refreshReaderSession()
         if let scrollIntent {
             requestReaderScroll(scrollIntent)
         }
@@ -131,6 +145,79 @@ final class LibraryStore {
         importTask = nil
         catalogRefreshTask?.cancel()
         catalogRefreshTask = nil
+    }
+
+    func cancelOfflineDownload() {
+        offlineDownloads.cancel()
+    }
+
+    func downloadCurrentChapter() {
+        startOfflineDownload(.currentChapter)
+    }
+
+    func downloadFollowingChapters() {
+        startOfflineDownload(.followingChapters(20))
+    }
+
+    func downloadEntireBook() {
+        startOfflineDownload(.entireBook)
+    }
+
+    func deleteOfflineCache() {
+        guard let book = selectedBook else { return }
+        let retainedChapterID = selectedChapterID
+        for chapter in book.chapters where chapter.id != retainedChapterID {
+            chapter.bodyText = nil
+            chapter.cachedAt = nil
+        }
+        saveChanges(failureMessage: "删除离线缓存失败")
+        refreshReaderSession()
+    }
+
+    func prepareContinuousReading() {
+        guard let chapter = selectedChapter else { return }
+        refreshReaderSession()
+        if let next = neighbor(of: chapter, offset: 1) {
+            startContinuousLoad(for: next)
+        }
+    }
+
+    func prefetchContinuousChapter(after chapterID: UUID) {
+        guard let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }),
+              let next = neighbor(of: chapter, offset: 1) else {
+            return
+        }
+        startContinuousLoad(for: next)
+    }
+
+    func retryContinuousChapter(after chapterID: UUID) {
+        guard let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }),
+              let next = neighbor(of: chapter, offset: 1) else {
+            return
+        }
+        continuousLoadFailures.remove(next.id)
+        startContinuousLoad(for: next)
+    }
+
+    func continuationStatus(after chapterID: UUID) -> ReaderContinuationStatus {
+        guard let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }),
+              let next = neighbor(of: chapter, offset: 1) else {
+            return .unavailable
+        }
+        if next.isCached { return .ready }
+        if continuousLoadFailures.contains(next.id) { return .failed }
+        return continuousLoadTasks[next.id] == nil ? .idle : .loading
+    }
+
+    func updateVisibleReaderPosition(chapterID: UUID, paragraphIndex: Int, total: Int) {
+        guard let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }) else { return }
+        readerSession.updateVisibleChapter(chapterID, paragraphIndex: paragraphIndex)
+        updateProgress(chapterID: chapterID, paragraphIndex: paragraphIndex, total: total)
+        guard selectedChapterID != chapterID else { return }
+        selectedChapterID = chapterID
+        chapter.book?.currentChapterID = chapterID
+        updateChapterNavigationSnapshot()
+        refreshReaderSession()
     }
 
     private func importURL(_ input: String) async {
@@ -281,7 +368,43 @@ final class LibraryStore {
             apply(result, to: chapter)
             try modelContext.save()
             updateChapterNavigationSnapshot()
+            refreshReaderSession()
             schedulePrefetch(after: chapter)
+        }
+    }
+
+    private func startOfflineDownload(_ scope: OfflineDownloadScope) {
+        guard let book = selectedBook, let chapter = selectedChapter else { return }
+        if !book.hasCatalog {
+            guard case .currentChapter = scope else { return }
+        }
+        offlineDownloads.start(book: book, currentChapter: chapter, scope: scope)
+    }
+
+    private func startContinuousLoad(for chapter: Chapter) {
+        guard !chapter.isCached,
+              continuousLoadTasks[chapter.id] == nil,
+              let url = URL(string: chapter.sourceURL) else {
+            return
+        }
+
+        continuousLoadTasks[chapter.id] = Task { [weak self] in
+            guard let self else { return }
+            defer { continuousLoadTasks[chapter.id] = nil }
+            do {
+                let result = try await coordinator.loadChapterContent(from: url)
+                guard !Task.isCancelled else { return }
+                apply(result, to: chapter)
+                try modelContext.save()
+                continuousLoadFailures.remove(chapter.id)
+                refreshReaderSession()
+            } catch is CancellationError {
+                return
+            } catch HTMLLoadError.cancelled {
+                return
+            } catch {
+                continuousLoadFailures.insert(chapter.id)
+            }
         }
     }
 
@@ -293,14 +416,8 @@ final class LibraryStore {
         }
         prefetchTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1))
-            guard !Task.isCancelled, let self, let url = URL(string: next.sourceURL) else { return }
-            do {
-                let result = try await self.coordinator.loadChapterContent(from: url)
-                self.apply(result, to: next)
-                try self.modelContext.save()
-            } catch {
-                // Prefetch is opportunistic; foreground loading will report errors.
-            }
+            guard !Task.isCancelled, let self else { return }
+            self.startContinuousLoad(for: next)
         }
     }
 
@@ -337,6 +454,33 @@ final class LibraryStore {
         return selectedBook?.chapters.first { chapter in
             chapter.sourceURL == urlString || canonicalURLString(chapter.sourceURL) == canonicalURLString(urlString)
         }
+    }
+
+    private func neighbor(of chapter: Chapter, offset: Int) -> Chapter? {
+        guard let index = sortedChapters.firstIndex(where: { $0.id == chapter.id }) else {
+            return nil
+        }
+        let targetIndex = index + offset
+        if sortedChapters.indices.contains(targetIndex) {
+            return sortedChapters[targetIndex]
+        }
+
+        let linkedURL = offset > 0 ? chapter.nextURL : chapter.previousURL
+        guard let linkedURL, let book = selectedBook else { return nil }
+        if let existing = chapterForURL(linkedURL) { return existing }
+
+        let generated = Chapter(
+            sourceURL: linkedURL,
+            title: offset > 0 ? "下一章" : "上一章",
+            sortIndex: chapter.sortIndex + offset,
+            book: nil
+        )
+        modelContext.insert(generated)
+        book.chapters.append(generated)
+        generated.book = book
+        rebuildSelectedBookChapters()
+        saveChanges(failureMessage: "保存章节失败")
+        return generated
     }
 
     private func upsert(_ result: NovelImportResult) throws -> Chapter {
@@ -435,6 +579,10 @@ final class LibraryStore {
             if lhs.sortIndex == rhs.sortIndex { return lhs.title < rhs.title }
             return lhs.sortIndex < rhs.sortIndex
         } ?? []
+    }
+
+    private func refreshReaderSession() {
+        readerSession.reset(around: selectedChapter, in: sortedChapters)
     }
 
     private func updateChapterNavigationSnapshot() {
