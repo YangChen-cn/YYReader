@@ -71,12 +71,25 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         let candidates = try document.select(
             "article, main, [id*=content], [class*=content], [id*=chapter], [class*=chapter], [id*=read], [class*=read]"
         ).array()
+        let hasChapterNavigation = try hasChapterNavigation(in: document)
+        let hasChapterTitle = isLikelyChapterTitle(try chapterTitle(in: document))
 
         return try candidates.max { lhs, rhs in
             try score(lhs) < score(rhs)
         }.flatMap { candidate in
-            guard (try? score(candidate)) ?? 0 > 100 else { return nil }
+            let candidateScore = (try? score(candidate)) ?? 0
+            guard candidateScore > 100
+                || (candidateScore >= 60 && hasChapterTitle && hasChapterNavigation) else {
+                return nil
+            }
             return candidate
+        }
+    }
+
+    private func hasChapterNavigation(in document: Document) throws -> Bool {
+        let labels = Set(["上一章", "上一章节", "前一章", "下一章", "下一章节", "后一章"])
+        return try document.select("a").array().contains { anchor in
+            labels.contains(try anchor.text().trimmingCharacters(in: .whitespacesAndNewlines))
         }
     }
 

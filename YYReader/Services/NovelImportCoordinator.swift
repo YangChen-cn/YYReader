@@ -246,7 +246,13 @@ final class NovelImportCoordinator {
     private func hasHighConfidenceChapterContent(in document: LoadedHTML) async throws -> Bool {
         do {
             let chapter = try await parser.parseChapterPage(document)
-            return chapter.paragraphs.joined().count >= 180
+            let bodyLength = chapter.paragraphs.joined().count
+            if bodyLength >= 180 {
+                return true
+            }
+            return bodyLength >= 60
+                && looksLikeChapterTitle(chapter.title)
+                && (chapter.previousChapterURL != nil || chapter.nextChapterURL != nil)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -307,7 +313,7 @@ final class NovelImportCoordinator {
     private func sourceBookURL(for chapter: ChapterLoadResult) -> URL {
         let chapterURL = chapter.chapterURL
         let pathComponents = chapterURL.path.split(separator: "/", omittingEmptySubsequences: true)
-        if pathComponents.count >= 2,
+        if hasExplicitBookPath(pathComponents),
            var components = URLComponents(url: chapterURL, resolvingAgainstBaseURL: false) {
             components.path = "/" + pathComponents.dropLast().joined(separator: "/") + "/"
             components.query = nil
@@ -318,7 +324,26 @@ final class NovelImportCoordinator {
         var components = URLComponents()
         components.scheme = "yyreader-book"
         components.host = chapterURL.host?.lowercased() ?? "unknown-source"
-        components.path = "/" + (chapter.bookTitle ?? chapter.title)
+        components.path = "/" + normalizedIdentityComponent(chapter.bookTitle ?? "未命名小说")
+            + "/" + normalizedIdentityComponent(chapter.author ?? "未知作者")
         return components.url ?? chapterURL
+    }
+
+    private func hasExplicitBookPath(_ pathComponents: [Substring]) -> Bool {
+        guard pathComponents.count >= 3 else { return false }
+        let collection = pathComponents[pathComponents.count - 3].lowercased()
+        return ["book", "books", "novel", "novels", "serial", "fiction", "story", "stories"].contains(collection)
+    }
+
+    private func normalizedIdentityComponent(_ value: String) -> String {
+        HTMLParsingSupport.normalize(value).folding(
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: Locale(identifier: "en_US_POSIX")
+        )
+    }
+
+    private func looksLikeChapterTitle(_ title: String) -> Bool {
+        HTMLParsingSupport.chapterNumber(in: title) != nil
+            || HTMLParsingSupport.firstCapture("^(?:序章|楔子|引子|尾声|后记|番外)", in: title) != nil
     }
 }

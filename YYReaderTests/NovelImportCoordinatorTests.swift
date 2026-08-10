@@ -144,6 +144,30 @@ struct NovelImportCoordinatorTests {
     }
 
     @Test
+    func shortChapterWithNavigationIsNotImportedAsCatalog() async throws {
+        let chapter = try #require(URL(string: "https://example.com/read/bright-moon-3.html"))
+        let loader = MockHTMLLoader(documents: [
+            chapter: """
+            <h1>第3章 导航佐证</h1>
+            <article>这是长度超过最低正文阈值的自造章节内容。虽然它不足一百八十字，但标题明确是章节标题，并且存在下一章导航，因此不应被侧栏目录链接覆盖或误判。</article>
+            <aside class="chapter-list">
+                <a href="/read/bright-moon-1.html">第1章 侧栏章节</a>
+                <a href="/read/bright-moon-2.html">第2章 侧栏章节</a>
+                <a href="/read/bright-moon-4.html">第4章 侧栏章节</a>
+            </aside>
+            <a href="/read/bright-moon-4.html">下一章</a>
+            """
+        ])
+        let coordinator = NovelImportCoordinator(loader: loader)
+
+        let result = try await coordinator.importNovel(from: chapter)
+
+        #expect(!result.hasCatalog)
+        #expect(result.chapterURL == chapter)
+        #expect(result.chapterTitle == "第3章 导航佐证")
+    }
+
+    @Test
     func importsFromAGenericCatalogPageAndLoadsItsFirstChapter() async throws {
         let catalog = try #require(URL(string: "https://www.longwangxs.com/book/552/"))
         let chapter = try #require(URL(string: "https://www.longwangxs.com/book/552/prologue.html"))
