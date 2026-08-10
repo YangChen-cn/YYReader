@@ -756,7 +756,7 @@
 				CODE_SIGN_ENTITLEMENTS = YYReader/YYReader.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YYReader/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = YYReader;
@@ -766,7 +766,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yyreader.app;
 				PRODUCT_NAME = YYReader;
 				SDKROOT = macosx;
@@ -896,7 +896,7 @@
 				CODE_SIGN_ENTITLEMENTS = YYReader/YYReader.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YYReader/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = YYReader;
@@ -906,7 +906,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yyreader.app;
 				PRODUCT_NAME = YYReader;
 				SDKROOT = macosx;
