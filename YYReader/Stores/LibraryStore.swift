@@ -95,14 +95,6 @@ final class LibraryStore {
         applyChapterSelection(id, scrollIntent: scrollIntent, restoringOnFailure: selectedChapterID)
     }
 
-    func reconcileChapterSelection(
-        _ id: UUID?,
-        previousID: UUID?,
-        scrollIntent: ReaderScrollIntent? = nil
-    ) {
-        applyChapterSelection(id, scrollIntent: scrollIntent, restoringOnFailure: previousID)
-    }
-
     private func applyChapterSelection(
         _ id: UUID?,
         scrollIntent: ReaderScrollIntent?,

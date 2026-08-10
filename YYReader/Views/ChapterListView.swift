@@ -20,7 +20,7 @@ struct ChapterListView: View {
                 .padding(.vertical, 7)
 
             ScrollViewReader { proxy in
-                List(selection: $store.selectedChapterID) {
+                List(selection: chapterSelection) {
                     ForEach(chapters) { chapter in
                         ChapterListRow(chapter: chapter)
                             .id(chapter.id)
@@ -58,17 +58,6 @@ struct ChapterListView: View {
             }
         }
         .navigationTitle(store.selectedBook?.title ?? "目录")
-        .onChange(of: store.selectedChapterID) { oldValue, newValue in
-            Task { @MainActor in
-                await Task.yield()
-                guard store.selectedChapterID == newValue else { return }
-                store.reconcileChapterSelection(
-                    newValue,
-                    previousID: oldValue,
-                    scrollIntent: selectionScrollIntent
-                )
-            }
-        }
         .onKeyPress(.return) {
             guard let chapterID = store.selectedChapterID else { return .ignored }
             activateChapter(chapterID)
@@ -76,8 +65,19 @@ struct ChapterListView: View {
         }
     }
 
+    private var chapterSelection: Binding<UUID?> {
+        Binding(
+            get: { store.selectedChapterID },
+            set: { newValue in
+                guard newValue != store.selectedChapterID else { return }
+                store.selectChapter(newValue, scrollIntent: selectionScrollIntent)
+            }
+        )
+    }
+
     private func centerSelectedChapter(using proxy: ScrollViewProxy, in chapters: [Chapter]) {
-        guard let chapterID = store.selectedChapterID,
+        guard isCatalogVisible,
+              let chapterID = store.selectedChapterID,
               chapters.contains(where: { $0.id == chapterID }) else {
             return
         }
