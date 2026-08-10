@@ -15,7 +15,6 @@ final class LibraryStore {
     private var continuousLoadTasks: [UUID: Task<Void, Never>] = [:]
     private var continuousLoadFailures: Set<UUID> = []
     private var visibleChapterDebounceTask: Task<Void, Never>?
-    private var stableTrimTask: Task<Void, Never>?
     private var visibilityGate = ContinuousReaderVisibilityGate()
     private var pendingContinuousAttachmentChapterID: UUID?
     private var isReaderScrolling = false
@@ -69,6 +68,7 @@ final class LibraryStore {
         rebuildSelectedBookChapters()
         selectInitialChapter(preferredID: chapterID)
         refreshReaderSession()
+        prefetchNextContinuousChapterIfNeeded()
         requestReaderScroll(.restore)
     }
 
@@ -89,6 +89,7 @@ final class LibraryStore {
         rebuildSelectedBookChapters()
         selectInitialChapter(preferredID: nil)
         refreshReaderSession()
+        prefetchNextContinuousChapterIfNeeded()
     }
 
     func selectChapter(_ id: UUID?, scrollIntent: ReaderScrollIntent? = nil) {
@@ -114,6 +115,7 @@ final class LibraryStore {
         selectedBook?.currentChapterID = chapter.id
         updateChapterNavigationSnapshot()
         refreshReaderSession()
+        prefetchNextContinuousChapterIfNeeded()
         if let scrollIntent {
             requestReaderScroll(scrollIntent)
         }
@@ -178,12 +180,18 @@ final class LibraryStore {
         continuousReadingEnabled = isEnabled
         candidateVisibleChapterID = nil
         visibleChapterDebounceTask?.cancel()
-        stableTrimTask?.cancel()
         pendingContinuousAttachmentChapterID = nil
         refreshReaderSession()
+        prefetchNextContinuousChapterIfNeeded()
     }
 
     func prepareContinuousReading() {
+        refreshReaderSession()
+        prefetchNextContinuousChapterIfNeeded()
+    }
+
+    func resetContinuousReaderWindow() {
+        pendingContinuousAttachmentChapterID = nil
         refreshReaderSession()
     }
 
@@ -204,13 +212,10 @@ final class LibraryStore {
             return
         }
 
+        pendingContinuousAttachmentChapterID = chapterID
         prefetchContinuousChapter(after: chapterID)
-        guard !visibilityGate.hasCommittedInCurrentTransaction else { return }
-        if next.isCached {
-            readerSession.attachNext(next)
-        } else {
-            pendingContinuousAttachmentChapterID = chapterID
-        }
+        guard next.isCached else { return }
+        attachPendingContinuousChapterIfSafe()
     }
 
     func retryContinuousChapter(after chapterID: UUID) {
@@ -249,14 +254,12 @@ final class LibraryStore {
 
     func beginReaderScrollTransaction() {
         isReaderScrolling = true
-        stableTrimTask?.cancel()
         visibilityGate.beginTransaction()
     }
 
-    func endReaderScrollTransaction(topVisibleChapterID: UUID?) {
+    func endReaderScrollTransaction(topVisibleChapterID _: UUID?) {
         isReaderScrolling = false
         attachPendingContinuousChapterIfSafe()
-        scheduleStableTrim(topVisibleChapterID: topVisibleChapterID)
     }
 
     private func scheduleVisibleChapterCommit(for chapter: Chapter) {
@@ -305,32 +308,7 @@ final class LibraryStore {
         chapter.book?.currentChapterID = chapter.id
         updateChapterNavigationSnapshot()
         scheduleProgressSave()
-    }
-
-    private func scheduleStableTrim(topVisibleChapterID: UUID?) {
-        guard continuousReadingEnabled,
-              let topVisibleChapterID else {
-            return
-        }
-        stableTrimTask?.cancel()
-        stableTrimTask = Task { [weak self] in
-            do {
-                try await Task.sleep(for: .milliseconds(250))
-            } catch is CancellationError {
-                return
-            } catch {
-                return
-            }
-            guard let self,
-                  !self.isReaderScrolling,
-                  self.selectedChapterID == topVisibleChapterID,
-                  let index = self.sortedChapters.firstIndex(where: { $0.id == topVisibleChapterID }) else {
-                return
-            }
-            let lowerBound = max(self.sortedChapters.startIndex, index - 1)
-            let upperBound = min(self.sortedChapters.index(before: self.sortedChapters.endIndex), index + 1)
-            self.readerSession.trim(toChapterIDs: Set(self.sortedChapters[lowerBound...upperBound].map(\.id)))
-        }
+        prefetchNextContinuousChapterIfNeeded()
     }
 
     private func importURL(_ input: String) async {
@@ -708,6 +686,11 @@ final class LibraryStore {
             if lhs.sortIndex == rhs.sortIndex { return lhs.title < rhs.title }
             return lhs.sortIndex < rhs.sortIndex
         } ?? []
+    }
+
+    private func prefetchNextContinuousChapterIfNeeded() {
+        guard continuousReadingEnabled, let chapterID = selectedChapterID else { return }
+        prefetchContinuousChapter(after: chapterID)
     }
 
     private func attachPendingContinuousChapterIfSafe() {

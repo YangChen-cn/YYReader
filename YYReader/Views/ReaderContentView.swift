@@ -20,6 +20,7 @@ struct ReaderContentView: View {
         let family = ReaderFontFamily(rawValue: fontFamily) ?? .serif
         let theme = ReaderTheme(rawValue: themeName) ?? .system
         let entries = store.readerSession.entries
+        let lastEntryID = entries.last?.id
 
         GeometryReader { geometry in
             let effectiveWidth = ReaderViewportLayout.effectiveContentWidth(
@@ -46,15 +47,19 @@ struct ReaderContentView: View {
                                 )
                                 .id(ReaderScrollTarget.paragraph(chapterID: entry.chapter.id, index: index))
                             }
-                        }
 
-                        if continuousReading, let lastEntry = entries.last {
-                            ReaderContinuationBoundary(
-                                status: store.continuationStatus(after: lastEntry.chapter.id),
-                                prefetch: { store.prepareContinuousChapterAttachment(after: lastEntry.chapter.id) },
-                                retry: { store.retryContinuousChapter(after: lastEntry.chapter.id) }
-                            )
-                            .id(ReaderScrollTarget.chapterFooter(lastEntry.chapter.id))
+                            if continuousReading {
+                                ReaderContinuationBoundary(
+                                    status: entry.id == lastEntryID
+                                        ? store.continuationStatus(after: entry.chapter.id)
+                                        : .attached,
+                                    prepareAttachment: {
+                                        store.prepareContinuousChapterAttachment(after: entry.chapter.id)
+                                    },
+                                    retry: { store.retryContinuousChapter(after: entry.chapter.id) }
+                                )
+                                .id(ReaderScrollTarget.chapterFooter(entry.chapter.id))
+                            }
                         }
 
                         ReaderChapterFooter(

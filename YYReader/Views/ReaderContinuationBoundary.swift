@@ -2,31 +2,40 @@ import SwiftUI
 
 struct ReaderContinuationBoundary: View {
     let status: ReaderContinuationStatus
-    let prefetch: () -> Void
+    let prepareAttachment: () -> Void
     let retry: () -> Void
 
     var body: some View {
-        Group {
+        ZStack {
+            Text("· · ·")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
+
             switch status {
-            case .idle:
-                ProgressView("正在准备下一章…")
-                    .onAppear(perform: prefetch)
-            case .loading:
-                ProgressView("正在准备下一章…")
+            case .idle, .loading:
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .accessibilityLabel("正在准备下一章")
             case .failed:
                 Button("加载下一章失败，重试", systemImage: "arrow.clockwise", action: retry)
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
-            case .ready:
-                Color.clear
-                    .frame(height: 1)
-                    .onAppear(perform: prefetch)
-            case .unavailable:
+            case .ready, .attached, .unavailable:
                 EmptyView()
             }
         }
         .font(.callout)
-        .padding(.vertical, 32)
+        .frame(height: 72)
         .frame(maxWidth: .infinity)
+        .onAppear(perform: prepareIfNeeded)
+        .onChange(of: status) { _, _ in prepareIfNeeded() }
+    }
+
+    private func prepareIfNeeded() {
+        if status == .idle || status == .ready {
+            prepareAttachment()
+        }
     }
 }

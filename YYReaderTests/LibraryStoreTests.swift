@@ -472,8 +472,10 @@ struct LibraryStoreTests {
     @Test
     func continuousPrefetchCachesNextChapterWithoutChangingRenderedEntries() async throws {
         let nextURL = try #require(URL(string: "https://example.com/book/continuous/2.html"))
+        let thirdURL = try #require(URL(string: "https://example.com/book/continuous/3.html"))
         let loader = MockHTMLLoader(documents: [
-            nextURL: genericCataloglessChapter(title: "第2章 继续", body: "连续阅读的第二章")
+            nextURL: genericCataloglessChapter(title: "第2章 继续", body: "连续阅读的第二章"),
+            thirdURL: genericCataloglessChapter(title: "第3章 后续", body: "连续阅读的第三章")
         ])
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
@@ -499,11 +501,18 @@ struct LibraryStoreTests {
             sortIndex: 2,
             book: book
         )
-        book.chapters = [first, second]
+        let third = Chapter(
+            sourceURL: thirdURL.absoluteString,
+            title: "第3章 后续",
+            sortIndex: 3,
+            book: book
+        )
+        book.chapters = [first, second, third]
         book.currentChapterID = first.id
         context.insert(book)
         context.insert(first)
         context.insert(second)
+        context.insert(third)
         try context.save()
 
         let store = LibraryStore(modelContext: context, coordinator: NovelImportCoordinator(loader: loader))
@@ -511,11 +520,9 @@ struct LibraryStoreTests {
         #expect(!store.continuousReadingEnabled)
         store.configureContinuousReading(true)
         store.prepareContinuousReading()
-        #expect(loader.requestedURLs.isEmpty)
-        #expect(store.readerSession.entries.map(\.chapter.id) == [first.id])
-        store.prefetchContinuousChapter(after: first.id)
         try await waitForCache(of: second)
 
+        // Enabling continuous reading starts a one-chapter lookahead without attaching it.
         #expect(loader.requestedURLs == [nextURL])
         #expect(store.readerSession.entries.map(\.chapter.id) == [first.id])
 
@@ -524,6 +531,15 @@ struct LibraryStoreTests {
         #expect(store.readerSession.entries.map(\.chapter.id) == [first.id])
 
         store.prepareContinuousChapterAttachment(after: first.id)
+        #expect(store.readerSession.entries.map(\.chapter.id) == [first.id, second.id])
+
+        store.beginReaderScrollTransaction()
+        store.updateVisibleReaderPosition(chapterID: second.id, paragraphIndex: 0, total: 1)
+        try await waitForCache(of: third)
+
+        // Committing the newly visible chapter advances lookahead, but does not attach it.
+        #expect(store.selectedChapterID == second.id)
+        #expect(loader.requestedURLs == [nextURL, thirdURL])
         #expect(store.readerSession.entries.map(\.chapter.id) == [first.id, second.id])
     }
 
@@ -562,8 +578,11 @@ struct LibraryStoreTests {
 
         store.beginReaderScrollTransaction()
         store.prepareContinuousChapterAttachment(after: chapters[0].id)
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id])
+        store.endReaderScrollTransaction(topVisibleChapterID: chapters[0].id)
         #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id, chapters[1].id])
 
+        store.beginReaderScrollTransaction()
         store.updateVisibleReaderPosition(chapterID: chapters[1].id, paragraphIndex: 0, total: 1)
         try await Task.sleep(for: .milliseconds(260))
         #expect(store.selectedChapterID == chapters[1].id)
@@ -576,10 +595,15 @@ struct LibraryStoreTests {
         #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id, chapters[1].id])
 
         store.endReaderScrollTransaction(topVisibleChapterID: chapters[1].id)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id, chapters[1].id])
         store.beginReaderScrollTransaction()
         store.prepareContinuousChapterAttachment(after: chapters[1].id)
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id, chapters[1].id])
+        store.endReaderScrollTransaction(topVisibleChapterID: chapters[1].id)
         #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id, chapters[1].id, chapters[2].id])
 
+        store.beginReaderScrollTransaction()
         store.updateVisibleReaderPosition(chapterID: chapters[2].id, paragraphIndex: 0, total: 1)
         try await Task.sleep(for: .milliseconds(260))
         #expect(store.selectedChapterID == chapters[2].id)
@@ -589,6 +613,8 @@ struct LibraryStoreTests {
             store.endReaderScrollTransaction(topVisibleChapterID: chapters[index].id)
             store.beginReaderScrollTransaction()
             store.prepareContinuousChapterAttachment(after: chapters[index].id)
+            store.endReaderScrollTransaction(topVisibleChapterID: chapters[index].id)
+            store.beginReaderScrollTransaction()
             store.updateVisibleReaderPosition(chapterID: chapters[index + 1].id, paragraphIndex: 0, total: 1)
             try await Task.sleep(for: .milliseconds(260))
             #expect(store.selectedChapterID == chapters[index + 1].id)

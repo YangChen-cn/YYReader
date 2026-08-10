@@ -37,7 +37,4 @@ final class ContinuousReaderSession {
         entries.append(Entry(chapter: chapter, paragraphs: chapter.paragraphs))
     }
 
-    func trim(toChapterIDs chapterIDs: Set<UUID>) {
-        entries.removeAll { !chapterIDs.contains($0.chapter.id) }
-    }
 }

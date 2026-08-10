@@ -120,6 +120,7 @@ struct LibraryRootView: View {
     }
     private func showLibrary() {
         store.flushPendingProgress()
+        store.resetContinuousReaderWindow()
         libraryColumnVisibility = .all
         isReading = false
         showingAppearancePopover = false
