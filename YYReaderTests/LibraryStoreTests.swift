@@ -622,6 +622,52 @@ struct LibraryStoreTests {
     }
 
     @Test
+    func continuousReaderReclaimsItsLargeWindowOnlyWhenScrollTransactionEnds() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        let book = Book(
+            title: "连续阅读回收测试",
+            author: "测试作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/book/reclaim/"
+        )
+        let chapters = (0..<32).map { index in
+            Chapter(
+                sourceURL: "https://example.com/book/reclaim/\(index).html",
+                title: "第\(index + 1)章",
+                sortIndex: index,
+                bodyText: "缓存正文",
+                cachedAt: .now,
+                book: book
+            )
+        }
+        book.chapters = chapters
+        book.currentChapterID = chapters[0].id
+        context.insert(book)
+        for chapter in chapters { context.insert(chapter) }
+        try context.save()
+
+        let store = LibraryStore(
+            modelContext: context,
+            coordinator: NovelImportCoordinator(loader: MockHTMLLoader(documents: [:]))
+        )
+        store.restoreSelection(bookID: book.id, chapterID: chapters[0].id)
+        store.configureContinuousReading(true)
+        for chapter in chapters.dropFirst() {
+            store.readerSession.attachNext(chapter)
+        }
+
+        store.beginReaderScrollTransaction()
+        #expect(store.readerSession.entries.count == 32)
+
+        store.endReaderScrollTransaction(topVisibleChapterID: chapters[30].id)
+        #expect(store.readerSession.entries.count == ContinuousReaderSession.targetRetainedEntryCount)
+        #expect(store.readerSession.entries.first?.id == chapters[12].id)
+        #expect(store.readerSession.entries.last?.id == chapters[31].id)
+    }
+
+    @Test
     func offlineDownloadSkipsCachedChaptersAndPreservesCurrentCacheOnClear() async throws {
         let secondURL = try #require(URL(string: "https://example.com/book/offline/2.html"))
         let thirdURL = try #require(URL(string: "https://example.com/book/offline/3.html"))

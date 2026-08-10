@@ -85,7 +85,6 @@ struct ReaderContentView: View {
                 ReaderScrollMetrics(geometry: geometry)
             } action: { _, metrics in
                 scrollState.update(metrics: metrics)
-                scheduleImmediateCommitIfNeeded()
             }
             .onScrollTargetVisibilityChange(idType: ReaderScrollTarget.self, threshold: 0.01) { targets in
                 scrollState.update(visibleTargets: targets)
@@ -126,6 +125,9 @@ struct ReaderContentView: View {
         }
         .task(id: store.readerScrollRequest?.id) {
             await applyPendingScrollRequest()
+        }
+        .onDisappear {
+            cancelDeferredKeyboardCommit()
         }
     }
 
@@ -186,31 +188,26 @@ struct ReaderContentView: View {
             releaseProgrammaticScrollPosition()
         }
 
-        if newPhase.isScrolling, !oldPhase.isScrolling {
+        if newPhase.isScrolling,
+           !oldPhase.isScrolling,
+           scrollState.beginScrollTransactionIfNeeded() {
             store.beginReaderScrollTransaction()
         }
 
         if newPhase == .idle {
             releaseProgrammaticScrollPosition()
-            commitVisiblePosition()
-            if oldPhase.isScrolling {
-                store.endReaderScrollTransaction(topVisibleChapterID: scrollState.topVisibleTarget?.chapterID)
+            if scrollState.hasPendingDeferredCommit {
+                finishDeferredKeyboardCommitIfReady()
+                return
             }
+            commitVisiblePosition()
+            finishScrollTransactionIfNeeded()
         }
     }
 
     private func commitVisiblePosition() {
         guard let target = scrollState.consumeVisibleTargetForCommit() else { return }
         commitVisibleTarget(target)
-    }
-
-    private func scheduleImmediateCommitIfNeeded() {
-        guard scrollState.hasImmediateCommitRequest else { return }
-        Task { @MainActor in
-            await Task.yield()
-            guard let target = scrollState.consumeImmediateCommitTarget() else { return }
-            commitVisibleTarget(target)
-        }
     }
 
     private func moveVertically(distance: Double, isKeyRepeat: Bool) {
@@ -222,15 +219,41 @@ struct ReaderContentView: View {
     }
 
     private func scroll(to destinationY: Double, isKeyRepeat: Bool) {
+        scrollState.requestDeferredCommit()
+        if scrollState.beginScrollTransactionIfNeeded() {
+            store.beginReaderScrollTransaction()
+        }
+        scrollState.scheduleDeferredCommit(after: .milliseconds(120)) {
+            finishDeferredKeyboardCommitIfReady()
+        }
+
         let destination = ScrollPosition(idType: ReaderScrollTarget.self, y: destinationY)
         if ReaderPageScroll.shouldAnimate(reduceMotion: reduceMotion, isKeyRepeat: isKeyRepeat) {
             withAnimation(.easeOut(duration: ReaderPageScroll.animationDuration)) {
                 scrollPosition = destination
             }
         } else {
-            scrollState.requestImmediateCommit()
             scrollPosition = destination
         }
+    }
+
+    private func finishDeferredKeyboardCommitIfReady() {
+        guard scrollState.canFinishDeferredCommit else { return }
+        releaseProgrammaticScrollPosition()
+        if let target = scrollState.finishDeferredCommit() {
+            commitVisibleTarget(target)
+        }
+        finishScrollTransactionIfNeeded()
+    }
+
+    private func finishScrollTransactionIfNeeded() {
+        guard scrollState.finishScrollTransactionIfNeeded() else { return }
+        store.endReaderScrollTransaction(topVisibleChapterID: scrollState.topVisibleTarget?.chapterID)
+    }
+
+    private func cancelDeferredKeyboardCommit() {
+        scrollState.cancelDeferredCommit()
+        finishScrollTransactionIfNeeded()
     }
 
     private func releaseProgrammaticScrollPosition() {

@@ -8,14 +8,22 @@ final class ReaderScrollState {
 
     private var commandedOffsetY: Double?
     private var lastCommittedTarget: ReaderScrollTarget?
-    private var immediateCommitRequested = false
+    private var visibleTargetsRevision = 0
+    private var deferredCommitBaselineRevision: Int?
+    private var deferredCommitDelayElapsed = false
+    private var deferredCommitTask: Task<Void, Never>?
+    private var scrollTransactionActive = false
 
     var topVisibleTarget: ReaderScrollTarget? {
         visibleTargets.first
     }
 
-    var hasImmediateCommitRequest: Bool {
-        immediateCommitRequested && phase == .idle
+    var hasPendingDeferredCommit: Bool {
+        deferredCommitBaselineRevision != nil
+    }
+
+    var canFinishDeferredCommit: Bool {
+        hasPendingDeferredCommit && deferredCommitDelayElapsed && phase == .idle
     }
 
     func update(metrics: ReaderScrollMetrics) {
@@ -23,7 +31,9 @@ final class ReaderScrollState {
     }
 
     func update(visibleTargets: [ReaderScrollTarget]) {
+        guard self.visibleTargets != visibleTargets else { return }
         self.visibleTargets = visibleTargets
+        visibleTargetsRevision += 1
     }
 
     func update(phase: ScrollPhase) {
@@ -33,7 +43,6 @@ final class ReaderScrollState {
             commandedOffsetY = nil
         case .idle:
             commandedOffsetY = nil
-            immediateCommitRequested = false
         case .animating:
             break
         }
@@ -55,18 +64,68 @@ final class ReaderScrollState {
         destinationY(distance: ReaderPageScroll.pageDistance(viewportHeight: metrics.viewportHeight) * direction)
     }
 
-    func requestImmediateCommit() {
-        immediateCommitRequested = true
+    func requestDeferredCommit() {
+        deferredCommitBaselineRevision = visibleTargetsRevision
+        deferredCommitDelayElapsed = false
+    }
+
+    func scheduleDeferredCommit(
+        after delay: Duration,
+        action: @escaping @MainActor () -> Void
+    ) {
+        deferredCommitTask?.cancel()
+        deferredCommitTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: delay)
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
+            guard let self else { return }
+            deferredCommitTask = nil
+            markDeferredCommitDelayElapsed()
+            action()
+        }
+    }
+
+    func markDeferredCommitDelayElapsed() {
+        deferredCommitDelayElapsed = true
+    }
+
+    func beginScrollTransactionIfNeeded() -> Bool {
+        guard !scrollTransactionActive else { return false }
+        scrollTransactionActive = true
+        return true
+    }
+
+    func finishScrollTransactionIfNeeded() -> Bool {
+        guard scrollTransactionActive else { return false }
+        scrollTransactionActive = false
+        return true
     }
 
     func releaseProgrammaticPosition() {
         commandedOffsetY = nil
     }
 
-    func consumeImmediateCommitTarget() -> ReaderScrollTarget? {
-        guard hasImmediateCommitRequest else { return nil }
-        immediateCommitRequested = false
+    func finishDeferredCommit() -> ReaderScrollTarget? {
+        guard canFinishDeferredCommit,
+              let baselineRevision = deferredCommitBaselineRevision else {
+            return nil
+        }
+        deferredCommitBaselineRevision = nil
+        deferredCommitDelayElapsed = false
+        // A clamped or intra-paragraph key movement has no new reading position.
+        guard visibleTargetsRevision > baselineRevision else { return nil }
         return consumeVisibleTargetForCommit()
+    }
+
+    func cancelDeferredCommit() {
+        deferredCommitTask?.cancel()
+        deferredCommitTask = nil
+        deferredCommitBaselineRevision = nil
+        deferredCommitDelayElapsed = false
     }
 
     func consumeVisibleTargetForCommit() -> ReaderScrollTarget? {

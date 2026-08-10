@@ -237,6 +237,53 @@ struct ReaderPresentationTests {
     }
 
     @Test @MainActor
+    func repeatedKeyboardCommandsCommitOnlyTheLatestVisibleRevisionAfterDebounce() async throws {
+        let chapterID = UUID()
+        let state = ReaderScrollState()
+        let initial = ReaderScrollTarget.paragraph(chapterID: chapterID, index: 1)
+        let passedDuringRepeat = ReaderScrollTarget.paragraph(chapterID: chapterID, index: 7)
+        let final = ReaderScrollTarget.paragraph(chapterID: chapterID, index: 12)
+        var debounceCallbacks = 0
+
+        state.update(visibleTargets: [initial])
+        state.requestDeferredCommit()
+        state.scheduleDeferredCommit(after: .milliseconds(30)) {
+            debounceCallbacks += 1
+        }
+        state.update(visibleTargets: [passedDuringRepeat])
+
+        try await Task.sleep(for: .milliseconds(10))
+        state.requestDeferredCommit()
+        state.scheduleDeferredCommit(after: .milliseconds(30)) {
+            debounceCallbacks += 1
+        }
+        state.update(visibleTargets: [final])
+
+        #expect(!state.canFinishDeferredCommit)
+        try await Task.sleep(for: .milliseconds(60))
+        #expect(debounceCallbacks == 1)
+        #expect(state.canFinishDeferredCommit)
+        #expect(state.finishDeferredCommit() == final)
+        #expect(!state.hasPendingDeferredCommit)
+        #expect(state.finishDeferredCommit() == nil)
+    }
+
+    @Test @MainActor
+    func deferredKeyboardCommitRequiresAVisibleTargetsRevision() {
+        let chapterID = UUID()
+        let state = ReaderScrollState()
+        let target = ReaderScrollTarget.paragraph(chapterID: chapterID, index: 4)
+
+        state.update(visibleTargets: [target])
+        state.requestDeferredCommit()
+        state.markDeferredCommitDelayElapsed()
+
+        #expect(state.canFinishDeferredCommit)
+        #expect(state.finishDeferredCommit() == nil)
+        #expect(!state.hasPendingDeferredCommit)
+    }
+
+    @Test @MainActor
     func idleScrollCommitUpdatesAndPersistsLatestReadingPosition() throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
@@ -312,6 +359,42 @@ struct ReaderPresentationTests {
         position.isPositionedByUser = true
         #expect(position.isPositionedByUser)
         #expect(position.point == nil)
+    }
+
+    @Test @MainActor
+    func continuousReaderReclaimsOnlyWhenWindowIsLargeAndOldEntriesAreDistant() {
+        let book = Book(
+            title: "长时间连续阅读",
+            author: "测试作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/book/long-session/"
+        )
+        let chapters = (0..<32).map { index in
+            Chapter(
+                sourceURL: "https://example.com/book/long-session/\(index).html",
+                title: "第\(index + 1)章",
+                sortIndex: index,
+                bodyText: "第\(index + 1)章正文",
+                cachedAt: .now,
+                book: book
+            )
+        }
+        let session = ContinuousReaderSession()
+        session.reset(around: chapters[0])
+        for chapter in chapters.dropFirst() {
+            session.attachNext(chapter)
+        }
+
+        #expect(session.entries.count == 32)
+        #expect(!session.reclaimDistantEntries(around: chapters[20].id))
+        #expect(session.entries.map(\.id) == chapters.map(\.id))
+
+        #expect(session.reclaimDistantEntries(around: chapters[30].id))
+        #expect(session.entries.count == ContinuousReaderSession.targetRetainedEntryCount)
+        #expect(session.entries.first?.id == chapters[12].id)
+        #expect(session.entries.contains(where: { $0.id == chapters[30].id }))
+        #expect(session.entries.last?.id == chapters[31].id)
+        #expect(!session.reclaimDistantEntries(around: chapters[30].id))
     }
 
     @Test

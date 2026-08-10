@@ -257,9 +257,12 @@ final class LibraryStore {
         visibilityGate.beginTransaction()
     }
 
-    func endReaderScrollTransaction(topVisibleChapterID _: UUID?) {
+    func endReaderScrollTransaction(topVisibleChapterID: UUID?) {
         isReaderScrolling = false
         attachPendingContinuousChapterIfSafe()
+        if continuousReadingEnabled, let topVisibleChapterID {
+            readerSession.reclaimDistantEntries(around: topVisibleChapterID)
+        }
     }
 
     private func scheduleVisibleChapterCommit(for chapter: Chapter) {
