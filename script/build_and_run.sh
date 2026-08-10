@@ -17,10 +17,23 @@ SWIFT_PATH_MAP="-file-prefix-map $ROOT_DIR=YYReaderBuild"
 
 source "$ROOT_DIR/script/portable_bundle.sh"
 
+cleanup_stale_temp_bundles() {
+  # Keep the installed /Applications copy untouched. These exact patterns are
+  # only the disposable staging directories created by YYReader scripts.
+  /usr/bin/find /private/tmp -maxdepth 1 -type d \
+    \( \
+      -name "${APP_NAME}-run-*" \
+      -o -name "${APP_NAME}-release-*" \
+      -o -name "yyreader-archive-check.*" \
+    \) \
+    -exec /bin/rm -rf {} +
+}
+
 cd "$ROOT_DIR"
 if [[ "$MODE" != "build-only" && "$MODE" != "--build-only" ]]; then
   pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 fi
+cleanup_stale_temp_bundles
 xcodegen generate
 xcodebuild \
   -project YYReader.xcodeproj \

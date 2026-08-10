@@ -99,6 +99,87 @@ struct NovelImportCoordinatorTests {
     }
 
     @Test
+    func importsAReadableChapterWithoutCatalog() async throws {
+        let chapter = try #require(URL(string: "https://www.qidiy.com/book/100/1.html"))
+        let loader = MockHTMLLoader(documents: [
+            chapter: """
+            <a href="/book/100/">没有目录的测试小说</a>
+            <h1 class="title">第1章 独立阅读</h1>
+            <div id="content">没有目录时也应保留这段可阅读的测试正文。</div>
+            <a href="/book/100/2.html">下一章</a>
+            """
+        ])
+        let coordinator = NovelImportCoordinator(loader: loader)
+
+        let result = try await coordinator.importNovel(from: chapter)
+
+        #expect(!result.hasCatalog)
+        #expect(result.catalogURL == chapter)
+        #expect(result.catalog.map(\.url) == [chapter])
+        #expect(result.bodyText == "没有目录时也应保留这段可阅读的测试正文。")
+    }
+
+    @Test
+    func importsFromAGenericCatalogPageAndLoadsItsFirstChapter() async throws {
+        let catalog = try #require(URL(string: "https://www.longwangxs.com/book/552/"))
+        let chapter = try #require(URL(string: "https://www.longwangxs.com/book/552/prologue.html"))
+        let firstNumberedChapter = try #require(URL(string: "https://www.longwangxs.com/book/552/1.html"))
+        let secondChapter = try #require(URL(string: "https://www.longwangxs.com/book/552/2.html"))
+        let loader = MockHTMLLoader(documents: [
+            catalog: """
+            <meta name="author" content="测试作者">
+            <h1>目录页测试小说</h1><p>作者：测试作者</p>
+            <article>这是一段目录页简介，而不是章节正文。它故意写得足够长，用于确认目录探测会优先识别章节列表，而不会把书籍简介误作第一个章节。继续补充自造内容，确保正文密度评分也会认为这里是一个看似可读的内容区域。</article>
+            <section class="chapter-list">
+                <a href="/book/552/prologue.html">前传 测试楔子</a>
+                <a href="/book/552/1.html">第1章 起始章节</a>
+                <a href="/book/552/2.html">第2章 后续章节</a>
+            </section>
+            """,
+            chapter: """
+            <title>第1章 起始章节_目录页测试小说</title>
+            <h1>第1章 起始章节</h1>
+            <article>这是从目录页导入后自动读取的第一段测试正文，长度足以通过通用正文识别。这里继续补充第二句话，以确认不是目录中的导航文字。最后补充第三句话，使测试正文保持自造且完整。为了覆盖通用解析器的正文密度阈值，再补充第四句关于阅读进度恢复的说明。继续补充第五句，确保这段自造文字明显长于导航、标题和目录链接的组合内容。</article>
+            <a href="/book/552/">目录</a>
+            <a href="/book/552/2.html">下一章</a>
+            """
+        ])
+        let coordinator = NovelImportCoordinator(loader: loader)
+
+        let result = try await coordinator.importNovel(from: catalog)
+
+        #expect(result.bookTitle == "目录页测试小说")
+        #expect(result.author == "测试作者")
+        #expect(result.catalogURL == catalog)
+        #expect(result.catalog.map(\.url) == [chapter, firstNumberedChapter, secondChapter])
+        #expect(result.chapterURL == chapter)
+        #expect(result.bodyText.contains("自动读取的第一段测试正文"))
+    }
+
+    @Test
+    func retriesStaticHTMLParsingWithRenderedDOM() async throws {
+        let chapter = try #require(URL(string: "https://www.qidiy.com/book/100/1.html"))
+        let loader = RenderedDOMFallbackLoader(
+            staticDocuments: [chapter: "<h1>正在加载正文</h1>"],
+            renderedDocuments: [
+                chapter: """
+                <a href="/book/100/">动态测试小说</a>
+                <h1 class="title">第1章 渲染正文</h1>
+                <div id="content">由渲染 DOM 提供的可阅读测试正文。</div>
+                <a href="/book/100/">章节列表</a>
+                """
+            ]
+        )
+        let coordinator = NovelImportCoordinator(loader: loader)
+
+        let result = try await coordinator.loadChapterContent(from: chapter)
+
+        #expect(result.bodyText == "由渲染 DOM 提供的可阅读测试正文。")
+        #expect(loader.staticURLs == [chapter])
+        #expect(loader.renderedURLs == [chapter])
+    }
+
+    @Test
     func fullCatalogAssignsGlobalOrderWhenExtrasRestartChapterNumbers() async throws {
         let catalog1 = try #require(URL(string: "https://www.qidiy.com/book/200/"))
         let catalog2 = try #require(URL(string: "https://www.qidiy.com/book/200_2/"))
@@ -172,5 +253,30 @@ struct NovelImportCoordinatorTests {
         } catch {
             Issue.record("收到非预期错误：\(error)")
         }
+    }
+}
+
+@MainActor
+private final class RenderedDOMFallbackLoader: RenderedDOMFallbackLoading {
+    private let staticDocuments: [URL: String]
+    private let renderedDocuments: [URL: String]
+    private(set) var staticURLs: [URL] = []
+    private(set) var renderedURLs: [URL] = []
+
+    init(staticDocuments: [URL: String], renderedDocuments: [URL: String]) {
+        self.staticDocuments = staticDocuments
+        self.renderedDocuments = renderedDocuments
+    }
+
+    func load(_ url: URL) async throws -> LoadedHTML {
+        staticURLs.append(url)
+        guard let html = staticDocuments[url] else { throw HTMLLoadError.httpStatus(404) }
+        return LoadedHTML(requestedURL: url, finalURL: url, html: html, retrievalKind: .urlSession)
+    }
+
+    func loadRenderedDOM(_ url: URL) async throws -> LoadedHTML {
+        renderedURLs.append(url)
+        guard let html = renderedDocuments[url] else { throw HTMLLoadError.httpStatus(404) }
+        return LoadedHTML(requestedURL: url, finalURL: url, html: html, retrievalKind: .webKit)
     }
 }

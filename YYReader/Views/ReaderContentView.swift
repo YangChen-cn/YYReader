@@ -15,6 +15,7 @@ struct ReaderContentView: View {
     @State private var paragraphs: [String] = []
     @State private var hasPreparedContent = false
     @State private var hasAppliedInitialScroll = false
+    @FocusState private var isReaderFocused: Bool
 
     var body: some View {
         let family = ReaderFontFamily(rawValue: fontFamily) ?? .serif
@@ -54,6 +55,16 @@ struct ReaderContentView: View {
             .scrollPosition(id: $scrollPosition, anchor: .top)
             .contentMargins(.vertical, 0, for: .scrollContent)
             .textSelection(.enabled)
+            .focusable()
+            .focused($isReaderFocused)
+            .onKeyPress(.upArrow) {
+                moveScrollPosition(by: -1)
+                return .handled
+            }
+            .onKeyPress(.downArrow) {
+                moveScrollPosition(by: 1)
+                return .handled
+            }
         }
         .background(theme.background)
         .foregroundStyle(theme.foreground)
@@ -81,6 +92,7 @@ struct ReaderContentView: View {
         scrollPosition = nil
         paragraphs = chapter.paragraphs
         hasPreparedContent = true
+        isReaderFocused = true
         await applyPendingScrollRequest()
     }
 
@@ -106,5 +118,18 @@ struct ReaderContentView: View {
         case .restore:
             min(max(chapter.topParagraphIndex, 0), max(paragraphs.count - 1, 0))
         }
+    }
+
+    private func moveScrollPosition(by offset: Int) {
+        guard let target = ReaderKeyboardScroll.target(
+            currentParagraphIndex: scrollPosition,
+            fallbackParagraphIndex: chapter.topParagraphIndex,
+            paragraphCount: paragraphs.count,
+            offset: offset
+        ) else {
+            return
+        }
+        scrollPosition = target
+        hasAppliedInitialScroll = true
     }
 }

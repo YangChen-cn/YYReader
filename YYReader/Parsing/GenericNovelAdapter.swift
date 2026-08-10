@@ -52,23 +52,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         let metadata = metadata(in: document)
         let headingTitle = try document.select("h1").first()?.text()
         let title = metadata.bookTitle ?? headingTitle ?? "未命名小说"
-        var seen = Set<String>()
-        var seeds: [ChapterSeed] = []
-
-        for anchor in try document.select("a").array() {
-            let anchorTitle = try anchor.text().trimmingCharacters(in: .whitespacesAndNewlines)
-            guard anchorTitle.range(of: "第.+[章回节]", options: .regularExpression) != nil,
-                  let url = HTMLParsingSupport.absoluteURL(for: anchor, relativeTo: loaded.finalURL),
-                  HTMLParsingSupport.isSameOrigin(url, as: loaded.finalURL),
-                  seen.insert(url.absoluteString).inserted else {
-                continue
-            }
-            seeds.append(ChapterSeed(
-                title: anchorTitle,
-                url: url,
-                sortIndex: seeds.count + 1
-            ))
-        }
+        let seeds = try chapterSeeds(in: document, baseURL: loaded.finalURL)
         guard !seeds.isEmpty else { throw NovelParsingError.missingCatalog }
 
         return ParsedBookCatalog(
@@ -118,6 +102,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         let ogTitle = try? document.select("meta[property=og:title]").first()?.attr("content")
         let author = (try? document.select("meta[name=author]").first()?.attr("content"))
             ?? jsonLDValue(named: "author", in: document)
+            ?? visibleAuthor(in: document)
         let bookTitle = jsonLDValue(named: "isPartOf", in: document)
             ?? ogTitle.flatMap { value in
                 let pieces = value.split(separator: "_")
@@ -125,6 +110,53 @@ struct GenericNovelAdapter: NovelSourceAdapter {
             }
             ?? pageTitle.split(separator: "_").dropFirst().first.map(String.init)
         return (bookTitle?.trimmingCharacters(in: .whitespacesAndNewlines), author)
+    }
+
+    private func visibleAuthor(in document: Document) -> String? {
+        let text = (try? document.text()) ?? ""
+        return HTMLParsingSupport.firstCapture("作者\\s*[：:]\\s*([^\\s]+)", in: text)
+    }
+
+    private func chapterSeeds(in document: Document, baseURL: URL) throws -> [ChapterSeed] {
+        let selectors = [
+            "[id*=catalog]", "[class*=catalog]",
+            "[id*=chapter]", "[class*=chapter]",
+            "[id*=list]", "[class*=list]",
+            "ul", "ol"
+        ]
+        let containers = try selectors.flatMap { try document.select($0).array() }
+        let candidates = try containers.map { try chapterSeeds(in: $0, baseURL: baseURL) }
+        if let best = candidates.max(by: { $0.count < $1.count }), !best.isEmpty {
+            return best
+        }
+        return try chapterSeeds(from: document.select("a").array(), baseURL: baseURL)
+    }
+
+    private func chapterSeeds(in container: Element, baseURL: URL) throws -> [ChapterSeed] {
+        try chapterSeeds(from: container.select("a").array(), baseURL: baseURL)
+    }
+
+    private func chapterSeeds(from anchors: [Element], baseURL: URL) throws -> [ChapterSeed] {
+        var seen = Set<String>()
+        var seeds: [ChapterSeed] = []
+        for anchor in anchors {
+            let chapterTitle = try anchor.text().trimmingCharacters(in: .whitespacesAndNewlines)
+            guard isLikelyChapterTitle(chapterTitle),
+                  let url = HTMLParsingSupport.absoluteURL(for: anchor, relativeTo: baseURL),
+                  HTMLParsingSupport.isSameOrigin(url, as: baseURL),
+                  seen.insert(url.absoluteString).inserted else {
+                continue
+            }
+            seeds.append(ChapterSeed(title: chapterTitle, url: url, sortIndex: seeds.count + 1))
+        }
+        return seeds
+    }
+
+    private func isLikelyChapterTitle(_ title: String) -> Bool {
+        if title.range(of: "第.+[章回节]", options: .regularExpression) != nil {
+            return true
+        }
+        return ["序章", "楔子", "引子", "尾声", "后记", "番外"].contains { title.contains($0) }
     }
 
     private func jsonLDValue(named key: String, in document: Document) -> String? {

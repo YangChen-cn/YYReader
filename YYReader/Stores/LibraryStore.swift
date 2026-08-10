@@ -44,6 +44,7 @@ final class LibraryStore {
     }
 
     var canCancelLoading: Bool { importTask != nil || catalogRefreshTask != nil }
+    var canRefreshSelectedCatalog: Bool { selectedBook?.hasCatalog == true }
 
     func restoreSelection(bookID: UUID?, chapterID: UUID?) {
         selectedBookID = books.contains { $0.id == bookID } ? bookID : books.first?.id
@@ -155,7 +156,11 @@ final class LibraryStore {
     }
 
     func refreshSelectedCatalog() async {
-        guard let book = selectedBook, let url = URL(string: book.catalogURL) else { return }
+        guard let book = selectedBook,
+              book.hasCatalog,
+              let url = URL(string: book.catalogURL) else {
+            return
+        }
         await performLoading("正在刷新目录…") {
             let catalog = try await coordinator.refreshCatalog(from: url) { [weak self] pageNumber in
                 self?.loadingMessage = "正在刷新目录…（第 \(pageNumber) 页）"
@@ -351,6 +356,7 @@ final class LibraryStore {
 
         book.title = result.bookTitle
         book.author = result.author
+        book.hasCatalog = result.hasCatalog
         // The initial catalog page is a successful refresh even when more pages exist.
         // Recording it prevents book selection from immediately downloading the full catalog.
         book.catalogFetchedAt = .now

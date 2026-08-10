@@ -1,7 +1,7 @@
 import Foundation
 
 enum ReaderPreferenceMigration {
-    static let currentVersion = 1
+    static let currentVersion = 2
 
     static func migrateIfNeeded(defaults: UserDefaults = .standard) {
         guard defaults.integer(forKey: ReaderPreferenceKeys.preferenceVersion) < currentVersion else {
@@ -10,9 +10,9 @@ enum ReaderPreferenceMigration {
 
         migrateKnownDefault(
             key: ReaderPreferenceKeys.contentWidth,
-            knownDefaults: [680, 720],
-            recommendedValue: 880,
-            validRange: 600...1_100,
+            knownDefaults: [680, 720, 880],
+            recommendedValue: ReaderViewportLayout.defaultPreferredWidth,
+            validRange: ReaderViewportLayout.minimumPreferredWidth...ReaderViewportLayout.maximumPreferredWidth,
             defaults: defaults
         )
         migrateKnownDefault(

@@ -18,16 +18,34 @@ final class NovelImportCoordinator {
 
     func importNovel(from inputURL: URL) async throws -> NovelImportResult {
         loader.beginOperation()
-        let chapter = try await loadChapterContentWithoutReset(from: inputURL)
-        guard let catalogURL = chapter.catalogURL else { throw NovelParsingError.missingCatalog }
-        let initialCatalog: ParsedBookCatalog?
+        guard ["http", "https"].contains(inputURL.scheme?.lowercased() ?? "") else {
+            throw NovelParsingError.unsupportedURL
+        }
+        let firstDocument = try await loader.load(inputURL)
+        if let catalog = try await staticCatalog(in: firstDocument) {
+            return try await importCatalog(catalog, from: firstDocument)
+        }
         do {
-            initialCatalog = try await loadCatalogPage(at: catalogURL)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch HTMLLoadError.cancelled {
-            throw HTMLLoadError.cancelled
-        } catch {
+            let chapter = try await loadChapterContent(from: firstDocument)
+            return try await importChapter(chapter)
+        } catch NovelParsingError.noReadableContent {
+            return try await importCatalog(firstDocument)
+        }
+    }
+
+    private func importChapter(_ chapter: ChapterLoadResult) async throws -> NovelImportResult {
+        let initialCatalog: ParsedBookCatalog?
+        if let catalogURL = chapter.catalogURL {
+            do {
+                initialCatalog = try await loadCatalogPage(at: catalogURL)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch HTMLLoadError.cancelled {
+                throw HTMLLoadError.cancelled
+            } catch {
+                initialCatalog = nil
+            }
+        } else {
             initialCatalog = nil
         }
 
@@ -42,9 +60,39 @@ final class NovelImportCoordinator {
         return NovelImportResult(
             bookTitle: catalogTitle.isEmpty ? (chapter.bookTitle ?? "未命名小说") : catalogTitle,
             author: initialCatalog?.author ?? "未知作者",
-            catalogURL: catalogURL,
+            catalogURL: chapter.catalogURL ?? chapter.chapterURL,
+            hasCatalog: chapter.catalogURL != nil,
             catalog: catalog,
             catalogIsComplete: initialCatalog?.nextPageURL == nil && initialCatalog != nil,
+            chapterTitle: chapter.title,
+            chapterURL: chapter.chapterURL,
+            bodyText: chapter.bodyText,
+            previousChapterURL: chapter.previousChapterURL,
+            nextChapterURL: chapter.nextChapterURL
+        )
+    }
+
+    private func importCatalog(_ document: LoadedHTML) async throws -> NovelImportResult {
+        let catalog = try await parseCatalogPage(document)
+        return try await importCatalog(catalog, from: document)
+    }
+
+    private func importCatalog(
+        _ catalog: ParsedBookCatalog,
+        from document: LoadedHTML
+    ) async throws -> NovelImportResult {
+        guard let firstChapter = catalog.chapters.first else {
+            throw NovelParsingError.missingCatalog
+        }
+        let chapter = try await loadChapterContentWithoutReset(from: firstChapter.url)
+
+        return NovelImportResult(
+            bookTitle: catalog.title,
+            author: catalog.author,
+            catalogURL: document.finalURL,
+            hasCatalog: true,
+            catalog: catalog.chapters,
+            catalogIsComplete: catalog.nextPageURL == nil,
             chapterTitle: chapter.title,
             chapterURL: chapter.chapterURL,
             bodyText: chapter.bodyText,
@@ -64,7 +112,11 @@ final class NovelImportCoordinator {
         }
 
         let firstDocument = try await loader.load(inputURL)
-        let firstPage = try await parser.parseChapterPage(firstDocument)
+        return try await loadChapterContent(from: firstDocument)
+    }
+
+    private func loadChapterContent(from firstDocument: LoadedHTML) async throws -> ChapterLoadResult {
+        let firstPage = try await parseChapterPage(firstDocument)
         var paragraphs = firstPage.paragraphs
         var pageURL = firstPage.nextPageURL
         var visitedPages: Set<URL> = [firstDocument.finalURL]
@@ -77,7 +129,7 @@ final class NovelImportCoordinator {
             }
             guard visitedPages.insert(nextPage).inserted else { throw NovelParsingError.paginationLoop }
             let document = try await loader.load(nextPage)
-            let parsed = try await parser.parseChapterPage(document)
+            let parsed = try await parseChapterPage(document)
             appendWithoutBoundaryDuplicate(parsed.paragraphs, to: &paragraphs)
             finalPage = parsed
             pageURL = parsed.nextPageURL
@@ -106,7 +158,7 @@ final class NovelImportCoordinator {
 
     private func loadCatalogPage(at url: URL) async throws -> ParsedBookCatalog {
         let document = try await loader.load(url)
-        return try await parser.parseCatalogPage(document)
+        return try await parseCatalogPage(document)
     }
 
     private func loadCatalog(
@@ -130,7 +182,7 @@ final class NovelImportCoordinator {
             onPageStarted?(visited.count)
             let document = try await loader.load(pageURL)
             try checkCatalogDeadline(startedAt: startedAt, clock: clock)
-            let page = try await parser.parseCatalogPage(document)
+            let page = try await parseCatalogPage(document)
             if bookTitle.isEmpty { bookTitle = page.title }
             if author == "未知作者" { author = page.author }
             for seed in page.chapters where seenChapterURLs.insert(seed.url.absoluteString).inserted {
@@ -155,6 +207,58 @@ final class NovelImportCoordinator {
         if startedAt.duration(to: clock.now) >= catalogRefreshTimeout {
             throw NovelParsingError.catalogRefreshTimedOut
         }
+    }
+
+    private func parseChapterPage(_ document: LoadedHTML) async throws -> ParsedChapterPage {
+        do {
+            return try await parser.parseChapterPage(document)
+        } catch {
+            return try await retryChapterParsingWithRenderedDOM(document, originalError: error)
+        }
+    }
+
+    private func parseCatalogPage(_ document: LoadedHTML) async throws -> ParsedBookCatalog {
+        do {
+            return try await parser.parseCatalogPage(document)
+        } catch {
+            return try await retryCatalogParsingWithRenderedDOM(document, originalError: error)
+        }
+    }
+
+    private func staticCatalog(in document: LoadedHTML) async throws -> ParsedBookCatalog? {
+        do {
+            let catalog = try await parser.parseCatalogPage(document)
+            // Two or more chapter entries distinguish a catalog from a chapter page's navigation links.
+            return catalog.chapters.count > 1 ? catalog : nil
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            return nil
+        }
+    }
+
+    private func retryChapterParsingWithRenderedDOM(
+        _ document: LoadedHTML,
+        originalError: any Error
+    ) async throws -> ParsedChapterPage {
+        guard document.retrievalKind == .urlSession,
+              let fallbackLoader = loader as? any RenderedDOMFallbackLoading else {
+            throw originalError
+        }
+        let renderedDocument = try await fallbackLoader.loadRenderedDOM(document.finalURL)
+        return try await parser.parseChapterPage(renderedDocument)
+    }
+
+    private func retryCatalogParsingWithRenderedDOM(
+        _ document: LoadedHTML,
+        originalError: any Error
+    ) async throws -> ParsedBookCatalog {
+        guard document.retrievalKind == .urlSession,
+              let fallbackLoader = loader as? any RenderedDOMFallbackLoading else {
+            throw originalError
+        }
+        let renderedDocument = try await fallbackLoader.loadRenderedDOM(document.finalURL)
+        return try await parser.parseCatalogPage(renderedDocument)
     }
 
     private func appendWithoutBoundaryDuplicate(_ newParagraphs: [String], to paragraphs: inout [String]) {

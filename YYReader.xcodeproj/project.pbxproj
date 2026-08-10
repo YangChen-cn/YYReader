@@ -23,6 +23,7 @@
 		357D9C53916E73B01D1D198C /* ReaderScrollIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5DD9E60BA13F4C56DD00D43 /* ReaderScrollIntent.swift */; };
 		359237AAFCCA7F72EE876A84 /* WebKitHostSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60C257C3334253FDA545E767 /* WebKitHostSession.swift */; };
 		36B330B1679B53B866C01302 /* ChapterSeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = E80A1F8E2F806202933B9AB0 /* ChapterSeed.swift */; };
+		3738B333E35DE9C9EDE0BC7D /* ReaderKeyboardScroll.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD61766C1A1F17020A5AA72B /* ReaderKeyboardScroll.swift */; };
 		37FA5D5426EE6A138FAB2347 /* BrowserHTMLLoading.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B051F7BA1876915BF0B9C42 /* BrowserHTMLLoading.swift */; };
 		3E22591FD9F89E31775A632C /* AddURLSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D044672EEE0BD4388C59459F /* AddURLSheet.swift */; };
 		3EB8F85FEFE6756D0F74B607 /* NovelImportCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBF8749F98DE0A2712F05A9D /* NovelImportCoordinatorTests.swift */; };
@@ -191,6 +192,7 @@
 		FB05103F9EEF73AD9B3CBB7F /* WebKitHTMLLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebKitHTMLLoader.swift; sourceTree = "<group>"; };
 		FB232BA40FDEACF9051BB07C /* GenericNovelAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenericNovelAdapter.swift; sourceTree = "<group>"; };
 		FB80376125151F62E66C5BB7 /* YYReader.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = YYReader.entitlements; sourceTree = "<group>"; };
+		FD61766C1A1F17020A5AA72B /* ReaderKeyboardScroll.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderKeyboardScroll.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -210,6 +212,7 @@
 			children = (
 				CD7C682CCEB631ECB765AF3B /* AppServices.swift */,
 				5F75B2D2568DD36D93DE7EFF /* ReaderCommandActions.swift */,
+				FD61766C1A1F17020A5AA72B /* ReaderKeyboardScroll.swift */,
 				7DFC7ACF8ABA94C5A2D68B01 /* ReaderParagraphFormatter.swift */,
 				F54E20F4E7492E288E4E6263 /* ReaderPreferenceKeys.swift */,
 				182A4EBB62150B0C78F8376C /* ReaderPreferenceMigration.swift */,
@@ -569,6 +572,7 @@
 				4BA7C64F52DA2AAA654598AF /* ReaderContentView.swift in Sources */,
 				84C4D4EEE97245831FE23B1C /* ReaderFontFamily.swift in Sources */,
 				AF8663103B1D1BACB31096E7 /* ReaderFontPicker.swift in Sources */,
+				3738B333E35DE9C9EDE0BC7D /* ReaderKeyboardScroll.swift in Sources */,
 				795049294B49C1CB16432563 /* ReaderLayoutPreset.swift in Sources */,
 				EB04C8C2FD7240D8598A332F /* ReaderParagraphFormatter.swift in Sources */,
 				762307E3D6F01958CE075862 /* ReaderParagraphView.swift in Sources */,

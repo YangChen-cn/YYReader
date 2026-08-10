@@ -2,8 +2,8 @@ import Foundation
 
 enum ReaderViewportLayout {
     static let minimumPreferredWidth = 600.0
-    static let defaultPreferredWidth = 880.0
-    static let maximumPreferredWidth = 1_100.0
+    static let defaultPreferredWidth = 1_040.0
+    static let maximumPreferredWidth = 1_800.0
 
     static func effectiveContentWidth(preferredWidth: Double, viewportWidth: Double) -> Double {
         let preferredWidth = min(

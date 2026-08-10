@@ -1,7 +1,7 @@
 import Foundation
 
 @MainActor
-final class HybridHTMLLoader: HTMLDocumentLoading {
+final class HybridHTMLLoader: RenderedDOMFallbackLoading {
     private let staticLoader: any StaticHTMLLoading
     private let webKitLoader: any BrowserHTMLLoading
     private(set) var browserPreferredHosts: Set<String> = []
@@ -32,5 +32,14 @@ final class HybridHTMLLoader: HTMLDocumentLoading {
 
     func isBrowserPreferred(_ host: String) -> Bool {
         browserPreferredHosts.contains(host.lowercased())
+    }
+
+    func loadRenderedDOM(_ url: URL) async throws -> LoadedHTML {
+        guard let host = url.host?.lowercased(), !host.isEmpty else {
+            throw NovelParsingError.unsupportedURL
+        }
+        // A rendered retry means this host needs JavaScript for the remainder of this operation.
+        browserPreferredHosts.insert(host)
+        return try await webKitLoader.load(url)
     }
 }

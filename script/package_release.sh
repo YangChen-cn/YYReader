@@ -6,7 +6,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
 ENTITLEMENTS="$ROOT_DIR/YYReader/YYReader.entitlements"
 SWIFT_PATH_MAP="-file-prefix-map $ROOT_DIR=YYReaderBuild"
-ARCHITECTURES=(arm64 x86_64)
+# Normal releases are Apple-silicon only. Intel was built once for v1.0.0
+# manually and is intentionally not part of the recurring release script.
+ARCHITECTURES=(arm64)
 TEMP_PARENT="${TMPDIR:-/private/tmp}"
 TEMP_PARENT="${TEMP_PARENT%/}"
 WORK_DIR=""

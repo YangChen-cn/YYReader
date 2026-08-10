@@ -10,6 +10,7 @@ final class Book {
     var sourceHost: String
     var createdAt: Date
     var updatedAt: Date
+    var hasCatalog: Bool = true
     var catalogFetchedAt: Date?
     var currentChapterID: UUID?
 
@@ -24,6 +25,7 @@ final class Book {
         catalogURL: String,
         createdAt: Date = .now,
         updatedAt: Date = .now,
+        hasCatalog: Bool = true,
         catalogFetchedAt: Date? = nil,
         currentChapterID: UUID? = nil,
         chapters: [Chapter] = []
@@ -35,6 +37,7 @@ final class Book {
         self.catalogURL = catalogURL
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.hasCatalog = hasCatalog
         self.catalogFetchedAt = catalogFetchedAt
         self.currentChapterID = currentChapterID
         self.chapters = chapters

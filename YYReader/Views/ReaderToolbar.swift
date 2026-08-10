@@ -3,6 +3,7 @@ import SwiftUI
 struct ReaderToolbar: ToolbarContent {
     @Binding var showingAppearancePopover: Bool
     let canManageBook: Bool
+    let canRefreshCatalog: Bool
     let isLoading: Bool
     let returnToLibrary: () -> Void
     let showAdvancedAppearance: () -> Void
@@ -27,7 +28,7 @@ struct ReaderToolbar: ToolbarContent {
 
             Menu("更多", systemImage: "ellipsis") {
                 Button("刷新目录", systemImage: "arrow.clockwise", action: refreshCatalog)
-                    .disabled(!canManageBook || isLoading)
+                    .disabled(!canRefreshCatalog || isLoading)
                 Button("添加网页…", systemImage: "plus", action: addURL)
                     .disabled(isLoading)
 

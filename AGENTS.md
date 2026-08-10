@@ -56,7 +56,7 @@ xcodebuild test \
 ./script/package_release.sh
 ```
 
-Release 产物位于 `dist/YYReader-<version>-arm64.dmg` 和 `dist/YYReader-<version>-x86_64.dmg`，不生成 ZIP。`DerivedData/` 与 `dist/` 不提交 Git。
+Release 产物位于 `dist/YYReader-<version>-arm64.dmg` ，不生成 ZIP。`DerivedData/` 与 `dist/` 不提交 Git。
 
 ## 目录与职责
 

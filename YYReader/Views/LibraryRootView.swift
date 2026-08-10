@@ -25,6 +25,7 @@ struct LibraryRootView: View {
                 ReaderToolbar(
                     showingAppearancePopover: $showingAppearancePopover,
                     canManageBook: store.selectedBook != nil,
+                    canRefreshCatalog: store.canRefreshSelectedCatalog,
                     isLoading: store.isLoading,
                     returnToLibrary: showLibrary,
                     showAdvancedAppearance: showAdvancedAppearance,
@@ -68,7 +69,7 @@ struct LibraryRootView: View {
         .preferredColorScheme(isReading ? readerTheme.preferredColorScheme : nil)
         .focusedSceneValue(\.readerCommandActions, ReaderCommandActions(
             canAddURL: !store.isLoading,
-            canRefreshCatalog: store.selectedBook != nil && !store.isLoading,
+            canRefreshCatalog: store.canRefreshSelectedCatalog && !store.isLoading,
             canNavigatePreviousChapter: isReading && store.chapterNavigationSnapshot.hasPrevious && !store.isLoading,
             canNavigateNextChapter: isReading && store.chapterNavigationSnapshot.hasNext && !store.isLoading,
             canToggleCatalog: isReading,
@@ -144,6 +145,7 @@ struct LibraryRootView: View {
             ChapterListView(
                 store: store,
                 selectionScrollIntent: nil,
+                isCatalogVisible: true,
                 activateChapter: activateChapter
             )
                 .navigationSplitViewColumnWidth(min: 230, ideal: 280, max: 380)
@@ -158,6 +160,7 @@ struct LibraryRootView: View {
             ChapterListView(
                 store: store,
                 selectionScrollIntent: .chapterTop,
+                isCatalogVisible: readerColumnVisibility != .detailOnly,
                 activateChapter: activateChapter
             )
                 .navigationSplitViewColumnWidth(min: 230, ideal: 280, max: 380)

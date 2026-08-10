@@ -4,6 +4,7 @@ struct NovelImportResult: Sendable {
     let bookTitle: String
     let author: String
     let catalogURL: URL
+    let hasCatalog: Bool
     let catalog: [ChapterSeed]
     let catalogIsComplete: Bool
     let chapterTitle: String

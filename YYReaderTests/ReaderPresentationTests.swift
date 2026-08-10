@@ -33,21 +33,21 @@ struct ReaderPresentationTests {
         #expect(ReaderLineSpacingPreset.closest(to: 9) == .comfortable)
 
         #expect(ReaderContentWidthPreset.narrow.value == 720)
-        #expect(ReaderContentWidthPreset.medium.value == 880)
-        #expect(ReaderContentWidthPreset.wide.value == 1_040)
+        #expect(ReaderContentWidthPreset.medium.value == 1_040)
+        #expect(ReaderContentWidthPreset.wide.value == 1_600)
         #expect(ReaderContentWidthPreset.closest(to: 940) == .medium)
     }
 
     @Test
     func readerWidthUsesViewportWithoutGrowingPastPreference() {
         #expect(
-            ReaderViewportLayout.effectiveContentWidth(preferredWidth: 880, viewportWidth: 1_500) == 880
+            ReaderViewportLayout.effectiveContentWidth(preferredWidth: 1_040, viewportWidth: 1_500) == 1_040
         )
         #expect(
-            ReaderViewportLayout.effectiveContentWidth(preferredWidth: 880, viewportWidth: 800) == 720
+            ReaderViewportLayout.effectiveContentWidth(preferredWidth: 1_040, viewportWidth: 800) == 720
         )
         #expect(
-            ReaderViewportLayout.effectiveContentWidth(preferredWidth: 1_500, viewportWidth: 1_500) == 1_100
+            ReaderViewportLayout.effectiveContentWidth(preferredWidth: 2_000, viewportWidth: 2_000) == 1_800
         )
     }
 
@@ -63,7 +63,7 @@ struct ReaderPresentationTests {
 
         ReaderPreferenceMigration.migrateIfNeeded(defaults: defaults)
 
-        #expect(defaults.double(forKey: ReaderPreferenceKeys.contentWidth) == 880)
+        #expect(defaults.double(forKey: ReaderPreferenceKeys.contentWidth) == 1_040)
         #expect(defaults.double(forKey: ReaderPreferenceKeys.lineSpacing) == 8)
         #expect(defaults.double(forKey: ReaderPreferenceKeys.paragraphSpacing) == 12)
 
@@ -90,5 +90,41 @@ struct ReaderPresentationTests {
         #expect(ReaderTheme.dark.preferredColorScheme == .dark)
         #expect(ReaderTheme.sepia.preferredColorScheme == .light)
         #expect(ReaderTheme.system.preferredColorScheme == nil)
+    }
+
+    @Test
+    func arrowKeyScrollingStaysWithinParagraphBounds() {
+        #expect(
+            ReaderKeyboardScroll.target(
+                currentParagraphIndex: 2,
+                fallbackParagraphIndex: 0,
+                paragraphCount: 5,
+                offset: 1
+            ) == 3
+        )
+        #expect(
+            ReaderKeyboardScroll.target(
+                currentParagraphIndex: 0,
+                fallbackParagraphIndex: 4,
+                paragraphCount: 5,
+                offset: -1
+            ) == 0
+        )
+        #expect(
+            ReaderKeyboardScroll.target(
+                currentParagraphIndex: nil,
+                fallbackParagraphIndex: 10,
+                paragraphCount: 5,
+                offset: 1
+            ) == 4
+        )
+        #expect(
+            ReaderKeyboardScroll.target(
+                currentParagraphIndex: nil,
+                fallbackParagraphIndex: 0,
+                paragraphCount: 0,
+                offset: 1
+            ) == nil
+        )
     }
 }
