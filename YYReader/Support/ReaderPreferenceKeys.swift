@@ -8,7 +8,7 @@ enum ReaderPreferenceKeys {
     static let horizontalPadding = "reader.horizontalPadding"
     static let theme = "reader.theme"
     static let paragraphIndent = "reader.paragraphIndent"
-    static let focusMode = "reader.focusMode"
+    static let continuousReading = "reader.continuousReading"
     static let prefetchNext = "reader.prefetchNext"
     static let lastReadingBookID = "reader.lastReadingBookID"
     static let lastReadingChapterID = "reader.lastReadingChapterID"

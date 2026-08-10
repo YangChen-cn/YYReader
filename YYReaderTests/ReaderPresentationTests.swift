@@ -163,14 +163,17 @@ struct ReaderPresentationTests {
     }
 
     @Test
-    func focusModeUsesGentleOpacityFalloff() {
-        let chapterID = UUID()
-        let focus = ReaderParagraphFocus(chapterID: chapterID, paragraphIndex: 3)
+    func visibilityGateCommitsOnlyOneAdjacentChapterPerScrollTransaction() {
+        let chapters = (0..<4).map { _ in UUID() }
+        var gate = ContinuousReaderVisibilityGate()
 
-        #expect(ReaderParagraphFocusStyle.opacity(chapterID: chapterID, paragraphIndex: 3, focus: focus) == 1)
-        #expect(ReaderParagraphFocusStyle.opacity(chapterID: chapterID, paragraphIndex: 2, focus: focus) == 0.90)
-        #expect(ReaderParagraphFocusStyle.opacity(chapterID: chapterID, paragraphIndex: 1, focus: focus) == 0.82)
-        #expect(ReaderParagraphFocusStyle.opacity(chapterID: chapterID, paragraphIndex: 0, focus: focus) == 0.78)
-        #expect(ReaderParagraphFocusStyle.opacity(chapterID: UUID(), paragraphIndex: 3, focus: focus) == 0.78)
+        gate.beginTransaction()
+        #expect(gate.accepts(candidateID: chapters[1], currentID: chapters[0], orderedChapterIDs: chapters))
+        gate.recordCommit()
+        #expect(!gate.accepts(candidateID: chapters[2], currentID: chapters[1], orderedChapterIDs: chapters))
+
+        gate.beginTransaction()
+        #expect(gate.accepts(candidateID: chapters[2], currentID: chapters[1], orderedChapterIDs: chapters))
     }
+
 }

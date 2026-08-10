@@ -14,6 +14,11 @@ final class LibraryStore {
     private var progressSaveTask: Task<Void, Never>?
     private var continuousLoadTasks: [UUID: Task<Void, Never>] = [:]
     private var continuousLoadFailures: Set<UUID> = []
+    private var visibleChapterDebounceTask: Task<Void, Never>?
+    private var stableTrimTask: Task<Void, Never>?
+    private var visibilityGate = ContinuousReaderVisibilityGate()
+    private var pendingContinuousAttachmentChapterID: UUID?
+    private var isReaderScrolling = false
     private var hasPendingProgressChanges = false
 
     let readerSession = ContinuousReaderSession()
@@ -22,6 +27,8 @@ final class LibraryStore {
     private(set) var sortedChapters: [Chapter] = []
     private(set) var chapterNavigationSnapshot = ReaderChapterNavigationSnapshot.empty
     private(set) var readerScrollRequest: ReaderScrollRequest?
+    private(set) var continuousReadingEnabled = false
+    private(set) var candidateVisibleChapterID: UUID?
     var selectedBookID: UUID?
     var selectedChapterID: UUID?
     private(set) var isLoading = false
@@ -174,6 +181,16 @@ final class LibraryStore {
         refreshReaderSession()
     }
 
+    func configureContinuousReading(_ isEnabled: Bool) {
+        guard continuousReadingEnabled != isEnabled else { return }
+        continuousReadingEnabled = isEnabled
+        candidateVisibleChapterID = nil
+        visibleChapterDebounceTask?.cancel()
+        stableTrimTask?.cancel()
+        pendingContinuousAttachmentChapterID = nil
+        refreshReaderSession()
+    }
+
     func prepareContinuousReading() {
         refreshReaderSession()
     }
@@ -183,11 +200,25 @@ final class LibraryStore {
               let next = neighbor(of: chapter, offset: 1) else {
             return
         }
-        if next.isCached {
-            refreshReaderSession(preservingVisibleWindow: true)
+        guard !next.isCached else { return }
+        startContinuousLoad(for: next)
+    }
+
+    func prepareContinuousChapterAttachment(after chapterID: UUID) {
+        guard continuousReadingEnabled,
+              chapterID == selectedChapterID,
+              let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }),
+              let next = neighbor(of: chapter, offset: 1) else {
             return
         }
-        startContinuousLoad(for: next)
+
+        prefetchContinuousChapter(after: chapterID)
+        guard !visibilityGate.hasCommittedInCurrentTransaction else { return }
+        if next.isCached {
+            readerSession.attachNext(next)
+        } else {
+            pendingContinuousAttachmentChapterID = chapterID
+        }
     }
 
     func retryContinuousChapter(after chapterID: UUID) {
@@ -211,16 +242,103 @@ final class LibraryStore {
 
     func updateVisibleReaderPosition(chapterID: UUID, paragraphIndex: Int, total: Int) {
         guard let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }) else { return }
-        readerSession.updateVisibleChapter(chapterID)
-        updateProgress(chapterID: chapterID, paragraphIndex: paragraphIndex, total: total)
-        guard selectedChapterID != chapterID else { return }
-        selectedChapterID = chapterID
-        chapter.book?.currentChapterID = chapterID
-        updateChapterNavigationSnapshot()
+        updateProgress(
+            chapterID: chapterID,
+            paragraphIndex: paragraphIndex,
+            total: total,
+            updatesCurrentChapter: !continuousReadingEnabled
+        )
+        guard continuousReadingEnabled else {
+            commitVisibleChapter(chapter)
+            return
+        }
+        scheduleVisibleChapterCommit(for: chapter)
     }
 
-    func updateReaderFocus(_ focus: ReaderParagraphFocus) {
-        readerSession.updateFocusedParagraph(focus)
+    func beginReaderScrollTransaction() {
+        isReaderScrolling = true
+        stableTrimTask?.cancel()
+        visibilityGate.beginTransaction()
+    }
+
+    func endReaderScrollTransaction(topVisibleChapterID: UUID?) {
+        isReaderScrolling = false
+        attachPendingContinuousChapterIfSafe()
+        scheduleStableTrim(topVisibleChapterID: topVisibleChapterID)
+    }
+
+    private func scheduleVisibleChapterCommit(for chapter: Chapter) {
+        guard chapter.id != selectedChapterID else {
+            candidateVisibleChapterID = nil
+            visibleChapterDebounceTask?.cancel()
+            return
+        }
+        guard readerSession.entries.contains(where: { $0.chapter.id == chapter.id }) else { return }
+        candidateVisibleChapterID = chapter.id
+        visibleChapterDebounceTask?.cancel()
+        visibleChapterDebounceTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(200))
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
+            guard let self,
+                  self.candidateVisibleChapterID == chapter.id else {
+                return
+            }
+            self.commitCandidateVisibleChapter(chapter.id)
+        }
+    }
+
+    private func commitCandidateVisibleChapter(_ chapterID: UUID) {
+        guard let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }),
+              visibilityGate.accepts(
+                candidateID: chapterID,
+                currentID: selectedChapterID,
+                orderedChapterIDs: sortedChapters.map(\.id)
+              ) else {
+            return
+        }
+        candidateVisibleChapterID = nil
+        visibilityGate.recordCommit()
+        commitVisibleChapter(chapter)
+    }
+
+    private func commitVisibleChapter(_ chapter: Chapter) {
+        readerSession.updateVisibleChapter(chapter.id)
+        guard selectedChapterID != chapter.id else { return }
+        selectedChapterID = chapter.id
+        chapter.book?.currentChapterID = chapter.id
+        updateChapterNavigationSnapshot()
+        scheduleProgressSave()
+    }
+
+    private func scheduleStableTrim(topVisibleChapterID: UUID?) {
+        guard continuousReadingEnabled,
+              let topVisibleChapterID else {
+            return
+        }
+        stableTrimTask?.cancel()
+        stableTrimTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(250))
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
+            guard let self,
+                  !self.isReaderScrolling,
+                  self.selectedChapterID == topVisibleChapterID,
+                  let index = self.sortedChapters.firstIndex(where: { $0.id == topVisibleChapterID }) else {
+                return
+            }
+            let lowerBound = max(self.sortedChapters.startIndex, index - 1)
+            let upperBound = min(self.sortedChapters.index(before: self.sortedChapters.endIndex), index + 1)
+            self.readerSession.trim(toChapterIDs: Set(self.sortedChapters[lowerBound...upperBound].map(\.id)))
+        }
     }
 
     private func importURL(_ input: String) async {
@@ -286,6 +404,20 @@ final class LibraryStore {
     }
 
     func updateProgress(chapterID: UUID, paragraphIndex: Int, total: Int) {
+        updateProgress(
+            chapterID: chapterID,
+            paragraphIndex: paragraphIndex,
+            total: total,
+            updatesCurrentChapter: true
+        )
+    }
+
+    private func updateProgress(
+        chapterID: UUID,
+        paragraphIndex: Int,
+        total: Int,
+        updatesCurrentChapter: Bool
+    ) {
         guard paragraphIndex >= 0,
               let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }) else { return }
         chapter.topParagraphIndex = max(0, paragraphIndex)
@@ -293,7 +425,9 @@ final class LibraryStore {
             ? min(max(Double(paragraphIndex) / Double(total - 1), 0), 1)
             : 0
         chapter.lastReadAt = .now
-        chapter.book?.currentChapterID = chapter.id
+        if updatesCurrentChapter {
+            chapter.book?.currentChapterID = chapter.id
+        }
         scheduleProgressSave()
     }
 
@@ -400,7 +534,7 @@ final class LibraryStore {
                 apply(result, to: chapter)
                 try modelContext.save()
                 continuousLoadFailures.remove(chapter.id)
-                refreshReaderSession(preservingVisibleWindow: true)
+                attachPendingContinuousChapterIfSafe()
             } catch is CancellationError {
                 return
             } catch HTMLLoadError.cancelled {
@@ -584,12 +718,24 @@ final class LibraryStore {
         } ?? []
     }
 
-    private func refreshReaderSession(preservingVisibleWindow: Bool = false) {
-        if preservingVisibleWindow {
-            readerSession.includeCachedNeighborhood(around: selectedChapter, in: sortedChapters)
-        } else {
-            readerSession.reset(around: selectedChapter, in: sortedChapters)
+    private func attachPendingContinuousChapterIfSafe() {
+        guard continuousReadingEnabled,
+              pendingContinuousAttachmentChapterID != nil,
+              !isReaderScrolling,
+              !visibilityGate.hasCommittedInCurrentTransaction,
+              let pendingChapterID = pendingContinuousAttachmentChapterID,
+              pendingChapterID == selectedChapterID,
+              let pendingChapter = selectedBook?.chapters.first(where: { $0.id == pendingChapterID }),
+              let next = neighbor(of: pendingChapter, offset: 1),
+              next.isCached else {
+            return
         }
+        pendingContinuousAttachmentChapterID = nil
+        readerSession.attachNext(next)
+    }
+
+    private func refreshReaderSession() {
+        readerSession.reset(around: selectedChapter)
     }
 
     private func updateChapterNavigationSnapshot() {

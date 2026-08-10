@@ -470,7 +470,7 @@ struct LibraryStoreTests {
     }
 
     @Test
-    func continuousReaderPrefetchesNextChapterNearBoundaryAndTracksVisibleChapter() async throws {
+    func continuousPrefetchCachesNextChapterWithoutChangingRenderedEntries() async throws {
         let nextURL = try #require(URL(string: "https://example.com/book/continuous/2.html"))
         let loader = MockHTMLLoader(documents: [
             nextURL: genericCataloglessChapter(title: "第2章 继续", body: "连续阅读的第二章")
@@ -508,21 +508,27 @@ struct LibraryStoreTests {
 
         let store = LibraryStore(modelContext: context, coordinator: NovelImportCoordinator(loader: loader))
         store.restoreSelection(bookID: book.id, chapterID: first.id)
+        #expect(!store.continuousReadingEnabled)
+        store.configureContinuousReading(true)
         store.prepareContinuousReading()
         #expect(loader.requestedURLs.isEmpty)
+        #expect(store.readerSession.entries.map(\.chapter.id) == [first.id])
         store.prefetchContinuousChapter(after: first.id)
         try await waitForCache(of: second)
 
         #expect(loader.requestedURLs == [nextURL])
-        #expect(store.readerSession.entries.map(\.chapter.id) == [first.id, second.id])
+        #expect(store.readerSession.entries.map(\.chapter.id) == [first.id])
 
-        store.updateVisibleReaderPosition(chapterID: second.id, paragraphIndex: 1, total: 2)
-        #expect(store.selectedChapterID == second.id)
-        #expect(store.selectedChapter?.readingProgress == 1)
+        // Re-prefetching an already cached chapter must remain a cache-only operation.
+        store.prefetchContinuousChapter(after: first.id)
+        #expect(store.readerSession.entries.map(\.chapter.id) == [first.id])
+
+        store.prepareContinuousChapterAttachment(after: first.id)
+        #expect(store.readerSession.entries.map(\.chapter.id) == [first.id, second.id])
     }
 
     @Test
-    func continuousWindowStaysStableWhenVisibleChapterChanges() throws {
+    func continuousReaderCommitsOneChapterPerScrollTransaction() async throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
         let context = container.mainContext
@@ -532,7 +538,7 @@ struct LibraryStoreTests {
             sourceHost: "example.com",
             catalogURL: "https://example.com/book/stable/"
         )
-        let chapters = (1...6).map { index in
+        let chapters = (1...20).map { index in
             Chapter(
                 sourceURL: "https://example.com/book/stable/\(index).html",
                 title: "第\(index)章",
@@ -543,26 +549,50 @@ struct LibraryStoreTests {
             )
         }
         book.chapters = chapters
-        book.currentChapterID = chapters[1].id
+        book.currentChapterID = chapters[0].id
         context.insert(book)
         for chapter in chapters { context.insert(chapter) }
         try context.save()
 
         let store = LibraryStore(modelContext: context, coordinator: NovelImportCoordinator(loader: MockHTMLLoader(documents: [:])))
-        store.restoreSelection(bookID: book.id, chapterID: chapters[1].id)
+        store.restoreSelection(bookID: book.id, chapterID: chapters[0].id)
+        store.configureContinuousReading(true)
         store.prepareContinuousReading()
-        #expect(store.readerSession.entries.map(\.chapter.id) == chapters[0...2].map(\.id))
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id])
+
+        store.beginReaderScrollTransaction()
+        store.prepareContinuousChapterAttachment(after: chapters[0].id)
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id, chapters[1].id])
+
+        store.updateVisibleReaderPosition(chapterID: chapters[1].id, paragraphIndex: 0, total: 1)
+        try await Task.sleep(for: .milliseconds(260))
+        #expect(store.selectedChapterID == chapters[1].id)
+        // Committing chapter 2 must not rebuild the viewport or attach chapter 3.
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id, chapters[1].id])
+        store.updateVisibleReaderPosition(chapterID: chapters[2].id, paragraphIndex: 0, total: 1)
+        try await Task.sleep(for: .milliseconds(260))
+        #expect(store.selectedChapterID == chapters[1].id)
+        store.prepareContinuousChapterAttachment(after: chapters[1].id)
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id, chapters[1].id])
+
+        store.endReaderScrollTransaction(topVisibleChapterID: chapters[1].id)
+        store.beginReaderScrollTransaction()
+        store.prepareContinuousChapterAttachment(after: chapters[1].id)
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id, chapters[1].id, chapters[2].id])
 
         store.updateVisibleReaderPosition(chapterID: chapters[2].id, paragraphIndex: 0, total: 1)
+        try await Task.sleep(for: .milliseconds(260))
         #expect(store.selectedChapterID == chapters[2].id)
-        #expect(store.readerSession.entries.map(\.chapter.id) == chapters[0...2].map(\.id))
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id, chapters[1].id, chapters[2].id])
 
-        store.prefetchContinuousChapter(after: chapters[2].id)
-        #expect(store.readerSession.entries.map(\.chapter.id) == chapters[0...3].map(\.id))
-
-        store.updateVisibleReaderPosition(chapterID: chapters[3].id, paragraphIndex: 0, total: 1)
-        store.prefetchContinuousChapter(after: chapters[3].id)
-        #expect(store.readerSession.entries.map(\.chapter.id) == chapters[0...4].map(\.id))
+        for index in 2..<5 {
+            store.endReaderScrollTransaction(topVisibleChapterID: chapters[index].id)
+            store.beginReaderScrollTransaction()
+            store.prepareContinuousChapterAttachment(after: chapters[index].id)
+            store.updateVisibleReaderPosition(chapterID: chapters[index + 1].id, paragraphIndex: 0, total: 1)
+            try await Task.sleep(for: .milliseconds(260))
+            #expect(store.selectedChapterID == chapters[index + 1].id)
+        }
     }
 
     @Test

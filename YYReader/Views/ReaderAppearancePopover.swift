@@ -7,7 +7,7 @@ struct ReaderAppearancePopover: View {
     @AppStorage(ReaderPreferenceKeys.contentWidth) private var contentWidth = ReaderViewportLayout.defaultPreferredWidth
     @AppStorage(ReaderPreferenceKeys.theme) private var theme = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.paragraphIndent) private var paragraphIndent = true
-    @AppStorage(ReaderPreferenceKeys.focusMode) private var focusMode = false
+    @AppStorage(ReaderPreferenceKeys.continuousReading) private var continuousReading = false
 
     let showAdvancedSettings: () -> Void
 
@@ -69,7 +69,7 @@ struct ReaderAppearancePopover: View {
             }
 
             Toggle("段首缩进 2 字符", isOn: $paragraphIndent)
-            Toggle("专注阅读", isOn: $focusMode)
+            Toggle("连续阅读", isOn: $continuousReading)
 
             Divider()
 
