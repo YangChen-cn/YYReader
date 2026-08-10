@@ -13,6 +13,7 @@ struct ReaderContentView: View {
     @AppStorage(ReaderPreferenceKeys.continuousReading) private var continuousReading = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var topVisibleTarget: ReaderScrollTarget?
+    @State private var keyboardTargets: [ReaderScrollTarget] = []
     @State private var hasAppliedInitialScroll = false
     @FocusState private var isReaderFocused: Bool
 
@@ -28,71 +29,69 @@ struct ReaderContentView: View {
                 viewportWidth: geometry.size.width
             )
 
-            ScrollViewReader { scrollProxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: paragraphSpacing) {
-                        ForEach(entries) { entry in
-                            ReaderChapterHeader(
-                                chapter: entry.chapter,
-                                target: .chapterHeader(entry.chapter.id)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: paragraphSpacing) {
+                    ForEach(entries) { entry in
+                        ReaderChapterHeader(
+                            chapter: entry.chapter,
+                            target: .chapterHeader(entry.chapter.id)
+                        )
+
+                        ForEach(entry.paragraphs.indices, id: \.self) { index in
+                            ReaderParagraphView(
+                                paragraph: entry.paragraphs[index],
+                                fontFamily: family,
+                                fontSize: fontSize,
+                                lineSpacing: lineSpacing,
+                                usesFirstLineIndent: paragraphIndent
                             )
-
-                            ForEach(entry.paragraphs.indices, id: \.self) { index in
-                                ReaderParagraphView(
-                                    paragraph: entry.paragraphs[index],
-                                    fontFamily: family,
-                                    fontSize: fontSize,
-                                    lineSpacing: lineSpacing,
-                                    usesFirstLineIndent: paragraphIndent
-                                )
-                                .id(ReaderScrollTarget.paragraph(chapterID: entry.chapter.id, index: index))
-                            }
-
-                            if continuousReading {
-                                ReaderContinuationBoundary(
-                                    status: entry.id == lastEntryID
-                                        ? store.continuationStatus(after: entry.chapter.id)
-                                        : .attached,
-                                    prepareAttachment: {
-                                        store.prepareContinuousChapterAttachment(after: entry.chapter.id)
-                                    },
-                                    retry: { store.retryContinuousChapter(after: entry.chapter.id) }
-                                )
-                                .id(ReaderScrollTarget.chapterFooter(entry.chapter.id))
-                            }
+                            .id(ReaderScrollTarget.paragraph(chapterID: entry.chapter.id, index: index))
                         }
 
-                        ReaderChapterFooter(
-                            snapshot: store.chapterNavigationSnapshot,
-                            previousChapter: store.goToPreviousChapter,
-                            nextChapter: store.goToNextChapter
-                        )
+                        if continuousReading {
+                            ReaderContinuationBoundary(
+                                status: entry.id == lastEntryID
+                                    ? store.continuationStatus(after: entry.chapter.id)
+                                    : .attached,
+                                prepareAttachment: {
+                                    store.prepareContinuousChapterAttachment(after: entry.chapter.id)
+                                },
+                                retry: { store.retryContinuousChapter(after: entry.chapter.id) }
+                            )
+                            .id(ReaderScrollTarget.chapterFooter(entry.chapter.id))
+                        }
                     }
-                    .scrollTargetLayout()
-                    .frame(width: effectiveWidth, alignment: .leading)
-                    .frame(maxWidth: .infinity)
+
+                    ReaderChapterFooter(
+                        snapshot: store.chapterNavigationSnapshot,
+                        previousChapter: store.goToPreviousChapter,
+                        nextChapter: store.goToNextChapter
+                    )
                 }
-                .scrollPosition(id: $topVisibleTarget, anchor: .top)
-                .onScrollPhaseChange { oldPhase, newPhase, _ in
-                    if newPhase.isScrolling, !oldPhase.isScrolling {
-                        store.beginReaderScrollTransaction()
-                    } else if oldPhase.isScrolling, !newPhase.isScrolling {
-                        store.endReaderScrollTransaction(topVisibleChapterID: topVisibleTarget?.chapterID)
-                    }
+                .scrollTargetLayout()
+                .frame(width: effectiveWidth, alignment: .leading)
+                .frame(maxWidth: .infinity)
+            }
+            .scrollPosition(id: $topVisibleTarget, anchor: .top)
+            .onScrollPhaseChange { oldPhase, newPhase, _ in
+                if newPhase.isScrolling, !oldPhase.isScrolling {
+                    store.beginReaderScrollTransaction()
+                } else if oldPhase.isScrolling, !newPhase.isScrolling {
+                    store.endReaderScrollTransaction(topVisibleChapterID: topVisibleTarget?.chapterID)
                 }
-                .contentMargins(.vertical, 0, for: .scrollContent)
-                .textSelection(.enabled)
-                .focusable()
-                .focusEffectDisabled()
-                .focused($isReaderFocused)
-                .onKeyPress(.upArrow) {
-                    moveScrollPosition(by: -1, entries: entries, proxy: scrollProxy)
-                    return .handled
-                }
-                .onKeyPress(.downArrow) {
-                    moveScrollPosition(by: 1, entries: entries, proxy: scrollProxy)
-                    return .handled
-                }
+            }
+            .contentMargins(.vertical, 0, for: .scrollContent)
+            .textSelection(.enabled)
+            .focusable()
+            .focusEffectDisabled()
+            .focused($isReaderFocused)
+            .onKeyPress(.upArrow) {
+                moveScrollPosition(by: -1)
+                return .handled
+            }
+            .onKeyPress(.downArrow) {
+                moveScrollPosition(by: 1)
+                return .handled
             }
         }
         .background(theme.background)
@@ -102,6 +101,11 @@ struct ReaderContentView: View {
         }
         .task(id: continuousReading) {
             store.configureContinuousReading(continuousReading)
+        }
+        .task(id: entries.map(\.id)) {
+            keyboardTargets = ReaderKeyboardScroll.paragraphTargets(
+                entries: entries.map { (chapterID: $0.chapter.id, paragraphs: $0.paragraphs) }
+            )
         }
         .task(id: store.readerScrollRequest?.id) {
             await applyPendingScrollRequest()
@@ -154,33 +158,19 @@ struct ReaderContentView: View {
         }
     }
 
-    private func moveScrollPosition(
-        by offset: Int,
-        entries: [ContinuousReaderSession.Entry],
-        proxy: ScrollViewProxy
-    ) {
-        let targets = entries.flatMap { entry in
-            entry.paragraphs.indices.map { ReaderScrollTarget.paragraph(chapterID: entry.chapter.id, index: $0) }
-        }
-        guard !targets.isEmpty else { return }
-        let currentIndex = topVisibleTarget.flatMap { targets.firstIndex(of: $0) }
-            ?? targets.firstIndex(of: .paragraph(
-                chapterID: store.selectedChapterID ?? entries[0].chapter.id,
-                index: store.selectedChapter?.topParagraphIndex ?? 0
-            ))
-            ?? 0
-        let targetIndex = min(max(currentIndex + offset, 0), targets.count - 1)
-        let target = targets[targetIndex]
-        scroll(to: target, proxy: proxy, anchor: .top)
-        hasAppliedInitialScroll = true
-    }
-
-    private func scroll(to target: ReaderScrollTarget, proxy: ScrollViewProxy, anchor: UnitPoint) {
+    private func moveScrollPosition(by offset: Int) {
+        guard let target = ReaderKeyboardScroll.nextTarget(
+            visibleTarget: topVisibleTarget,
+            selectedChapterID: store.selectedChapterID,
+            fallbackParagraphIndex: store.selectedChapter?.topParagraphIndex ?? 0,
+            targets: keyboardTargets,
+            offset: offset
+        ) else { return }
         if reduceMotion {
-            proxy.scrollTo(target, anchor: anchor)
+            topVisibleTarget = target
         } else {
             withAnimation(.easeOut(duration: 0.18)) {
-                proxy.scrollTo(target, anchor: anchor)
+                topVisibleTarget = target
             }
         }
     }

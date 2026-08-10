@@ -129,6 +129,115 @@ struct ReaderPresentationTests {
     }
 
     @Test
+    func paragraphTargetsFollowChapterThenParagraphOrder() {
+        let first = UUID()
+        let second = UUID()
+        let targets = ReaderKeyboardScroll.paragraphTargets(entries: [
+            (chapterID: first, paragraphs: ["a", "b"]),
+            (chapterID: second, paragraphs: ["c", "d", "e"])
+        ])
+        #expect(
+            targets == [
+                .paragraph(chapterID: first, index: 0),
+                .paragraph(chapterID: first, index: 1),
+                .paragraph(chapterID: second, index: 0),
+                .paragraph(chapterID: second, index: 1),
+                .paragraph(chapterID: second, index: 2)
+            ]
+        )
+        #expect(ReaderKeyboardScroll.paragraphTargets(entries: []).isEmpty)
+    }
+
+    @Test
+    func nextTargetMovesAcrossChapterBoundariesAndClamps() {
+        let first = UUID()
+        let second = UUID()
+        let targets = ReaderKeyboardScroll.paragraphTargets(entries: [
+            (chapterID: first, paragraphs: ["a", "b"]),
+            (chapterID: second, paragraphs: ["c", "d"])
+        ])
+
+        let lastOfFirst = ReaderScrollTarget.paragraph(chapterID: first, index: 1)
+        let firstOfSecond = ReaderScrollTarget.paragraph(chapterID: second, index: 0)
+        let lastOfSecond = ReaderScrollTarget.paragraph(chapterID: second, index: 1)
+
+        #expect(
+            ReaderKeyboardScroll.nextTarget(
+                visibleTarget: lastOfFirst,
+                selectedChapterID: first,
+                fallbackParagraphIndex: 0,
+                targets: targets,
+                offset: 1
+            ) == firstOfSecond
+        )
+        #expect(
+            ReaderKeyboardScroll.nextTarget(
+                visibleTarget: firstOfSecond,
+                selectedChapterID: second,
+                fallbackParagraphIndex: 0,
+                targets: targets,
+                offset: -1
+            ) == lastOfFirst
+        )
+        #expect(
+            ReaderKeyboardScroll.nextTarget(
+                visibleTarget: lastOfSecond,
+                selectedChapterID: second,
+                fallbackParagraphIndex: 1,
+                targets: targets,
+                offset: 1
+            ) == lastOfSecond
+        )
+        #expect(
+            ReaderKeyboardScroll.nextTarget(
+                visibleTarget: .paragraph(chapterID: first, index: 0),
+                selectedChapterID: first,
+                fallbackParagraphIndex: 0,
+                targets: targets,
+                offset: -1
+            ) == .paragraph(chapterID: first, index: 0)
+        )
+    }
+
+    @Test
+    func nextTargetFallsBackToSelectedChapterParagraph() {
+        let first = UUID()
+        let second = UUID()
+        let targets = ReaderKeyboardScroll.paragraphTargets(entries: [
+            (chapterID: first, paragraphs: ["a", "b"]),
+            (chapterID: second, paragraphs: ["c", "d"])
+        ])
+
+        #expect(
+            ReaderKeyboardScroll.nextTarget(
+                visibleTarget: nil,
+                selectedChapterID: second,
+                fallbackParagraphIndex: 1,
+                targets: targets,
+                offset: 1
+            ) == .paragraph(chapterID: second, index: 1)
+        )
+        #expect(
+            ReaderKeyboardScroll.nextTarget(
+                visibleTarget: .chapterHeader(second),
+                selectedChapterID: nil,
+                fallbackParagraphIndex: 2,
+                targets: targets,
+                offset: 1
+            ) == .paragraph(chapterID: first, index: 1)
+        )
+        #expect(
+            ReaderKeyboardScroll.nextTarget(
+                visibleTarget: nil,
+                selectedChapterID: nil,
+                fallbackParagraphIndex: 0,
+                targets: [],
+                offset: 1
+            ) == nil
+        )
+    }
+
+    @Test
     func persistentReaderSelectionTakesPriorityOverSceneRestoration() {
         let persistedBookID = UUID()
         let persistedChapterID = UUID()

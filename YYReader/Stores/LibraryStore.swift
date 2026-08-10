@@ -517,7 +517,7 @@ final class LibraryStore {
 
     private func schedulePrefetch(after chapter: Chapter) {
         prefetchTask?.cancel()
-        guard UserDefaults.standard.object(forKey: "reader.prefetchNext") as? Bool ?? true,
+        guard UserDefaults.standard.object(forKey: ReaderPreferenceKeys.prefetchNext) as? Bool ?? true,
               let next = chapterForURL(chapter.nextURL), !next.isCached else {
             return
         }
