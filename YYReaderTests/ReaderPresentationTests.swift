@@ -74,6 +74,19 @@ struct ReaderPresentationTests {
     }
 
     @Test
+    func legacyIvoryThemeMigratesToRose() throws {
+        let suiteName = "ReaderThemeMigrationTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set("ivory", forKey: ReaderPreferenceKeys.theme)
+        ReaderPreferenceMigration.migrateIfNeeded(defaults: defaults)
+
+        #expect(defaults.string(forKey: ReaderPreferenceKeys.theme) == ReaderTheme.rose.rawValue)
+        #expect(ReaderTheme.rose.title == "绯霞")
+    }
+
+    @Test
     func customReaderPreferencesArePreservedAndClamped() throws {
         let suiteName = "ReaderPreferenceCustomTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
@@ -82,7 +95,6 @@ struct ReaderPresentationTests {
         defaults.set(940.0, forKey: ReaderPreferenceKeys.contentWidth)
         defaults.set(7.0, forKey: ReaderPreferenceKeys.lineSpacing)
         defaults.set(50.0, forKey: ReaderPreferenceKeys.paragraphSpacing)
-
         ReaderPreferenceMigration.migrateIfNeeded(defaults: defaults)
 
         #expect(defaults.double(forKey: ReaderPreferenceKeys.contentWidth) == 940)
@@ -99,17 +111,20 @@ struct ReaderPresentationTests {
 
         for theme in ReaderTheme.allCases {
             let background = try #require(NSColor(theme.background).usingColorSpace(.sRGB))
+            let accent = try #require(NSColor(theme.accent).usingColorSpace(.sRGB))
             let foreground = try #require(NSColor(theme.foreground).usingColorSpace(.sRGB))
             let secondary = try #require(NSColor(theme.secondaryForeground).usingColorSpace(.sRGB))
             let tertiary = try #require(NSColor(theme.tertiaryForeground).usingColorSpace(.sRGB))
             let separator = try #require(NSColor(theme.separator).usingColorSpace(.sRGB))
 
             #expect(background.alphaComponent > 0)
+            #expect(accent.alphaComponent > 0)
             #expect(foreground.alphaComponent > 0)
             #expect(secondary.alphaComponent > 0)
             #expect(tertiary.alphaComponent > 0)
             #expect(separator.alphaComponent > 0)
             #expect(contrastRatio(foreground, background) >= 4.5)
+            #expect(contrastRatio(accent, background) >= 3.0)
         }
     }
 

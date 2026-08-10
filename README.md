@@ -71,6 +71,11 @@ xcodebuild test \
   -derivedDataPath DerivedData
 ```
 
+> 提示：UI 测试会合成键盘事件。若系统装有第三方输入法（如豆包输入法）且其为
+> 激活输入源，macOS 会弹出「允许 testmanagerd 启用 …」授权框；由于 Debug 构建每次
+> ad-hoc 重新签名，该授权无法被记住，每次运行都会弹出。跑测试前将输入源切换到
+> ABC/英文即可避免。
+
 生成 ad-hoc 签名的 arm64 Release DMG：
 
 ```bash

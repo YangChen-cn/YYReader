@@ -17,7 +17,7 @@ struct ReaderAppearancePopover: View {
                 Button {
                     fontSize = max(14, fontSize - 1)
                 } label: {
-                    Text("A−")
+                    Image(systemName: "textformat.size.smaller")
                         .frame(width: 34, height: 26)
                 }
                 .disabled(fontSize <= 14)
@@ -32,7 +32,7 @@ struct ReaderAppearancePopover: View {
                 Button {
                     fontSize = min(36, fontSize + 1)
                 } label: {
-                    Text("A+")
+                    Image(systemName: "textformat.size.larger")
                         .frame(width: 34, height: 26)
                 }
                 .disabled(fontSize >= 36)
@@ -40,15 +40,15 @@ struct ReaderAppearancePopover: View {
             }
             .buttonStyle(.borderless)
 
-            preferenceSection("主题") {
+            preferenceSection("主题", systemImage: "paintpalette") {
                 ReaderThemePicker(selection: $theme)
             }
 
-            preferenceSection("字体") {
+            preferenceSection("字体", systemImage: "textformat") {
                 ReaderFontPicker(selection: $fontFamily)
             }
 
-            preferenceSection("行距") {
+            preferenceSection("行距", systemImage: "arrow.up.and.down") {
                 Picker("行距", selection: lineSpacingPreset) {
                     ForEach(ReaderLineSpacingPreset.allCases) { preset in
                         Text(preset.title).tag(preset)
@@ -58,7 +58,7 @@ struct ReaderAppearancePopover: View {
                 .pickerStyle(.segmented)
             }
 
-            preferenceSection("正文宽度") {
+            preferenceSection("正文宽度", systemImage: "rectangle.compress.vertical") {
                 Picker("正文宽度", selection: contentWidthPreset) {
                     ForEach(ReaderContentWidthPreset.allCases) { preset in
                         Text(preset.title).tag(preset)
@@ -96,10 +96,11 @@ struct ReaderAppearancePopover: View {
 
     private func preferenceSection<Content: View>(
         _ title: String,
+        systemImage: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+            Label(title, systemImage: systemImage)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             content()

@@ -1,11 +1,15 @@
 import Foundation
 
 enum ReaderPreferenceMigration {
-    static let currentVersion = 2
+    static let currentVersion = 3
 
     static func migrateIfNeeded(defaults: UserDefaults = .standard) {
         guard defaults.integer(forKey: ReaderPreferenceKeys.preferenceVersion) < currentVersion else {
             return
+        }
+
+        if defaults.string(forKey: ReaderPreferenceKeys.theme) == "ivory" {
+            defaults.set(ReaderTheme.rose.rawValue, forKey: ReaderPreferenceKeys.theme)
         }
 
         migrateKnownDefault(

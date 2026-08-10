@@ -10,39 +10,61 @@ struct ReaderThemePicker: View {
             spacing: 12
         ) {
             ForEach(ReaderTheme.allCases) { theme in
-                Button {
-                    selection = theme.rawValue
-                } label: {
-                    VStack(spacing: 6) {
-                        Text("Aa")
-                            .font(.system(size: 15, weight: .medium, design: .serif))
-                            .foregroundStyle(theme.foreground)
-                            .frame(maxWidth: .infinity, minHeight: 36)
-                            .background(theme.background, in: .rect(cornerRadius: 6))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(
-                                        selection == theme.rawValue ? Color.accentColor : theme.separator,
-                                        lineWidth: selection == theme.rawValue ? 2 : 1
-                                    )
-                            }
-                            .overlay(alignment: .topTrailing) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .symbolRenderingMode(.palette)
-                                    .foregroundStyle(Color.white, Color.accentColor)
-                                    .padding(3)
-                                    .opacity(selection == theme.rawValue ? 1 : 0)
-                            }
-
-                        Text(theme.title)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(theme.title)主题")
-                .accessibilityAddTraits(selection == theme.rawValue ? .isSelected : [])
+                swatch(for: theme)
             }
         }
+    }
+
+    private func swatch(for theme: ReaderTheme) -> some View {
+        let isSelected = selection == theme.rawValue
+
+        return Button {
+            selection = theme.rawValue
+        } label: {
+            VStack(spacing: 5) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(theme.background)
+                    .frame(height: 56)
+                    .overlay(alignment: .topLeading) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Capsule()
+                                .fill(theme.accent)
+                                .frame(width: 20, height: 3)
+                            Capsule()
+                                .fill(theme.foreground.opacity(0.55))
+                                .frame(height: 2)
+                            Capsule()
+                                .fill(theme.tertiaryForeground.opacity(0.7))
+                                .frame(height: 2)
+                            Capsule()
+                                .fill(theme.tertiaryForeground.opacity(0.45))
+                                .frame(height: 2)
+                        }
+                        .padding(6)
+                        .accessibilityHidden(true)
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(
+                                isSelected ? Color.accentColor : theme.separator,
+                                lineWidth: isSelected ? 2 : 1
+                            )
+                    }
+                    .overlay(alignment: .topTrailing) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(Color.white, Color.accentColor)
+                            .padding(3)
+                            .opacity(isSelected ? 1 : 0)
+                    }
+
+                Text(theme.title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(theme.title)主题")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

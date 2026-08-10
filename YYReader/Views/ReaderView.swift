@@ -33,7 +33,7 @@ struct ReaderView: View {
             if store.selectedChapter != nil {
                 ReaderReadingProgressFooter(
                     text: store.readerProgressText,
-                    foreground: theme.tertiaryForeground
+                    foreground: theme.accent
                 )
             }
         }

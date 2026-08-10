@@ -34,6 +34,7 @@ struct ReaderContentView: View {
                     ForEach(entries) { entry in
                         ReaderChapterHeader(
                             chapter: entry.chapter,
+                            accent: theme.accent,
                             target: .chapterHeader(entry.chapter.id)
                         )
 
@@ -53,6 +54,7 @@ struct ReaderContentView: View {
                                 status: entry.id == lastEntryID
                                     ? store.continuationStatus(after: entry.chapter.id)
                                     : .attached,
+                                accent: theme.accent,
                                 secondaryForeground: theme.secondaryForeground,
                                 tertiaryForeground: theme.tertiaryForeground,
                                 prepareAttachment: {
@@ -66,6 +68,8 @@ struct ReaderContentView: View {
 
                     ReaderChapterFooter(
                         snapshot: store.chapterNavigationSnapshot,
+                        accent: theme.accent,
+                        separator: theme.separator,
                         foreground: theme.foreground,
                         secondaryForeground: theme.secondaryForeground,
                         previousChapter: store.goToPreviousChapter,
@@ -113,6 +117,7 @@ struct ReaderContentView: View {
         }
         .background(theme.background)
         .foregroundStyle(theme.foreground)
+        .tint(theme.accent)
         .task {
             await prepareContinuousReading()
         }

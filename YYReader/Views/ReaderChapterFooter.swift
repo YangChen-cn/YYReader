@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ReaderChapterFooter: View {
     let snapshot: ReaderChapterNavigationSnapshot
+    let accent: Color
+    let separator: Color
     let foreground: Color
     let secondaryForeground: Color
     let previousChapter: () -> Void
@@ -9,6 +11,20 @@ struct ReaderChapterFooter: View {
 
     var body: some View {
         VStack(spacing: 28) {
+            HStack(spacing: 10) {
+                Rectangle()
+                    .fill(separator.opacity(0.8))
+                    .frame(height: 1)
+                Text("❖")
+                    .font(.caption)
+                    .foregroundStyle(accent)
+                Rectangle()
+                    .fill(separator.opacity(0.8))
+                    .frame(height: 1)
+            }
+            .frame(maxWidth: 180)
+            .accessibilityHidden(true)
+
             HStack {
                 Text(snapshot.positionText)
             }
