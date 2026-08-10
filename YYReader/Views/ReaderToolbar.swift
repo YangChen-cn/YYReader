@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ReaderToolbar: ToolbarContent {
     @Binding var showingAppearancePopover: Bool
+    @Binding var showingDownloadProgress: Bool
     let canManageBook: Bool
     let canRefreshCatalog: Bool
     let isLoading: Bool
@@ -16,6 +17,8 @@ struct ReaderToolbar: ToolbarContent {
     let deleteOfflineCache: () -> Void
     let canDownloadEntireBook: Bool
     let isDownloading: Bool
+    let hasDownloadStatus: Bool
+    let downloads: OfflineDownloadManager
     let deleteBook: () -> Void
 
     var body: some ToolbarContent {
@@ -31,6 +34,21 @@ struct ReaderToolbar: ToolbarContent {
             .help("阅读外观")
             .popover(isPresented: $showingAppearancePopover, arrowEdge: .top) {
                 ReaderAppearancePopover(showAdvancedSettings: showAdvancedAppearance)
+            }
+
+            if hasDownloadStatus {
+                Button("下载进度", systemImage: isDownloading ? "arrow.down.circle" : "exclamationmark.triangle") {
+                    showingDownloadProgress.toggle()
+                }
+                .help("显示或隐藏下载进度")
+                .popover(isPresented: $showingDownloadProgress, arrowEdge: .top) {
+                    OfflineDownloadStatusPopover(
+                        downloads: downloads,
+                        cancel: cancelDownload,
+                        dismiss: { showingDownloadProgress = false },
+                        dismissFailure: downloads.dismissFailure
+                    )
+                }
             }
 
             Menu("更多", systemImage: "ellipsis") {
@@ -49,6 +67,9 @@ struct ReaderToolbar: ToolbarContent {
                     if isDownloading {
                         Divider()
                         Button("取消下载", role: .cancel, action: cancelDownload)
+                        Button("显示下载进度") {
+                            showingDownloadProgress = true
+                        }
                     }
                 }
                 .disabled(isLoading)

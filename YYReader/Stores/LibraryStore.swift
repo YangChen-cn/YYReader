@@ -175,16 +175,16 @@ final class LibraryStore {
     }
 
     func prepareContinuousReading() {
-        guard let chapter = selectedChapter else { return }
         refreshReaderSession()
-        if let next = neighbor(of: chapter, offset: 1) {
-            startContinuousLoad(for: next)
-        }
     }
 
     func prefetchContinuousChapter(after chapterID: UUID) {
         guard let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }),
               let next = neighbor(of: chapter, offset: 1) else {
+            return
+        }
+        if next.isCached {
+            refreshReaderSession(preservingVisibleWindow: true)
             return
         }
         startContinuousLoad(for: next)
@@ -211,13 +211,16 @@ final class LibraryStore {
 
     func updateVisibleReaderPosition(chapterID: UUID, paragraphIndex: Int, total: Int) {
         guard let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }) else { return }
-        readerSession.updateVisibleChapter(chapterID, paragraphIndex: paragraphIndex)
+        readerSession.updateVisibleChapter(chapterID)
         updateProgress(chapterID: chapterID, paragraphIndex: paragraphIndex, total: total)
         guard selectedChapterID != chapterID else { return }
         selectedChapterID = chapterID
         chapter.book?.currentChapterID = chapterID
         updateChapterNavigationSnapshot()
-        refreshReaderSession()
+    }
+
+    func updateReaderFocus(_ focus: ReaderParagraphFocus) {
+        readerSession.updateFocusedParagraph(focus)
     }
 
     private func importURL(_ input: String) async {
@@ -397,7 +400,7 @@ final class LibraryStore {
                 apply(result, to: chapter)
                 try modelContext.save()
                 continuousLoadFailures.remove(chapter.id)
-                refreshReaderSession()
+                refreshReaderSession(preservingVisibleWindow: true)
             } catch is CancellationError {
                 return
             } catch HTMLLoadError.cancelled {
@@ -581,8 +584,12 @@ final class LibraryStore {
         } ?? []
     }
 
-    private func refreshReaderSession() {
-        readerSession.reset(around: selectedChapter, in: sortedChapters)
+    private func refreshReaderSession(preservingVisibleWindow: Bool = false) {
+        if preservingVisibleWindow {
+            readerSession.includeCachedNeighborhood(around: selectedChapter, in: sortedChapters)
+        } else {
+            readerSession.reset(around: selectedChapter, in: sortedChapters)
+        }
     }
 
     private func updateChapterNavigationSnapshot() {

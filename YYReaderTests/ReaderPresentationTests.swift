@@ -127,4 +127,50 @@ struct ReaderPresentationTests {
             ) == nil
         )
     }
+
+    @Test
+    func persistentReaderSelectionTakesPriorityOverSceneRestoration() {
+        let persistedBookID = UUID()
+        let persistedChapterID = UUID()
+        let sceneBookID = UUID()
+        let sceneChapterID = UUID()
+
+        let selection = ReaderSelectionRestoration.selection(
+            persistedBookID: persistedBookID.uuidString,
+            persistedChapterID: persistedChapterID.uuidString,
+            sceneBookID: sceneBookID.uuidString,
+            sceneChapterID: sceneChapterID.uuidString
+        )
+
+        #expect(selection.bookID == persistedBookID)
+        #expect(selection.chapterID == persistedChapterID)
+    }
+
+    @Test
+    func sceneSelectionRemainsFallbackWhenNoPersistentReadingSelectionExists() {
+        let sceneBookID = UUID()
+        let sceneChapterID = UUID()
+
+        let selection = ReaderSelectionRestoration.selection(
+            persistedBookID: "",
+            persistedChapterID: "",
+            sceneBookID: sceneBookID.uuidString,
+            sceneChapterID: sceneChapterID.uuidString
+        )
+
+        #expect(selection.bookID == sceneBookID)
+        #expect(selection.chapterID == sceneChapterID)
+    }
+
+    @Test
+    func focusModeUsesGentleOpacityFalloff() {
+        let chapterID = UUID()
+        let focus = ReaderParagraphFocus(chapterID: chapterID, paragraphIndex: 3)
+
+        #expect(ReaderParagraphFocusStyle.opacity(chapterID: chapterID, paragraphIndex: 3, focus: focus) == 1)
+        #expect(ReaderParagraphFocusStyle.opacity(chapterID: chapterID, paragraphIndex: 2, focus: focus) == 0.90)
+        #expect(ReaderParagraphFocusStyle.opacity(chapterID: chapterID, paragraphIndex: 1, focus: focus) == 0.82)
+        #expect(ReaderParagraphFocusStyle.opacity(chapterID: chapterID, paragraphIndex: 0, focus: focus) == 0.78)
+        #expect(ReaderParagraphFocusStyle.opacity(chapterID: UUID(), paragraphIndex: 3, focus: focus) == 0.78)
+    }
 }

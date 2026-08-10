@@ -9,6 +9,7 @@ struct LibraryRootView: View {
     @State private var showingAddURL = false
     @State private var showingAppearancePopover = false
     @State private var showingAppearanceInspector = false
+    @State private var showingDownloadProgress = false
     @State private var confirmingDelete = false
 
     var body: some View {
@@ -24,6 +25,7 @@ struct LibraryRootView: View {
             if isReading {
                 ReaderToolbar(
                     showingAppearancePopover: $showingAppearancePopover,
+                    showingDownloadProgress: $showingDownloadProgress,
                     canManageBook: store.selectedBook != nil,
                     canRefreshCatalog: store.canRefreshSelectedCatalog,
                     isLoading: store.isLoading,
@@ -38,6 +40,8 @@ struct LibraryRootView: View {
                     deleteOfflineCache: store.deleteOfflineCache,
                     canDownloadEntireBook: store.canDownloadEntireBook,
                     isDownloading: store.offlineDownloads.isDownloading,
+                    hasDownloadStatus: store.offlineDownloads.isDownloading || store.offlineDownloads.failureMessage != nil,
+                    downloads: store.offlineDownloads,
                     deleteBook: confirmDelete
                 )
             } else {
@@ -51,11 +55,7 @@ struct LibraryRootView: View {
             }
         }
         .overlay {
-            if store.offlineDownloads.isDownloading {
-                LoadingOverlay(message: store.offlineDownloads.progressMessage) {
-                    store.cancelOfflineDownload()
-                }
-            } else if store.isLoading, store.canCancelLoading || !isReading {
+            if store.isLoading, store.canCancelLoading || !isReading {
                 if store.canCancelLoading {
                     LoadingOverlay(message: store.loadingMessage) {
                         store.cancelLoading()
@@ -71,9 +71,10 @@ struct LibraryRootView: View {
         .alert(item: $store.presentedError) { error in
             Alert(title: Text("操作失败"), message: Text(error.message), dismissButton: .default(Text("好")))
         }
-        .onChange(of: store.offlineDownloads.failureMessage) { _, message in
-            guard let message else { return }
-            store.presentedError = PresentedError(message: message)
+        .onChange(of: store.offlineDownloads.isDownloading) { _, isDownloading in
+            if !isDownloading {
+                showingDownloadProgress = false
+            }
         }
         .confirmationDialog("确定删除这本小说及其离线缓存吗？", isPresented: $confirmingDelete) {
             Button("删除", role: .destructive, action: deleteSelectedBook)
@@ -123,6 +124,7 @@ struct LibraryRootView: View {
         isReading = false
         showingAppearancePopover = false
         showingAppearanceInspector = false
+        showingDownloadProgress = false
     }
     private func deleteSelectedBook() {
         let wasReading = isReading

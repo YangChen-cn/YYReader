@@ -43,6 +43,11 @@ final class OfflineDownloadManager {
         task?.cancel()
     }
 
+    func dismissFailure() {
+        guard !isDownloading else { return }
+        failureMessage = nil
+    }
+
     private func plannedChapters(
         book: Book,
         currentChapter: Chapter,

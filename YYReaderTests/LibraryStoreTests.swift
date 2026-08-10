@@ -470,7 +470,7 @@ struct LibraryStoreTests {
     }
 
     @Test
-    func continuousReaderPrefetchesNextChapterAndTracksVisibleChapter() async throws {
+    func continuousReaderPrefetchesNextChapterNearBoundaryAndTracksVisibleChapter() async throws {
         let nextURL = try #require(URL(string: "https://example.com/book/continuous/2.html"))
         let loader = MockHTMLLoader(documents: [
             nextURL: genericCataloglessChapter(title: "第2章 继续", body: "连续阅读的第二章")
@@ -509,6 +509,8 @@ struct LibraryStoreTests {
         let store = LibraryStore(modelContext: context, coordinator: NovelImportCoordinator(loader: loader))
         store.restoreSelection(bookID: book.id, chapterID: first.id)
         store.prepareContinuousReading()
+        #expect(loader.requestedURLs.isEmpty)
+        store.prefetchContinuousChapter(after: first.id)
         try await waitForCache(of: second)
 
         #expect(loader.requestedURLs == [nextURL])
@@ -517,6 +519,50 @@ struct LibraryStoreTests {
         store.updateVisibleReaderPosition(chapterID: second.id, paragraphIndex: 1, total: 2)
         #expect(store.selectedChapterID == second.id)
         #expect(store.selectedChapter?.readingProgress == 1)
+    }
+
+    @Test
+    func continuousWindowStaysStableWhenVisibleChapterChanges() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        let book = Book(
+            title: "稳定连续阅读",
+            author: "测试作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/book/stable/"
+        )
+        let chapters = (1...6).map { index in
+            Chapter(
+                sourceURL: "https://example.com/book/stable/\(index).html",
+                title: "第\(index)章",
+                sortIndex: index,
+                bodyText: "第\(index)章的缓存测试正文。",
+                cachedAt: .now,
+                book: book
+            )
+        }
+        book.chapters = chapters
+        book.currentChapterID = chapters[1].id
+        context.insert(book)
+        for chapter in chapters { context.insert(chapter) }
+        try context.save()
+
+        let store = LibraryStore(modelContext: context, coordinator: NovelImportCoordinator(loader: MockHTMLLoader(documents: [:])))
+        store.restoreSelection(bookID: book.id, chapterID: chapters[1].id)
+        store.prepareContinuousReading()
+        #expect(store.readerSession.entries.map(\.chapter.id) == chapters[0...2].map(\.id))
+
+        store.updateVisibleReaderPosition(chapterID: chapters[2].id, paragraphIndex: 0, total: 1)
+        #expect(store.selectedChapterID == chapters[2].id)
+        #expect(store.readerSession.entries.map(\.chapter.id) == chapters[0...2].map(\.id))
+
+        store.prefetchContinuousChapter(after: chapters[2].id)
+        #expect(store.readerSession.entries.map(\.chapter.id) == chapters[0...3].map(\.id))
+
+        store.updateVisibleReaderPosition(chapterID: chapters[3].id, paragraphIndex: 0, total: 1)
+        store.prefetchContinuousChapter(after: chapters[3].id)
+        #expect(store.readerSession.entries.map(\.chapter.id) == chapters[0...4].map(\.id))
     }
 
     @Test
