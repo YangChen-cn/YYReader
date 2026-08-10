@@ -78,6 +78,7 @@
 		CE0DF3B1BB48CA5D6A8516DD /* VerificationRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = A236FF161626D4F5303DFF71 /* VerificationRequest.swift */; };
 		CE5AE74C60CF5809DA06DF84 /* HybridHTMLLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 640BD2FB3A2FBFF1931C4B8D /* HybridHTMLLoader.swift */; };
 		CF68CAB5AB6AC9BB13472DC4 /* LibraryToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B748293BFBD97A13118EEF9 /* LibraryToolbar.swift */; };
+		D2F5608E509AE597D0A58A65 /* AboutSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C89A1C4F7C6707B88A753A8 /* AboutSettingsView.swift */; };
 		E5426BE4781AA0353EC0E3F6 /* OfflineDownloadScope.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2189724A7990DE41705D79EA /* OfflineDownloadScope.swift */; };
 		E5FABD7219D900D7F148630B /* ReaderTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C9CBDB8A44F784298110098 /* ReaderTheme.swift */; };
 		E74DEFD9BA19EB08A1F270C6 /* HybridHTMLLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 766B2107CD7A9B981E5514CB /* HybridHTMLLoaderTests.swift */; };
@@ -123,6 +124,7 @@
 		07CC7883179C338CD1A43211 /* BookSidebarRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookSidebarRow.swift; sourceTree = "<group>"; };
 		08C25A3B8B6503DA98B7E3EE /* ReaderContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderContentView.swift; sourceTree = "<group>"; };
 		0A0C2BF6B6A3928A55288E00 /* NovelImportResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelImportResult.swift; sourceTree = "<group>"; };
+		0C89A1C4F7C6707B88A753A8 /* AboutSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutSettingsView.swift; sourceTree = "<group>"; };
 		16962E22CE775BEF29CF2B36 /* WebVerificationWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebVerificationWebView.swift; sourceTree = "<group>"; };
 		182A4EBB62150B0C78F8376C /* ReaderPreferenceMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderPreferenceMigration.swift; sourceTree = "<group>"; };
 		18BD4265501668198E65C51D /* ReaderChapterHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderChapterHeader.swift; sourceTree = "<group>"; };
@@ -318,6 +320,7 @@
 		5094B1DEBDC637FBD4DE4B79 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				0C89A1C4F7C6707B88A753A8 /* AboutSettingsView.swift */,
 				D044672EEE0BD4388C59459F /* AddURLSheet.swift */,
 				3D1FE8ACBCD32A22D38F5482 /* AppearanceInspectorView.swift */,
 				07CC7883179C338CD1A43211 /* BookSidebarRow.swift */,
@@ -560,6 +563,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D2F5608E509AE597D0A58A65 /* AboutSettingsView.swift in Sources */,
 				3E22591FD9F89E31775A632C /* AddURLSheet.swift in Sources */,
 				CC77BA445BE2DF949A447E5C /* AppServices.swift in Sources */,
 				42698DCAD444FB862048ACB9 /* AppearanceInspectorView.swift in Sources */,
@@ -744,7 +748,7 @@
 				CODE_SIGN_ENTITLEMENTS = YYReader/YYReader.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YYReader/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = YYReader;
@@ -754,7 +758,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yyreader.app;
 				PRODUCT_NAME = YYReader;
 				SDKROOT = macosx;
@@ -884,7 +888,7 @@
 				CODE_SIGN_ENTITLEMENTS = YYReader/YYReader.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YYReader/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = YYReader;
@@ -894,7 +898,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yyreader.app;
 				PRODUCT_NAME = YYReader;
 				SDKROOT = macosx;

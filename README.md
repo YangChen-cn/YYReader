@@ -6,17 +6,17 @@ YYReader 是一款以正文为中心的原生 macOS 小说阅读器。粘贴小�
 
 - 原生 SwiftUI 阅读界面，正文可选择，不使用 WebView 渲染。
 - 书架、可搜索目录与沉浸式阅读模式。
-- 自动合并章节分页，支持上一章和下一章。
-- 阅读进度、章节缓存与离线重开。
+- 自动合并章节分页，支持上一章、下一章和可选的连续章节阅读。
+- 阅读进度、章节缓存、主动下载与离线重开。
 - 字体、字号、行距、正文宽度、段首缩进和明暗主题设置。
 - 为 `qidiy.com` 提供专用解析；其他小说网站使用通用解析器。
 - 遇到 Cloudflare 或 JavaScript 验证时，复用每个网站的持久 WebKit 会话。
 
-## 安装 v1.0.0
+## 安装 v1.1.0
 
-YYReader 1.0.0 支持 Apple 芯片和 Intel Mac，要求 macOS 15 或更高版本。
+YYReader 1.1.0 支持 Apple 芯片 Mac，要求 macOS 15 或更高版本。
 
-1. 从 [GitHub Releases](https://github.com/YangChen-cn/YYReader/releases/latest) 下载对应架构的 DMG：Apple 芯片选择 `YYReader-1.0.0-arm64.dmg`，Intel Mac 选择 `YYReader-1.0.0-x86_64.dmg`。
+1. 从 [GitHub Releases](https://github.com/YangChen-cn/YYReader/releases/latest) 下载 `YYReader-1.1.0-arm64.dmg`。
 2. 打开 DMG，将 `YYReader` 拖入 `Applications`。
 3. 本版本使用 ad-hoc 签名且未经过 Apple 公证；首次启动时请在 Finder 中右键应用并选择“打开”，再确认启动。
 
@@ -32,6 +32,19 @@ YYReader 1.0.0 支持 Apple 芯片和 Intel Mac，要求 macOS 15 或更高版�
 - 阅读模式返回箭头：退出沉浸阅读并回到书架。
 - `⌘L`：添加网页。
 - `⌘[` / `⌘]`：上一章 / 下一章。
+
+## 1.1.0 更新日志
+
+- 新增可选连续阅读：进入章节后提前预取下一章，接近底部时平滑衔接，并保持稳定的阅读会话。
+- 新增“下载到本地”：支持当前章节、后续 20 章或整本目录的低并发下载，可取消并在后台查看进度。
+- 增强通用网站兼容性：支持直接导入目录页、无目录小说、多卷目录，以及静态解析失败后的安全 rendered DOM 回退。
+- 改进阅读体验：支持方向键逐段滚动、轻量章节进度、目录跟随当前章节和上次阅读书籍恢复。
+- 修复连续阅读中的跨章连跳、章节切换闪烁及章节边界轻微滚动跳动。
+
+## 项目信息
+
+- 作者：Yangchen
+- GitHub：[YangChen-cn/YYReader](https://github.com/YangChen-cn/YYReader)
 
 ## 从源码构建
 
@@ -58,7 +71,7 @@ xcodebuild test \
   -derivedDataPath DerivedData
 ```
 
-生成 ad-hoc 签名的 arm64 和 Intel x86_64 Release DMG：
+生成 ad-hoc 签名的 arm64 Release DMG：
 
 ```bash
 ./script/package_release.sh
@@ -66,10 +79,9 @@ xcodebuild test \
 
 产物位于：
 
-- `dist/YYReader-1.0.0-arm64.dmg`
-- `dist/YYReader-1.0.0-x86_64.dmg`
+- `dist/YYReader-1.1.0-arm64.dmg`
 
-构建脚本会分别编译两个架构，移除调试记录和绝对 RPATH，并检查挂载后的 DMG 内不包含开发机 `/Users/...` 路径。发布产物只包含 DMG，不生成 ZIP。
+构建脚本只编译 Apple 芯片 arm64 架构，移除调试记录和绝对 RPATH，并检查挂载后的 DMG 内不包含开发机 `/Users/...` 路径。发布产物只包含 DMG，不生成 ZIP。
 
 ## 技术结构
 

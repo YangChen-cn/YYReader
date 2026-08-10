@@ -25,6 +25,10 @@ struct SettingsView: View {
                 .formStyle(.grouped)
                 .padding()
             }
+
+            Tab("关于", systemImage: "info.circle") {
+                AboutSettingsView()
+            }
         }
         .frame(width: 540, height: 620)
     }
