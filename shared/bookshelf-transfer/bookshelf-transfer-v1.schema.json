@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/YangChen-cn/YYReader/blob/main/shared/bookshelf-transfer/bookshelf-transfer-v1.schema.json",
+  "title": "YYReader BookshelfTransfer v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["format", "version", "exportedAt", "books"],
+  "properties": {
+    "format": {
+      "const": "yyreader-bookshelf"
+    },
+    "version": {
+      "const": 1
+    },
+    "exportedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "books": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/book"
+      }
+    }
+  },
+  "$defs": {
+    "book": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["sourceURL", "title", "author"],
+      "properties": {
+        "sourceURL": {
+          "type": "string",
+          "format": "uri",
+          "description": "Canonical book-level source URL, not the current chapter URL."
+        },
+        "title": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "currentChapterURL": {
+          "type": ["string", "null"],
+          "format": "uri"
+        },
+        "paragraphIndex": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "progress": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}

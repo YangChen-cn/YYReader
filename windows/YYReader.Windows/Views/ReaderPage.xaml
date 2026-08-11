@@ -1,0 +1,83 @@
+<Page
+    x:Class="YYReader.Windows.Views.ReaderPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    xmlns:local="using:YYReader.Windows.Views">
+    <Page.Resources>
+        <DataTemplate x:Key="ReaderHeaderTemplate" x:DataType="local:ReaderItem">
+            <TextBlock Text="{x:Bind Text}"
+                       FontSize="{x:Bind FontSize}"
+                       FontFamily="{x:Bind FontFamily}"
+                       Foreground="{x:Bind Foreground}"
+                       TextWrapping="Wrap"
+                       Margin="{x:Bind Margin}"
+                       FontWeight="SemiBold" />
+        </DataTemplate>
+        <DataTemplate x:Key="ReaderParagraphTemplate" x:DataType="local:ReaderItem">
+            <TextBlock Text="{x:Bind Text}"
+                       FontSize="{x:Bind FontSize}"
+                       LineHeight="{x:Bind LineHeight}"
+                       FontFamily="{x:Bind FontFamily}"
+                       Foreground="{x:Bind Foreground}"
+                       TextWrapping="Wrap"
+                       IsTextSelectionEnabled="True"
+                       Margin="{x:Bind Margin}" />
+        </DataTemplate>
+        <DataTemplate x:Key="ReaderFooterTemplate" x:DataType="local:ReaderItem">
+            <TextBlock Text="{x:Bind Text}"
+                       FontSize="{x:Bind FontSize}"
+                       FontFamily="{x:Bind FontFamily}"
+                       Foreground="{x:Bind Foreground}"
+                       TextWrapping="Wrap"
+                       HorizontalAlignment="Center"
+                       Margin="{x:Bind Margin}" />
+        </DataTemplate>
+        <local:ReaderItemTemplateSelector x:Key="ReaderItemSelector"
+            HeaderTemplate="{StaticResource ReaderHeaderTemplate}"
+            ParagraphTemplate="{StaticResource ReaderParagraphTemplate}"
+            FooterTemplate="{StaticResource ReaderFooterTemplate}" />
+    </Page.Resources>
+
+    <Grid x:Name="ReaderRoot" RowDefinitions="Auto,*,Auto" SizeChanged="ReaderRoot_SizeChanged">
+        <Grid Grid.Row="0" Padding="16,8" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
+            <Button Content="返回" Click="Back_Click" />
+            <TextBlock Grid.Column="1" Text="{x:Bind Store.SelectedBook.Title, Mode=OneWay}" VerticalAlignment="Center" FontSize="16" />
+            <ComboBox x:Name="ChapterPicker"
+                      Grid.Column="2"
+                      Width="230"
+                      PlaceholderText="目录"
+                      DisplayMemberPath="Title"
+                      SelectionChanged="ChapterPicker_SelectionChanged" />
+            <Button Grid.Column="3" Content="上一章" Click="PreviousChapter_Click" />
+            <Button Grid.Column="4" Content="下一章" Click="NextChapter_Click" />
+            <Button Grid.Column="5" Content="Aa" Click="Appearance_Click" />
+            <Button Grid.Column="6" Content="更多" Click="More_Click" />
+        </Grid>
+
+        <ScrollViewer x:Name="ReaderScrollViewer"
+                      Grid.Row="1"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto"
+                      ViewChanged="ReaderScrollViewer_ViewChanged"
+                      KeyDown="ReaderScrollViewer_KeyDown"
+                      IsTabStop="True">
+            <Grid x:Name="ReaderContent" HorizontalAlignment="Center">
+                <ItemsRepeater x:Name="ReaderRepeater"
+                               ItemsSource="{x:Bind Items}"
+                               ItemTemplate="{StaticResource ReaderItemSelector}"
+                               ElementPrepared="ReaderRepeater_ElementPrepared"
+                               ElementClearing="ReaderRepeater_ElementClearing">
+                    <ItemsRepeater.Layout>
+                        <StackLayout Spacing="0" />
+                    </ItemsRepeater.Layout>
+                </ItemsRepeater>
+            </Grid>
+        </ScrollViewer>
+
+        <Grid Grid.Row="2" Padding="12,4" ColumnDefinitions="*,Auto" Opacity="0.65">
+            <TextBlock x:Name="ProgressText" />
+            <TextBlock Grid.Column="1" Text="↑↓ 小步　←→ / PageUp/PageDown 翻页　Space 下一屏" />
+        </Grid>
+    </Grid>
+</Page>

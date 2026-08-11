@@ -1,5 +1,9 @@
 .DS_Store
 DerivedData/
 dist/
+.codex/dotnet-sdk/
+.codex/windows-sdk/
+windows/**/bin/
+windows/**/obj/
 *.xcuserstate
 xcuserdata/
