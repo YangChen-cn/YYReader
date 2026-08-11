@@ -15,7 +15,16 @@
             <TextBlock Text="{x:Bind Text}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
         </DataTemplate>
         <DataTemplate x:Key="ReaderFooterTemplate" x:DataType="local:ReaderItem">
-            <TextBlock Text="{x:Bind Text}" TextWrapping="Wrap" HorizontalAlignment="Center" Margin="0,16" />
+            <StackPanel Margin="0,24,0,34" Spacing="10">
+                <Border Height="1" Opacity="0.25" />
+                <Grid ColumnDefinitions="*,Auto,*">
+                    <Button Content="← 上一章" Tag="{x:Bind Chapter}" Click="ReaderFooterPrevious_Click"
+                            HorizontalAlignment="Left" />
+                    <TextBlock Grid.Column="1" Text="{x:Bind Text}" Opacity="0.5" VerticalAlignment="Center" />
+                    <Button Grid.Column="2" Content="下一章 →" Tag="{x:Bind Chapter}" Click="ReaderFooterNext_Click"
+                            HorizontalAlignment="Right" />
+                </Grid>
+            </StackPanel>
         </DataTemplate>
         <local:ReaderItemTemplateSelector x:Key="ReaderItemSelector"
             HeaderTemplate="{StaticResource ReaderHeaderTemplate}"
@@ -68,7 +77,58 @@
                             <TextBlock x:Name="ToolbarChapterTitle" FontSize="11" Opacity="0.58"
                                        TextTrimming="CharacterEllipsis" TextAlignment="Center" />
                         </StackPanel>
-                        <Button Grid.Column="3" Content="Aa" Click="Appearance_Click" Height="36" ToolTipService.ToolTip="阅读设置" />
+                        <Button Grid.Column="3" Content="Aa" Height="36" ToolTipService.ToolTip="阅读设置">
+                            <Button.Flyout>
+                                <Flyout x:Name="AppearanceFlyout" Opened="AppearanceFlyout_Opened">
+                                    <StackPanel Width="340" Spacing="12">
+                                        <TextBlock Text="阅读设置" FontSize="18" FontWeight="SemiBold" />
+                                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                            <Button Content="A−" Click="DecreaseFont_Click" />
+                                            <TextBlock x:Name="AppearanceFontSizeText" Grid.Column="1"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            <Button Grid.Column="2" Content="A+" Click="IncreaseFont_Click" />
+                                        </Grid>
+                                        <ComboBox x:Name="AppearanceThemeBox" Header="主题" HorizontalAlignment="Stretch"
+                                                  SelectionChanged="AppearanceControl_Changed">
+                                            <ComboBoxItem Content="跟随系统" Tag="system" />
+                                            <ComboBoxItem Content="白色" Tag="light" />
+                                            <ComboBoxItem Content="绯霞" Tag="rose" />
+                                            <ComboBoxItem Content="米黄" Tag="sepia" />
+                                            <ComboBoxItem Content="雾蓝" Tag="mist" />
+                                            <ComboBoxItem Content="草木" Tag="sage" />
+                                            <ComboBoxItem Content="暗色" Tag="dark" />
+                                            <ComboBoxItem Content="深夜" Tag="midnight" />
+                                        </ComboBox>
+                                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                                            <ComboBox x:Name="AppearanceFontBox" Header="字体" SelectionChanged="AppearanceControl_Changed">
+                                                <ComboBoxItem Content="宋体" Tag="serif" />
+                                                <ComboBoxItem Content="黑体" Tag="system" />
+                                                <ComboBoxItem Content="楷体" Tag="kaiti" />
+                                            </ComboBox>
+                                            <ComboBox x:Name="AppearanceLineBox" Grid.Column="1" Header="行距" SelectionChanged="AppearanceControl_Changed">
+                                                <ComboBoxItem Content="紧凑" Tag="compact" />
+                                                <ComboBoxItem Content="舒适" Tag="comfortable" />
+                                                <ComboBoxItem Content="宽松" Tag="loose" />
+                                            </ComboBox>
+                                            <ComboBox x:Name="AppearanceParagraphBox" Grid.Column="2" Header="段距" SelectionChanged="AppearanceControl_Changed">
+                                                <ComboBoxItem Content="紧凑" Tag="compact" />
+                                                <ComboBoxItem Content="舒适" Tag="comfortable" />
+                                                <ComboBoxItem Content="宽松" Tag="loose" />
+                                            </ComboBox>
+                                        </Grid>
+                                        <ComboBox x:Name="AppearanceWidthBox" Header="正文宽度" HorizontalAlignment="Stretch"
+                                                  SelectionChanged="AppearanceControl_Changed">
+                                            <ComboBoxItem Content="窄" Tag="narrow" />
+                                            <ComboBoxItem Content="舒适" Tag="comfortable" />
+                                            <ComboBoxItem Content="宽" Tag="wide" />
+                                        </ComboBox>
+                                        <ToggleSwitch x:Name="AppearanceIndentToggle" Header="段首缩进" Toggled="AppearanceControl_Changed" />
+                                        <ToggleSwitch x:Name="AppearanceContinuousToggle" Header="连续阅读" Toggled="AppearanceControl_Changed" />
+                                        <ToggleSwitch x:Name="AppearancePrefetchToggle" Header="空闲时预取下一章" Toggled="AppearanceControl_Changed" />
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
                         <Button Grid.Column="4" Width="40" Height="36" ToolTipService.ToolTip="更多">
                             <FontIcon Glyph="&#xE712;" FontSize="16" />
                             <Button.Flyout>

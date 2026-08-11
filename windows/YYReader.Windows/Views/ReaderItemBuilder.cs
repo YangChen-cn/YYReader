@@ -14,7 +14,7 @@ public static class ReaderItemBuilder
     public static IReadOnlyList<ReaderItem> BuildEntry(ContinuousReaderSession.Entry entry)
     {
         var paragraphs = entry.Paragraphs;
-        var result = new List<ReaderItem>(paragraphs.Count + 1)
+        var result = new List<ReaderItem>(paragraphs.Count + 2)
         {
             new(ReaderItemKind.Header, entry.Chapter)
         };
@@ -22,6 +22,7 @@ public static class ReaderItemBuilder
         {
             result.Add(new ReaderItem(ReaderItemKind.Paragraph, entry.Chapter, index, paragraphs));
         }
+        result.Add(new ReaderItem(ReaderItemKind.Footer, entry.Chapter));
         return result;
     }
 }

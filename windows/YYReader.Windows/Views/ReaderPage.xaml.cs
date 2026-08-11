@@ -22,12 +22,14 @@ public sealed partial class ReaderPage : Page
     private readonly DispatcherQueueTimer _progressTimer;
     private readonly Dictionary<int, UIElement> _realizedElements = new();
     private readonly ReaderContinuousLoadState _continuousLoadState = new();
+    private CancellationTokenSource? _preferenceSaveCancellation;
     private ReaderPreferences _preferences = ReaderPreferences.Defaults;
     private ReaderThemePalette _palette = ReaderThemePalette.FromName("system");
     private bool _initialized;
     private bool _changingChapter;
     private bool _synchronizingCatalog;
     private bool _loadingNext;
+    private bool _synchronizingAppearance;
 
     public ReaderPage(LibraryStore store, Book book, Window window)
     {
@@ -70,6 +72,7 @@ public sealed partial class ReaderPage : Page
     {
         _progressTimer.Stop();
         CommitVisiblePosition();
+        await FlushPreferencesAsync();
         await Store.FlushPendingProgressAsync();
     }
 
@@ -144,6 +147,13 @@ public sealed partial class ReaderPage : Page
                 title.FontFamily = fontFamily;
                 title.Foreground = _palette.Accent;
             }
+            return;
+        }
+
+        if (item.Kind == ReaderItemKind.Footer && element is StackPanel footer
+            && footer.Children.OfType<Border>().FirstOrDefault() is { } separator)
+        {
+            separator.Background = _palette.Separator;
         }
     }
 
@@ -410,6 +420,39 @@ public sealed partial class ReaderPage : Page
 
     private async void NextChapter_Click(object sender, RoutedEventArgs e) => await NavigateChapterAsync(1);
 
+    private async void ReaderFooterPrevious_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.Tag is Chapter chapter) await NavigateFromChapterAsync(chapter, -1);
+    }
+
+    private async void ReaderFooterNext_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.Tag is Chapter chapter) await NavigateFromChapterAsync(chapter, 1);
+    }
+
+    private async Task NavigateFromChapterAsync(Chapter chapter, int offset)
+    {
+        if (_changingChapter || _loadingNext) return;
+        _changingChapter = true;
+        SetNavigationEnabled(false);
+        try
+        {
+            var target = await Store.NavigateFromChapterAsync(chapter, offset);
+            if (target is null)
+            {
+                await ShowChapterLoadFailureAsync();
+                return;
+            }
+            RefreshCatalogList();
+            RebuildItems(ReaderRebuildPosition.ChapterTop);
+        }
+        finally
+        {
+            _changingChapter = false;
+            SetNavigationEnabled(true);
+        }
+    }
+
     private void RefreshCatalogList()
     {
         _synchronizingCatalog = true;
@@ -540,44 +583,100 @@ public sealed partial class ReaderPage : Page
 
     private void CancelCatalogRefresh_Click(object sender, RoutedEventArgs e) => Store.CancelCatalogRefresh();
 
-    private async void Appearance_Click(object sender, RoutedEventArgs e)
+    private void AppearanceFlyout_Opened(object sender, object e)
     {
-        var content = new StackPanel { Spacing = 12, Width = 360 };
-        var fontSlider = new Slider { Minimum = 14, Maximum = 36, StepFrequency = 1, Value = _preferences.FontSize, Header = "字号" };
-        var widthBox = new ComboBox { Header = "正文宽度", ItemsSource = new[] { "narrow", "comfortable", "wide" }, SelectedItem = WidthName(_preferences.ContentWidthEm) };
-        var themeBox = new ComboBox { Header = "主题", ItemsSource = new[] { "system", "light", "rose", "sepia", "mist", "sage", "dark", "midnight" }, SelectedItem = _preferences.Theme };
-        var indent = new ToggleSwitch { Header = "段首缩进", IsOn = _preferences.ParagraphIndent };
-        var continuous = new ToggleSwitch { Header = "连续阅读", IsOn = _preferences.ContinuousReading };
-        var prefetch = new ToggleSwitch { Header = "空闲时预取下一章", IsOn = _preferences.PrefetchNextChapter };
-        content.Children.Add(fontSlider);
-        content.Children.Add(widthBox);
-        content.Children.Add(themeBox);
-        content.Children.Add(indent);
-        content.Children.Add(continuous);
-        content.Children.Add(prefetch);
-        var dialog = new ContentDialog
+        _synchronizingAppearance = true;
+        try
         {
-            Title = "阅读设置",
-            Content = content,
-            PrimaryButtonText = "应用",
-            CloseButtonText = "取消",
-            XamlRoot = XamlRoot
-        };
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-        _preferences = _preferences with
+            SelectComboTag(AppearanceThemeBox, _preferences.Theme);
+            SelectComboTag(AppearanceFontBox, _preferences.FontFamily);
+            SelectComboTag(AppearanceLineBox, SpacingName(_preferences.LineSpacing, 0.34, 0.49));
+            SelectComboTag(AppearanceParagraphBox, SpacingName(_preferences.ParagraphSpacing, 0.50, 0.70));
+            SelectComboTag(AppearanceWidthBox, WidthName(_preferences.ContentWidthEm));
+            AppearanceIndentToggle.IsOn = _preferences.ParagraphIndent;
+            AppearanceContinuousToggle.IsOn = _preferences.ContinuousReading;
+            AppearancePrefetchToggle.IsOn = _preferences.PrefetchNextChapter;
+            AppearanceFontSizeText.Text = $"{_preferences.FontSize:0} pt";
+        }
+        finally
         {
-            FontSize = fontSlider.Value,
-            ContentWidthEm = WidthValue(widthBox.SelectedItem as string),
-            Theme = themeBox.SelectedItem as string ?? "system",
-            ParagraphIndent = indent.IsOn,
-            ContinuousReading = continuous.IsOn,
-            PrefetchNextChapter = prefetch.IsOn
-        };
+            _synchronizingAppearance = false;
+        }
+    }
+
+    private void DecreaseFont_Click(object sender, RoutedEventArgs e) => ChangeFontSize(-1);
+
+    private void IncreaseFont_Click(object sender, RoutedEventArgs e) => ChangeFontSize(1);
+
+    private void ChangeFontSize(double amount)
+    {
+        _preferences = (_preferences with { FontSize = _preferences.FontSize + amount }).Normalized();
+        AppearanceFontSizeText.Text = $"{_preferences.FontSize:0} pt";
+        ApplyAppearanceChange();
+    }
+
+    private void AppearanceControl_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_synchronizingAppearance) return;
+        _preferences = (_preferences with
+        {
+            Theme = SelectedTag(AppearanceThemeBox, "system"),
+            FontFamily = SelectedTag(AppearanceFontBox, "serif"),
+            LineSpacing = SpacingValue(SelectedTag(AppearanceLineBox, "comfortable"), 0.28, 0.40, 0.58),
+            ParagraphSpacing = SpacingValue(SelectedTag(AppearanceParagraphBox, "comfortable"), 0.40, 0.60, 0.82),
+            ContentWidthEm = WidthValue(SelectedTag(AppearanceWidthBox, "comfortable")),
+            ParagraphIndent = AppearanceIndentToggle.IsOn,
+            ContinuousReading = AppearanceContinuousToggle.IsOn,
+            PrefetchNextChapter = AppearancePrefetchToggle.IsOn
+        }).Normalized();
+        ApplyAppearanceChange();
+    }
+
+    private void ApplyAppearanceChange()
+    {
         _continuousLoadState.Reset();
-        await _preferencesStore.SaveAsync(_preferences);
         Store.ConfigureNextChapterPrefetch(_preferences.PrefetchNextChapter);
         ApplyPreferences();
         RebuildItems();
+        SchedulePreferencesSave();
+    }
+
+    private void SchedulePreferencesSave()
+    {
+        _preferenceSaveCancellation?.Cancel();
+        _preferenceSaveCancellation?.Dispose();
+        var cancellation = new CancellationTokenSource();
+        _preferenceSaveCancellation = cancellation;
+        _ = SavePreferencesAfterIdleAsync(cancellation);
+    }
+
+    private async Task SavePreferencesAfterIdleAsync(CancellationTokenSource scheduledSave)
+    {
+        try
+        {
+            await Task.Delay(500, scheduledSave.Token);
+            if (ReferenceEquals(_preferenceSaveCancellation, scheduledSave))
+            {
+                _preferenceSaveCancellation = null;
+                await _preferencesStore.SaveAsync(_preferences, scheduledSave.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            scheduledSave.Dispose();
+        }
+    }
+
+    private async Task FlushPreferencesAsync()
+    {
+        var scheduledSave = _preferenceSaveCancellation;
+        _preferenceSaveCancellation = null;
+        scheduledSave?.Cancel();
+        scheduledSave?.Dispose();
+        await _preferencesStore.SaveAsync(_preferences);
     }
 
     private async void More_Click(object sender, RoutedEventArgs e)
@@ -660,6 +759,26 @@ public sealed partial class ReaderPage : Page
         "wide" => 58,
         _ => 48
     };
+
+    private static string SpacingName(double value, double compactThreshold, double looseThreshold) =>
+        value < compactThreshold ? "compact" : value > looseThreshold ? "loose" : "comfortable";
+
+    private static double SpacingValue(string value, double compact, double comfortable, double loose) => value switch
+    {
+        "compact" => compact,
+        "loose" => loose,
+        _ => comfortable
+    };
+
+    private static string SelectedTag(ComboBox comboBox, string fallback) =>
+        (comboBox.SelectedItem as ComboBoxItem)?.Tag as string ?? fallback;
+
+    private static void SelectComboTag(ComboBox comboBox, string tag)
+    {
+        comboBox.SelectedItem = comboBox.Items.OfType<ComboBoxItem>()
+            .FirstOrDefault(item => string.Equals(item.Tag as string, tag, StringComparison.Ordinal))
+            ?? comboBox.Items.OfType<ComboBoxItem>().FirstOrDefault();
+    }
 
     private enum ReaderRebuildPosition
     {

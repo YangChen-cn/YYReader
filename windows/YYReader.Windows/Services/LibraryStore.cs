@@ -231,7 +231,17 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
             return null;
         }
 
-        var target = Neighbor(SelectedBook, SelectedChapter, offset);
+        return await NavigateFromChapterAsync(SelectedChapter, offset, cancellationToken).ConfigureAwait(true);
+    }
+
+    public async Task<Chapter?> NavigateFromChapterAsync(Chapter fromChapter, int offset, CancellationToken cancellationToken = default)
+    {
+        if (offset is not (-1 or 1) || SelectedBook is null)
+        {
+            return null;
+        }
+
+        var target = Neighbor(SelectedBook, fromChapter, offset);
         if (target is null)
         {
             return null;

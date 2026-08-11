@@ -22,7 +22,7 @@ public sealed class ReaderItem(
     public int ParagraphIndex { get; } = paragraphIndex;
     public string ChapterUrl => Chapter.SourceUrl;
     public int ParagraphCount => paragraphs?.Count ?? 0;
-    public string Text => Kind == ReaderItemKind.Header
+    public string Text => Kind is ReaderItemKind.Header or ReaderItemKind.Footer
         ? Chapter.Title
         : paragraphs is not null && ParagraphIndex >= 0 && ParagraphIndex < paragraphs.Count
             ? paragraphs[ParagraphIndex]
