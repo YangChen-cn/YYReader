@@ -17,9 +17,9 @@ enum ReaderLineSpacingPreset: String, CaseIterable, Identifiable {
 
     var value: Double {
         switch self {
-        case .compact: 5
-        case .comfortable: 8
-        case .spacious: 12
+        case .compact: 0.30
+        case .comfortable: 0.40
+        case .spacious: 0.50
         }
     }
 
@@ -45,9 +45,9 @@ enum ReaderContentWidthPreset: String, CaseIterable, Identifiable {
 
     var value: Double {
         switch self {
-        case .narrow: 720
-        case .medium: 1_040
-        case .wide: 1_600
+        case .narrow: 38
+        case .medium: 48
+        case .wide: 58
         }
     }
 

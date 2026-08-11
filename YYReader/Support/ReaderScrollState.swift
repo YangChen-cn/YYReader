@@ -30,9 +30,17 @@ final class ReaderScrollState {
         self.metrics = metrics
     }
 
-    func update(visibleTargets: [ReaderScrollTarget]) {
-        guard self.visibleTargets != visibleTargets else { return }
-        self.visibleTargets = visibleTargets
+    func update(visibleTargets: [ReaderScrollTarget], chapterIndexByID: [UUID: Int] = [:]) {
+        let orderedTargets = visibleTargets.sorted { lhs, rhs in
+            let lhsChapterIndex = chapterIndexByID[lhs.chapterID] ?? 0
+            let rhsChapterIndex = chapterIndexByID[rhs.chapterID] ?? 0
+            if lhsChapterIndex != rhsChapterIndex {
+                return lhsChapterIndex < rhsChapterIndex
+            }
+            return lhs.positionWithinChapter < rhs.positionWithinChapter
+        }
+        guard self.visibleTargets != orderedTargets else { return }
+        self.visibleTargets = orderedTargets
         visibleTargetsRevision += 1
     }
 

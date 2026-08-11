@@ -8,6 +8,7 @@ final class Chapter {
     var title: String
     var sortIndex: Int
     var bodyText: String?
+    @Transient var contentRevision: Int = 0
     var previousURL: String?
     var nextURL: String?
     var cachedAt: Date?
@@ -34,7 +35,7 @@ final class Chapter {
         self.sourceURL = sourceURL
         self.title = title
         self.sortIndex = sortIndex
-        self.bodyText = bodyText
+        self.bodyText = bodyText.map(Self.normalizedBodyText)
         self.previousURL = previousURL
         self.nextURL = nextURL
         self.cachedAt = cachedAt
@@ -48,12 +49,24 @@ final class Chapter {
         guard let bodyText else { return [] }
         return bodyText
             .split(separator: "\n", omittingEmptySubsequences: true)
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+            .map(String.init)
+    }
+
+    func replaceBodyText(_ bodyText: String?) {
+        self.bodyText = bodyText.map(Self.normalizedBodyText)
+        contentRevision &+= 1
     }
 
     var isCached: Bool {
         guard let bodyText else { return false }
         return !bodyText.isEmpty
+    }
+
+    private static func normalizedBodyText(_ bodyText: String) -> String {
+        bodyText
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
     }
 }

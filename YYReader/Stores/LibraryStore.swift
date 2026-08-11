@@ -24,6 +24,8 @@ final class LibraryStore {
     let offlineDownloads: OfflineDownloadManager
     private(set) var books: [Book] = []
     private(set) var sortedChapters: [Chapter] = []
+    private(set) var chapterByID: [UUID: Chapter] = [:]
+    private(set) var chapterIndexByID: [UUID: Int] = [:]
     private(set) var chapterNavigationSnapshot = ReaderChapterNavigationSnapshot.empty
     private(set) var readerScrollRequest: ReaderScrollRequest?
     private(set) var continuousReadingEnabled = false
@@ -51,7 +53,7 @@ final class LibraryStore {
     }
 
     var selectedChapter: Chapter? {
-        selectedBook?.chapters.first { $0.id == selectedChapterID }
+        selectedChapterID.flatMap { chapterByID[$0] }
     }
 
     var canCancelLoading: Bool { importTask != nil || catalogRefreshTask != nil }
@@ -168,7 +170,7 @@ final class LibraryStore {
         guard let book = selectedBook else { return }
         let retainedChapterID = selectedChapterID
         for chapter in book.chapters where chapter.id != retainedChapterID {
-            chapter.bodyText = nil
+            chapter.replaceBodyText(nil)
             chapter.cachedAt = nil
         }
         saveChanges(failureMessage: "删除离线缓存失败")
@@ -196,7 +198,7 @@ final class LibraryStore {
     }
 
     func prefetchContinuousChapter(after chapterID: UUID) {
-        guard let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }),
+        guard let chapter = chapterByID[chapterID],
               let next = neighbor(of: chapter, offset: 1) else {
             return
         }
@@ -207,7 +209,7 @@ final class LibraryStore {
     func prepareContinuousChapterAttachment(after chapterID: UUID) {
         guard continuousReadingEnabled,
               chapterID == selectedChapterID,
-              let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }),
+              let chapter = chapterByID[chapterID],
               let next = neighbor(of: chapter, offset: 1) else {
             return
         }
@@ -219,7 +221,7 @@ final class LibraryStore {
     }
 
     func retryContinuousChapter(after chapterID: UUID) {
-        guard let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }),
+        guard let chapter = chapterByID[chapterID],
               let next = neighbor(of: chapter, offset: 1) else {
             return
         }
@@ -228,7 +230,7 @@ final class LibraryStore {
     }
 
     func continuationStatus(after chapterID: UUID) -> ReaderContinuationStatus {
-        guard let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }),
+        guard let chapter = chapterByID[chapterID],
               let next = neighbor(of: chapter, offset: 1) else {
             return .unavailable
         }
@@ -238,7 +240,7 @@ final class LibraryStore {
     }
 
     func updateVisibleReaderPosition(chapterID: UUID, paragraphIndex: Int, total: Int) {
-        guard let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }) else { return }
+        guard let chapter = chapterByID[chapterID] else { return }
         updateProgress(
             chapterID: chapterID,
             paragraphIndex: paragraphIndex,
@@ -288,11 +290,11 @@ final class LibraryStore {
     }
 
     private func commitCandidateVisibleChapter(_ chapterID: UUID) {
-        guard let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }),
+        guard let chapter = chapterByID[chapterID],
               visibilityGate.accepts(
                 candidateID: chapterID,
                 currentID: selectedChapterID,
-                orderedChapterIDs: sortedChapters.map(\.id)
+                chapterIndexByID: chapterIndexByID
               ) else {
             return
         }
@@ -389,7 +391,7 @@ final class LibraryStore {
         updatesCurrentChapter: Bool
     ) {
         guard paragraphIndex >= 0,
-              let chapter = selectedBook?.chapters.first(where: { $0.id == chapterID }) else { return }
+              let chapter = chapterByID[chapterID] else { return }
         chapter.topParagraphIndex = max(0, paragraphIndex)
         chapter.readingProgress = total > 1
             ? min(max(Double(paragraphIndex) / Double(total - 1), 0), 1)
@@ -550,7 +552,7 @@ final class LibraryStore {
         }
         let chapters = sortedChapters
         guard let selectedChapter,
-              let index = chapters.firstIndex(where: { $0.id == selectedChapter.id }) else { return }
+              let index = chapterIndexByID[selectedChapter.id] else { return }
         let nextIndex = index + fallbackOffset
         guard chapters.indices.contains(nextIndex) else { return }
         selectChapter(chapters[nextIndex].id, scrollIntent: .chapterTop)
@@ -564,7 +566,7 @@ final class LibraryStore {
     }
 
     private func neighbor(of chapter: Chapter, offset: Int) -> Chapter? {
-        guard let index = sortedChapters.firstIndex(where: { $0.id == chapter.id }) else {
+        guard let index = chapterIndexByID[chapter.id] else {
             return nil
         }
         let targetIndex = index + offset
@@ -629,7 +631,7 @@ final class LibraryStore {
             chapter.book = book
         }
         chapter.title = result.chapterTitle
-        chapter.bodyText = result.bodyText
+        chapter.replaceBodyText(result.bodyText)
         chapter.previousURL = result.previousChapterURL?.absoluteString
         chapter.nextURL = result.nextChapterURL?.absoluteString
         chapter.cachedAt = .now
@@ -663,7 +665,7 @@ final class LibraryStore {
 
     private func apply(_ result: ChapterLoadResult, to chapter: Chapter) {
         chapter.title = result.title
-        chapter.bodyText = result.bodyText
+        chapter.replaceBodyText(result.bodyText)
         chapter.previousURL = result.previousChapterURL?.absoluteString
         chapter.nextURL = result.nextChapterURL?.absoluteString
         chapter.cachedAt = .now
@@ -675,8 +677,8 @@ final class LibraryStore {
             updateChapterNavigationSnapshot()
             return
         }
-        let preferred = preferredID.flatMap { id in book.chapters.first { $0.id == id } }
-        let current = book.currentChapterID.flatMap { id in book.chapters.first { $0.id == id } }
+        let preferred = preferredID.flatMap { chapterByID[$0] }
+        let current = book.currentChapterID.flatMap { chapterByID[$0] }
         selectedChapterID = (preferred ?? current ?? sortedChapters.first)?.id
         updateChapterNavigationSnapshot()
     }
@@ -686,6 +688,8 @@ final class LibraryStore {
             if lhs.sortIndex == rhs.sortIndex { return lhs.title < rhs.title }
             return lhs.sortIndex < rhs.sortIndex
         } ?? []
+        chapterByID = Dictionary(uniqueKeysWithValues: sortedChapters.map { ($0.id, $0) })
+        chapterIndexByID = Dictionary(uniqueKeysWithValues: sortedChapters.enumerated().map { ($0.element.id, $0.offset) })
     }
 
     private func prefetchNextContinuousChapterIfNeeded() {
@@ -700,7 +704,7 @@ final class LibraryStore {
               !visibilityGate.hasCommittedInCurrentTransaction,
               let pendingChapterID = pendingContinuousAttachmentChapterID,
               pendingChapterID == selectedChapterID,
-              let pendingChapter = selectedBook?.chapters.first(where: { $0.id == pendingChapterID }),
+              let pendingChapter = chapterByID[pendingChapterID],
               let next = neighbor(of: pendingChapter, offset: 1),
               next.isCached else {
             return
@@ -725,7 +729,7 @@ final class LibraryStore {
             return
         }
 
-        let index = sortedChapters.firstIndex { $0.id == chapter.id }
+        let index = chapterIndexByID[chapter.id]
         chapterNavigationSnapshot = ReaderChapterNavigationSnapshot(
             chapterID: chapter.id,
             index: index,

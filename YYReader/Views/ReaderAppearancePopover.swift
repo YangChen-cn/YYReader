@@ -3,8 +3,8 @@ import SwiftUI
 struct ReaderAppearancePopover: View {
     @AppStorage(ReaderPreferenceKeys.fontFamily) private var fontFamily = ReaderFontFamily.serif.rawValue
     @AppStorage(ReaderPreferenceKeys.fontSize) private var fontSize = 20.0
-    @AppStorage(ReaderPreferenceKeys.lineSpacing) private var lineSpacing = 8.0
-    @AppStorage(ReaderPreferenceKeys.contentWidth) private var contentWidth = ReaderViewportLayout.defaultPreferredWidth
+    @AppStorage(ReaderPreferenceKeys.lineSpacing) private var lineSpacing = ReaderLineSpacingPreset.comfortable.value
+    @AppStorage(ReaderPreferenceKeys.contentWidth) private var contentWidth = ReaderViewportLayout.defaultPreferredWidthEM
     @AppStorage(ReaderPreferenceKeys.theme) private var theme = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.paragraphIndent) private var paragraphIndent = true
     @AppStorage(ReaderPreferenceKeys.continuousReading) private var continuousReading = false
@@ -59,13 +59,29 @@ struct ReaderAppearancePopover: View {
             }
 
             preferenceSection("正文宽度", systemImage: "rectangle.compress.vertical") {
-                Picker("正文宽度", selection: contentWidthPreset) {
-                    ForEach(ReaderContentWidthPreset.allCases) { preset in
-                        Text(preset.title).tag(preset)
+                HStack(spacing: 10) {
+                    Picker("正文宽度", selection: contentWidthPreset) {
+                        ForEach(ReaderContentWidthPreset.allCases) { preset in
+                            Text(preset.title).tag(preset)
+                        }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 150)
+
+                    Slider(
+                        value: $contentWidth,
+                        in: ReaderViewportLayout.minimumPreferredWidthEM...ReaderViewportLayout.maximumPreferredWidthEM,
+                        step: 1
+                    )
+                    .accessibilityLabel("自定义正文宽度")
+                    .accessibilityValue("\(Int(contentWidth)) em")
+
+                    Text("\(Int(contentWidth)) em")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(width: 46, alignment: .trailing)
                 }
-                .labelsHidden()
-                .pickerStyle(.segmented)
             }
 
             Toggle("段首缩进 2 字符", isOn: $paragraphIndent)
@@ -77,7 +93,7 @@ struct ReaderAppearancePopover: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(16)
-        .frame(width: 320)
+        .frame(width: 400)
     }
 
     private var lineSpacingPreset: Binding<ReaderLineSpacingPreset> {

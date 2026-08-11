@@ -3,9 +3,9 @@ import SwiftUI
 struct AppearanceInspectorView: View {
     @AppStorage(ReaderPreferenceKeys.fontFamily) private var fontFamily = ReaderFontFamily.serif.rawValue
     @AppStorage(ReaderPreferenceKeys.fontSize) private var fontSize = 20.0
-    @AppStorage(ReaderPreferenceKeys.lineSpacing) private var lineSpacing = 8.0
-    @AppStorage(ReaderPreferenceKeys.paragraphSpacing) private var paragraphSpacing = 12.0
-    @AppStorage(ReaderPreferenceKeys.contentWidth) private var contentWidth = ReaderViewportLayout.defaultPreferredWidth
+    @AppStorage(ReaderPreferenceKeys.lineSpacing) private var lineSpacing = ReaderLineSpacingPreset.comfortable.value
+    @AppStorage(ReaderPreferenceKeys.paragraphSpacing) private var paragraphSpacing = 0.60
+    @AppStorage(ReaderPreferenceKeys.contentWidth) private var contentWidth = ReaderViewportLayout.defaultPreferredWidthEM
     @AppStorage(ReaderPreferenceKeys.theme) private var theme = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.paragraphIndent) private var paragraphIndent = true
 
@@ -34,28 +34,28 @@ struct AppearanceInspectorView: View {
                 Slider(value: $fontSize, in: 14...36, step: 1)
 
                 LabeledContent("行距") {
-                    Text("\(Int(lineSpacing)) 点")
+                    Text(lineSpacing, format: .number.precision(.fractionLength(2)))
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
-                Slider(value: $lineSpacing, in: 2...20, step: 1)
+                Slider(value: $lineSpacing, in: 0.20...0.65, step: 0.05)
 
                 LabeledContent("段距") {
-                    Text("\(Int(paragraphSpacing)) 点")
+                    Text(paragraphSpacing, format: .number.precision(.fractionLength(2)))
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
-                Slider(value: $paragraphSpacing, in: 8...36, step: 1)
+                Slider(value: $paragraphSpacing, in: 0.35...0.90, step: 0.05)
 
                 LabeledContent("正文宽度") {
-                    Text("\(Int(contentWidth)) 点")
+                    Text("\(Int(contentWidth)) em")
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
                 Slider(
                     value: $contentWidth,
-                    in: ReaderViewportLayout.minimumPreferredWidth...ReaderViewportLayout.maximumPreferredWidth,
-                    step: 20
+                    in: ReaderViewportLayout.minimumPreferredWidthEM...ReaderViewportLayout.maximumPreferredWidthEM,
+                    step: 1
                 )
 
                 Toggle("段首缩进 2 字符", isOn: $paragraphIndent)

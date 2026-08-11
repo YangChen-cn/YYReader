@@ -1,10 +1,11 @@
 import Foundation
 
 enum ReaderPreferenceMigration {
-    static let currentVersion = 3
+    static let currentVersion = 4
 
     static func migrateIfNeeded(defaults: UserDefaults = .standard) {
-        guard defaults.integer(forKey: ReaderPreferenceKeys.preferenceVersion) < currentVersion else {
+        let storedVersion = defaults.integer(forKey: ReaderPreferenceKeys.preferenceVersion)
+        guard storedVersion < currentVersion else {
             return
         }
 
@@ -12,36 +13,44 @@ enum ReaderPreferenceMigration {
             defaults.set(ReaderTheme.rose.rawValue, forKey: ReaderPreferenceKeys.theme)
         }
 
-        migrateKnownDefault(
-            key: ReaderPreferenceKeys.contentWidth,
-            knownDefaults: [680, 720, 880],
-            recommendedValue: ReaderViewportLayout.defaultPreferredWidth,
-            validRange: ReaderViewportLayout.minimumPreferredWidth...ReaderViewportLayout.maximumPreferredWidth,
-            defaults: defaults
-        )
-        migrateKnownDefault(
-            key: ReaderPreferenceKeys.lineSpacing,
-            knownDefaults: [9],
-            recommendedValue: ReaderLineSpacingPreset.comfortable.value,
-            validRange: 2...20,
-            defaults: defaults
-        )
-        migrateKnownDefault(
-            key: ReaderPreferenceKeys.paragraphSpacing,
-            knownDefaults: [18],
-            recommendedValue: 12,
-            validRange: 8...36,
-            defaults: defaults
-        )
+        if storedVersion < 4 {
+            let storedFontSize = defaults.double(forKey: ReaderPreferenceKeys.fontSize)
+            let fontSize = storedFontSize > 0 ? storedFontSize : 20
+            migratePointValueToEM(
+                key: ReaderPreferenceKeys.contentWidth,
+                knownDefaults: [680, 720, 880, 1_040, 1_600],
+                recommendedValue: ReaderViewportLayout.defaultPreferredWidthEM,
+                validRange: ReaderViewportLayout.minimumPreferredWidthEM...ReaderViewportLayout.maximumPreferredWidthEM,
+                fontSize: fontSize,
+                defaults: defaults
+            )
+            migratePointValueToEM(
+                key: ReaderPreferenceKeys.lineSpacing,
+                knownDefaults: [8, 9],
+                recommendedValue: ReaderLineSpacingPreset.comfortable.value,
+                validRange: 0.20...0.65,
+                fontSize: fontSize,
+                defaults: defaults
+            )
+            migratePointValueToEM(
+                key: ReaderPreferenceKeys.paragraphSpacing,
+                knownDefaults: [12, 18],
+                recommendedValue: 0.60,
+                validRange: 0.35...0.90,
+                fontSize: fontSize,
+                defaults: defaults
+            )
+        }
 
         defaults.set(currentVersion, forKey: ReaderPreferenceKeys.preferenceVersion)
     }
 
-    private static func migrateKnownDefault(
+    private static func migratePointValueToEM(
         key: String,
         knownDefaults: Set<Double>,
         recommendedValue: Double,
         validRange: ClosedRange<Double>,
+        fontSize: Double,
         defaults: UserDefaults
     ) {
         guard let storedValue = defaults.object(forKey: key) as? NSNumber else {
@@ -49,11 +58,8 @@ enum ReaderPreferenceMigration {
             return
         }
 
-        let value = storedValue.doubleValue
-        if knownDefaults.contains(value) {
-            defaults.set(recommendedValue, forKey: key)
-        } else {
-            defaults.set(min(max(value, validRange.lowerBound), validRange.upperBound), forKey: key)
-        }
+        let pointValue = storedValue.doubleValue
+        let value = knownDefaults.contains(pointValue) ? recommendedValue : pointValue / fontSize
+        defaults.set(min(max(value, validRange.lowerBound), validRange.upperBound), forKey: key)
     }
 }

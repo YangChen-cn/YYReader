@@ -5,15 +5,24 @@ struct ReaderContinuationBoundary: View {
     let accent: Color
     let secondaryForeground: Color
     let tertiaryForeground: Color
+    let separator: Color
+    let usesOrnament: Bool
     let prepareAttachment: () -> Void
     let retry: () -> Void
 
     var body: some View {
         ZStack {
-            Text("· · ·")
-                .font(.caption)
-                .foregroundStyle(tertiaryForeground)
-                .accessibilityHidden(true)
+            if usesOrnament {
+                Text("· · ·")
+                    .font(.caption)
+                    .foregroundStyle(tertiaryForeground)
+                    .accessibilityHidden(true)
+            } else {
+                Capsule()
+                    .fill(separator)
+                    .frame(width: 36, height: 1)
+                    .accessibilityHidden(true)
+            }
 
             switch status {
             case .idle, .loading:
@@ -31,7 +40,7 @@ struct ReaderContinuationBoundary: View {
             }
         }
         .font(.callout)
-        .frame(height: 72)
+        .frame(height: 36)
         .frame(maxWidth: .infinity)
         .onAppear(perform: prepareIfNeeded)
         .onChange(of: status) { _, _ in prepareIfNeeded() }

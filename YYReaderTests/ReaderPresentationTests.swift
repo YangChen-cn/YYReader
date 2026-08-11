@@ -28,27 +28,41 @@ struct ReaderPresentationTests {
 
     @Test
     func readerPresetsUseBoundedNovelReadingValues() {
-        #expect(ReaderLineSpacingPreset.compact.value == 5)
-        #expect(ReaderLineSpacingPreset.comfortable.value == 8)
-        #expect(ReaderLineSpacingPreset.spacious.value == 12)
-        #expect(ReaderLineSpacingPreset.closest(to: 9) == .comfortable)
+        #expect(ReaderLineSpacingPreset.compact.value == 0.30)
+        #expect(ReaderLineSpacingPreset.comfortable.value == 0.40)
+        #expect(ReaderLineSpacingPreset.spacious.value == 0.50)
+        #expect(ReaderLineSpacingPreset.closest(to: 0.42) == .comfortable)
 
-        #expect(ReaderContentWidthPreset.narrow.value == 720)
-        #expect(ReaderContentWidthPreset.medium.value == 1_040)
-        #expect(ReaderContentWidthPreset.wide.value == 1_600)
-        #expect(ReaderContentWidthPreset.closest(to: 940) == .medium)
+        #expect(ReaderContentWidthPreset.narrow.value == 38)
+        #expect(ReaderContentWidthPreset.medium.value == 48)
+        #expect(ReaderContentWidthPreset.wide.value == 58)
+        #expect(ReaderContentWidthPreset.closest(to: 50) == .medium)
     }
 
     @Test
     func readerWidthUsesViewportWithoutGrowingPastPreference() {
+        #expect(ReaderViewportLayout.minimumPreferredWidthEM == 20)
+        #expect(ReaderViewportLayout.maximumPreferredWidthEM == 80)
         #expect(
-            ReaderViewportLayout.effectiveContentWidth(preferredWidth: 1_040, viewportWidth: 1_500) == 1_040
+            ReaderViewportLayout.effectiveContentWidth(
+                preferredWidthEM: 38,
+                fontSize: 20,
+                viewportWidth: 1_500
+            ) == 760
         )
         #expect(
-            ReaderViewportLayout.effectiveContentWidth(preferredWidth: 1_040, viewportWidth: 800) == 720
+            ReaderViewportLayout.effectiveContentWidth(
+                preferredWidthEM: 38,
+                fontSize: 28,
+                viewportWidth: 800
+            ) == 720
         )
         #expect(
-            ReaderViewportLayout.effectiveContentWidth(preferredWidth: 2_000, viewportWidth: 2_000) == 1_800
+            ReaderViewportLayout.effectiveContentWidth(
+                preferredWidthEM: 80,
+                fontSize: 36,
+                viewportWidth: 2_000
+            ) == 1_896
         )
     }
 
@@ -64,9 +78,9 @@ struct ReaderPresentationTests {
 
         ReaderPreferenceMigration.migrateIfNeeded(defaults: defaults)
 
-        #expect(defaults.double(forKey: ReaderPreferenceKeys.contentWidth) == 1_040)
-        #expect(defaults.double(forKey: ReaderPreferenceKeys.lineSpacing) == 8)
-        #expect(defaults.double(forKey: ReaderPreferenceKeys.paragraphSpacing) == 12)
+        #expect(defaults.double(forKey: ReaderPreferenceKeys.contentWidth) == 48)
+        #expect(defaults.double(forKey: ReaderPreferenceKeys.lineSpacing) == 0.40)
+        #expect(defaults.double(forKey: ReaderPreferenceKeys.paragraphSpacing) == 0.60)
 
         defaults.set(940.0, forKey: ReaderPreferenceKeys.contentWidth)
         ReaderPreferenceMigration.migrateIfNeeded(defaults: defaults)
@@ -97,9 +111,9 @@ struct ReaderPresentationTests {
         defaults.set(50.0, forKey: ReaderPreferenceKeys.paragraphSpacing)
         ReaderPreferenceMigration.migrateIfNeeded(defaults: defaults)
 
-        #expect(defaults.double(forKey: ReaderPreferenceKeys.contentWidth) == 940)
-        #expect(defaults.double(forKey: ReaderPreferenceKeys.lineSpacing) == 7)
-        #expect(defaults.double(forKey: ReaderPreferenceKeys.paragraphSpacing) == 36)
+        #expect(defaults.double(forKey: ReaderPreferenceKeys.contentWidth) == 47)
+        #expect(defaults.double(forKey: ReaderPreferenceKeys.lineSpacing) == 0.35)
+        #expect(defaults.double(forKey: ReaderPreferenceKeys.paragraphSpacing) == 0.90)
         #expect(ReaderTheme.dark.preferredColorScheme == .dark)
         #expect(ReaderTheme.sepia.preferredColorScheme == .light)
         #expect(ReaderTheme.system.preferredColorScheme == nil)
@@ -237,6 +251,37 @@ struct ReaderPresentationTests {
     }
 
     @Test @MainActor
+    func visibleTargetsAreExplicitlyOrderedByChapterAndParagraph() {
+        let firstChapterID = UUID()
+        let secondChapterID = UUID()
+        let state = ReaderScrollState()
+
+        state.update(
+            visibleTargets: [
+                .paragraph(chapterID: secondChapterID, index: 0),
+                .paragraph(chapterID: firstChapterID, index: 8),
+                .paragraph(chapterID: firstChapterID, index: 3)
+            ],
+            chapterIndexByID: [firstChapterID: 10, secondChapterID: 11]
+        )
+
+        #expect(state.topVisibleTarget == .paragraph(chapterID: firstChapterID, index: 3))
+    }
+
+    @Test
+    func restoredScrollTargetUsesSavedParagraphAndClampsToContent() {
+        let chapterID = UUID()
+        #expect(
+            ReaderScrollTarget.restoredParagraph(chapterID: chapterID, savedIndex: 12, paragraphCount: 40)
+                == .paragraph(chapterID: chapterID, index: 12)
+        )
+        #expect(
+            ReaderScrollTarget.restoredParagraph(chapterID: chapterID, savedIndex: 99, paragraphCount: 40)
+                == .paragraph(chapterID: chapterID, index: 39)
+        )
+    }
+
+    @Test @MainActor
     func repeatedKeyboardCommandsCommitOnlyTheLatestVisibleRevisionAfterDebounce() async throws {
         let chapterID = UUID()
         let state = ReaderScrollState()
@@ -313,6 +358,7 @@ struct ReaderPresentationTests {
             coordinator: NovelImportCoordinator(loader: MockHTMLLoader(documents: [:]))
         )
         store.restoreSelection(bookID: book.id, chapterID: chapter.id)
+        #expect(store.readerScrollRequest?.intent == .restore)
         let state = ReaderScrollState()
 
         state.update(phase: .interacting)
@@ -362,7 +408,7 @@ struct ReaderPresentationTests {
     }
 
     @Test @MainActor
-    func continuousReaderEntriesDeriveParagraphsWithoutKeepingSnapshots() {
+    func continuousReaderParagraphCacheInvalidatesUpdatedContent() {
         let book = Book(
             title: "长时间连续阅读",
             author: "测试作者",
@@ -381,8 +427,28 @@ struct ReaderPresentationTests {
         session.reset(around: chapter)
         #expect(session.entries.first?.paragraphs == ["第一段", "第二段"])
 
-        chapter.bodyText = "更新后的第一段\n\n更新后的第二段"
+        chapter.replaceBodyText("更新后的第一段\n\n更新后的第二段")
         #expect(session.entries.first?.paragraphs == ["更新后的第一段", "更新后的第二段"])
+    }
+
+    @Test @MainActor
+    func continuousReaderParagraphCacheEvictsLeastRecentlyUsedChapters() {
+        let session = ContinuousReaderSession(paragraphCacheCapacity: 5)
+        let chapters = (0..<8).map { index in
+            Chapter(
+                sourceURL: "https://example.com/cache/\(index)",
+                title: "第\(index)章",
+                sortIndex: index,
+                bodyText: "正文 \(index)",
+                cachedAt: .now
+            )
+        }
+
+        for chapter in chapters {
+            _ = session.paragraphs(for: chapter)
+        }
+
+        #expect(session.cachedParagraphChapterCount == 5)
     }
 
     @Test
@@ -425,12 +491,13 @@ struct ReaderPresentationTests {
         var gate = ContinuousReaderVisibilityGate()
 
         gate.beginTransaction()
-        #expect(gate.accepts(candidateID: chapters[1], currentID: chapters[0], orderedChapterIDs: chapters))
+        let indexes = Dictionary(uniqueKeysWithValues: chapters.enumerated().map { ($0.element, $0.offset) })
+        #expect(gate.accepts(candidateID: chapters[1], currentID: chapters[0], chapterIndexByID: indexes))
         gate.recordCommit()
-        #expect(!gate.accepts(candidateID: chapters[2], currentID: chapters[1], orderedChapterIDs: chapters))
+        #expect(!gate.accepts(candidateID: chapters[2], currentID: chapters[1], chapterIndexByID: indexes))
 
         gate.beginTransaction()
-        #expect(gate.accepts(candidateID: chapters[2], currentID: chapters[1], orderedChapterIDs: chapters))
+        #expect(gate.accepts(candidateID: chapters[2], currentID: chapters[1], chapterIndexByID: indexes))
     }
 
     private func contrastRatio(_ first: NSColor, _ second: NSColor) -> Double {

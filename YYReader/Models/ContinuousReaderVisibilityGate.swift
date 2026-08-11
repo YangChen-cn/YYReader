@@ -10,13 +10,13 @@ struct ContinuousReaderVisibilityGate {
     func accepts(
         candidateID: UUID,
         currentID: UUID?,
-        orderedChapterIDs: [UUID]
+        chapterIndexByID: [UUID: Int]
     ) -> Bool {
         guard !hasCommittedInCurrentTransaction,
               let currentID,
               candidateID != currentID,
-              let currentIndex = orderedChapterIDs.firstIndex(of: currentID),
-              let candidateIndex = orderedChapterIDs.firstIndex(of: candidateID) else {
+              let currentIndex = chapterIndexByID[currentID],
+              let candidateIndex = chapterIndexByID[candidateID] else {
             return false
         }
         return abs(candidateIndex - currentIndex) == 1

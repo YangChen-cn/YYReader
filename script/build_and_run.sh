@@ -55,6 +55,10 @@ sign_portable_bundle "$APP_BUNDLE" "$ENTITLEMENTS"
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
 verify_portable_bundle "$APP_BUNDLE" "$ROOT_DIR"
 
+# The dist copy is the only deliverable; drop the DerivedData product so
+# builds do not leave intermediate .app bundles behind.
+/bin/rm -rf "$SOURCE_APP"
+
 open_app() {
   rm -rf "$RUN_BUNDLE"
   mkdir -p "$RUN_STAGING_DIR"

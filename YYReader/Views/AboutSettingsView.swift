@@ -83,18 +83,38 @@ struct AboutSettingsView: View {
             Text("更新日志")
                 .font(.headline)
 
-            Text("自 1.1.0 以来的改进")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 10) {
-                Label("修复方向键滚动只能前进一次的问题，按住可连续滚动。", systemImage: "arrow.up.arrow.down")
-                Label("新增 ←/→ 整页滚动与 ↑/↓ 小幅滚动，页面间保留重叠便于衔接。", systemImage: "arrow.right")
-                Label("全新阅读主题：每主题专属强调色，章首与章尾装饰点缀。", systemImage: "paintpalette")
-                Label("外观面板与主题选择器焕新：迷你页面样张与分组图标。", systemImage: "textformat.size")
+            GroupBox("性能与稳定性") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("正文段落采用 8 章 LRU 缓存，减少主题和窗口变化时的重复拆分，并自动释放远离章节。", systemImage: "memorychip")
+                    Label("大目录建立章节与位置索引，章节切换、进度更新和邻章查询由线性扫描降为常数时间。", systemImage: "list.number")
+                    Label("连续阅读窗口、预取与章节挂接更加稳定，避免长时间阅读时正文跳动或缓存持续增长。", systemImage: "speedometer")
+                    Label("目录切换优先读取本地缓存，不再因缓存时间自动刷新大目录。", systemImage: "externaldrive")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .font(.callout)
+
+            GroupBox("Bug 修复") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("修复“继续阅读”回到章首的问题，现在会恢复到已保存的顶部段落。", systemImage: "bookmark")
+                    Label("修复方向键滚动只能前进一次的问题，支持按住连续滚动及稳定的进度保存。", systemImage: "arrow.up.arrow.down")
+                    Label("修复连续章节切换、预取挂接和可见章节判断导致的跳章、闪动与进度错位。", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
+                    Label("修复选择目录或书籍时意外重置当前阅读章节的问题。", systemImage: "books.vertical")
+                    Label("改进通用网页导入与渲染 DOM 回退，提升无目录正文页及复杂站点的兼容性。", systemImage: "safari")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            GroupBox("阅读体验") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("新增连续阅读、离线缓存和下一章机会性预取。", systemImage: "arrow.down.to.line.compact")
+                    Label("新增 ←/→ 整页滚动与 ↑/↓ 小幅滚动，翻页保留重叠便于衔接。", systemImage: "arrow.left.and.right")
+                    Label("正文宽度、行距与段距改为随字号缩放，并支持更宽范围的自定义滑块。", systemImage: "textformat.size")
+                    Label("扩充阅读主题，并为连续章节提供更紧凑、与主题一致的视觉边界。", systemImage: "paintpalette")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
+        .font(.callout)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 

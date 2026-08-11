@@ -6,15 +6,19 @@ import Observation
 final class ContinuousReaderSession {
     struct Entry: Identifiable {
         let chapter: Chapter
+        fileprivate let paragraphCache: ChapterParagraphCache
 
         var id: UUID { chapter.id }
-        // Keep the rendered identity stable without retaining another paragraph array
-        // for every chapter visited during a long continuous-reading session.
-        var paragraphs: [String] { chapter.paragraphs }
+        @MainActor var paragraphs: [String] { paragraphCache.paragraphs(for: chapter) }
     }
 
+    private let paragraphCache: ChapterParagraphCache
     private(set) var entries: [Entry] = []
     private(set) var visibleChapterID: UUID?
+
+    init(paragraphCacheCapacity: Int = 8) {
+        paragraphCache = ChapterParagraphCache(capacity: paragraphCacheCapacity)
+    }
 
     func reset(around chapter: Chapter?) {
         guard let chapter, chapter.isCached else {
@@ -23,7 +27,7 @@ final class ContinuousReaderSession {
             return
         }
 
-        entries = [Entry(chapter: chapter)]
+        entries = [Entry(chapter: chapter, paragraphCache: paragraphCache)]
         visibleChapterID = chapter.id
     }
 
@@ -36,7 +40,13 @@ final class ContinuousReaderSession {
               !entries.contains(where: { $0.chapter.id == chapter.id }) else {
             return
         }
-        entries.append(Entry(chapter: chapter))
+        entries.append(Entry(chapter: chapter, paragraphCache: paragraphCache))
     }
+
+    func paragraphs(for chapter: Chapter) -> [String] {
+        paragraphCache.paragraphs(for: chapter)
+    }
+
+    var cachedParagraphChapterCount: Int { paragraphCache.count }
 
 }

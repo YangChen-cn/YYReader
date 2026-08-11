@@ -77,7 +77,7 @@ final class OfflineDownloadManager {
             do {
                 let result = try await coordinator.loadChapterContent(from: url)
                 chapter.title = result.title
-                chapter.bodyText = result.bodyText
+                chapter.replaceBodyText(result.bodyText)
                 chapter.previousURL = result.previousChapterURL?.absoluteString
                 chapter.nextURL = result.nextChapterURL?.absoluteString
                 chapter.cachedAt = .now

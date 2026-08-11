@@ -105,4 +105,9 @@ for ARCHITECTURE in "${ARCHITECTURES[@]}"; do
   MOUNT_DIR=""
 
   echo "Disk image ($ARCHITECTURE): $OUTPUT_DMG"
+
+  # Release builds always `clean build`, so the DerivedData has no reuse
+  # value. Remove the per-architecture products after the DMG is verified to
+  # avoid leaving build intermediates behind.
+  /bin/rm -rf "$DERIVED_DATA"
 done

@@ -61,6 +61,10 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
         preferredColorScheme != .dark
     }
 
+    var usesBookishChapterOrnament: Bool {
+        self == .rose || self == .sepia
+    }
+
     private var palette: (
         background: Color,
         accent: Color,
