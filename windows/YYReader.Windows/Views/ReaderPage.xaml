@@ -44,7 +44,7 @@
     </Page.Resources>
 
     <Grid x:Name="ReaderRoot" RowDefinitions="Auto,*,Auto" SizeChanged="ReaderRoot_SizeChanged">
-        <Grid Grid.Row="0" Padding="12,8" ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8">
+        <Grid Grid.Row="0" Padding="12,8" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
             <Button Click="Back_Click" Width="40" Height="36" ToolTipService.ToolTip="返回书架">
                 <FontIcon Glyph="&#xE72B;" FontSize="15" />
             </Button>
@@ -58,14 +58,13 @@
                       PlaceholderText="目录"
                       DisplayMemberPath="Title"
                       SelectionChanged="ChapterPicker_SelectionChanged" />
-            <Button Grid.Column="3" Content="Aa" Click="Appearance_Click" Height="36" ToolTipService.ToolTip="阅读设置" />
-            <Button Grid.Column="4" Width="40" Height="36" ToolTipService.ToolTip="更多">
+            <Button Grid.Column="3" Content="上一章" Click="PreviousChapter_Click" Height="36" />
+            <Button Grid.Column="4" Content="下一章" Click="NextChapter_Click" Height="36" />
+            <Button Grid.Column="5" Content="Aa" Click="Appearance_Click" Height="36" ToolTipService.ToolTip="阅读设置" />
+            <Button Grid.Column="6" Width="40" Height="36" ToolTipService.ToolTip="更多">
                 <FontIcon Glyph="&#xE712;" FontSize="16" />
                 <Button.Flyout>
                     <MenuFlyout>
-                        <MenuFlyoutItem Text="上一章" Click="PreviousChapter_Click" />
-                        <MenuFlyoutItem Text="下一章" Click="NextChapter_Click" />
-                        <MenuFlyoutSeparator />
                         <MenuFlyoutItem Text="关于原生阅读" Click="More_Click" />
                     </MenuFlyout>
                 </Button.Flyout>

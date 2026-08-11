@@ -194,6 +194,10 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         {
             await LoadChapterIntoMemoryAsync(next, cancellationToken).ConfigureAwait(true);
         }
+        if (!next.IsCached)
+        {
+            return null;
+        }
         ReaderSession.AttachNext(next);
         return next;
     }
@@ -240,8 +244,15 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
 
     public async Task FlushPendingProgressAsync(CancellationToken cancellationToken = default)
     {
-        _progressSaveCancellation?.Cancel();
+        var scheduledSave = _progressSaveCancellation;
         _progressSaveCancellation = null;
+        scheduledSave?.Cancel();
+        scheduledSave?.Dispose();
+        await CommitPendingProgressAsync(cancellationToken).ConfigureAwait(true);
+    }
+
+    private async Task CommitPendingProgressAsync(CancellationToken cancellationToken)
+    {
         if (_pendingProgress is not { } pending)
         {
             return;
@@ -401,21 +412,32 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
     private void ScheduleProgressSave()
     {
         _progressSaveCancellation?.Cancel();
+        _progressSaveCancellation?.Dispose();
         var cancellation = new CancellationTokenSource();
         _progressSaveCancellation = cancellation;
-        _ = SaveProgressAfterIdleAsync(cancellation.Token);
+        _ = SaveProgressAfterIdleAsync(cancellation);
     }
 
-    private async Task SaveProgressAfterIdleAsync(CancellationToken cancellationToken)
+    private async Task SaveProgressAfterIdleAsync(CancellationTokenSource scheduledSave)
     {
         try
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(600), cancellationToken).ConfigureAwait(true);
-            await FlushPendingProgressAsync(cancellationToken).ConfigureAwait(true);
+            await Task.Delay(TimeSpan.FromMilliseconds(600), scheduledSave.Token).ConfigureAwait(true);
+            if (!ReferenceEquals(_progressSaveCancellation, scheduledSave))
+            {
+                return;
+            }
+
+            _progressSaveCancellation = null;
+            await CommitPendingProgressAsync(scheduledSave.Token).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
             // A new scroll sample or explicit flush superseded this write.
+        }
+        finally
+        {
+            scheduledSave.Dispose();
         }
     }
 

@@ -25,7 +25,9 @@ public sealed partial class ReaderPage : Page
     private ReaderThemePalette _palette = ReaderThemePalette.FromName("system");
     private bool _initialized;
     private bool _changingChapter;
+    private bool _synchronizingChapterPicker;
     private bool _loadingNext;
+    private string? _continuousLoadAttemptedAfterChapterUrl;
 
     public ReaderPage(LibraryStore store, Book book, Window window)
     {
@@ -62,6 +64,7 @@ public sealed partial class ReaderPage : Page
     private async void ReaderPage_Unloaded(object sender, RoutedEventArgs e)
     {
         _progressTimer.Stop();
+        CommitVisiblePosition();
         await Store.FlushPendingProgressAsync();
     }
 
@@ -163,6 +166,13 @@ public sealed partial class ReaderPage : Page
         CommitVisiblePosition();
         if (_preferences.ContinuousReading && !_loadingNext && IsNearEndOfLoadedEntries())
         {
+            var lastLoadedUrl = Store.ReaderSession.Entries.LastOrDefault()?.Chapter.SourceUrl;
+            if (lastLoadedUrl is null || _continuousLoadAttemptedAfterChapterUrl == lastLoadedUrl)
+            {
+                return;
+            }
+
+            _continuousLoadAttemptedAfterChapterUrl = lastLoadedUrl;
             _loadingNext = true;
             try
             {
@@ -190,7 +200,15 @@ public sealed partial class ReaderPage : Page
         ToolbarChapterTitle.Text = Store.SelectedChapter?.Title ?? "";
         if (ChapterPicker.SelectedItem != Store.SelectedChapter)
         {
-            ChapterPicker.SelectedItem = Store.SelectedChapter;
+            _synchronizingChapterPicker = true;
+            try
+            {
+                ChapterPicker.SelectedItem = Store.SelectedChapter;
+            }
+            finally
+            {
+                _synchronizingChapterPicker = false;
+            }
         }
     }
 
@@ -236,17 +254,40 @@ public sealed partial class ReaderPage : Page
             chapter.ParagraphIndex,
             chapter.Progress,
             chapter.Paragraphs.Count);
+        var itemIndex = -1;
+        for (var index = 0; index < Items.Count; index++)
+        {
+            if (Items[index] is { IsParagraph: true } item
+                && item.ChapterUrl == chapter.SourceUrl
+                && item.ParagraphIndex == restoredIndex)
+            {
+                itemIndex = index;
+                break;
+            }
+        }
+
+        if (itemIndex >= 0)
+        {
+            var element = ReaderRepeater.GetOrCreateElement(itemIndex);
+            element.StartBringIntoView(new BringIntoViewOptions
+            {
+                AnimationDesired = false,
+                VerticalAlignmentRatio = 0
+            });
+            return;
+        }
+
         var progress = ReaderPosition.ProgressForParagraph(restoredIndex, chapter.Paragraphs.Count);
-        DispatcherQueue.TryEnqueue(() =>
-            ReaderScrollViewer.ChangeView(null, ReaderScrollViewer.ScrollableHeight * progress, null, true));
+        ReaderScrollViewer.ChangeView(null, ReaderScrollViewer.ScrollableHeight * progress, null, true);
     }
 
     private async void ChapterPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!_initialized || _changingChapter || ChapterPicker.SelectedItem is not Chapter chapter) return;
+        if (!_initialized || _changingChapter || _synchronizingChapterPicker || ChapterPicker.SelectedItem is not Chapter chapter) return;
         _changingChapter = true;
         try
         {
+            _continuousLoadAttemptedAfterChapterUrl = null;
             await Store.SelectChapterAsync(chapter);
             RebuildItems(ReaderRebuildPosition.ChapterTop);
         }
@@ -261,6 +302,7 @@ public sealed partial class ReaderPage : Page
         _changingChapter = true;
         try
         {
+            _continuousLoadAttemptedAfterChapterUrl = null;
             var chapter = await Store.NavigateChapterAsync(offset);
             if (chapter is null) return;
             RefreshChapterPicker();
@@ -278,8 +320,16 @@ public sealed partial class ReaderPage : Page
 
     private void RefreshChapterPicker()
     {
-        ChapterPicker.ItemsSource = Store.SelectedBook?.Chapters.OrderBy(chapter => chapter.SortIndex).ToArray();
-        ChapterPicker.SelectedItem = Store.SelectedChapter;
+        _synchronizingChapterPicker = true;
+        try
+        {
+            ChapterPicker.ItemsSource = Store.SelectedBook?.Chapters.OrderBy(chapter => chapter.SortIndex).ToArray();
+            ChapterPicker.SelectedItem = Store.SelectedChapter;
+        }
+        finally
+        {
+            _synchronizingChapterPicker = false;
+        }
         ToolbarChapterTitle.Text = Store.SelectedChapter?.Title ?? "";
     }
 
@@ -354,6 +404,7 @@ public sealed partial class ReaderPage : Page
             ContinuousReading = continuous.IsOn,
             PrefetchNextChapter = prefetch.IsOn
         };
+        _continuousLoadAttemptedAfterChapterUrl = null;
         await _preferencesStore.SaveAsync(_preferences);
         Store.ConfigureNextChapterPrefetch(_preferences.PrefetchNextChapter);
         ApplyPreferences();

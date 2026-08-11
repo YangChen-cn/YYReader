@@ -14,6 +14,7 @@ public sealed partial class MainWindow : Window
     private readonly LibraryStore _store;
     private readonly LibraryPage _libraryPage;
     private TaskCompletionSource<bool>? _verificationCompletion;
+    private bool _closeReady;
 
     public MainWindow()
     {
@@ -35,7 +36,7 @@ public sealed partial class MainWindow : Window
         _libraryPage = new LibraryPage(_store, this);
         _libraryPage.OpenBookRequested += OpenBookRequested;
         ContentFrame.Content = _libraryPage;
-        Closed += MainWindow_Closed;
+        AppWindow.Closing += MainWindow_Closing;
         _ = InitializeStoreAsync();
     }
 
@@ -77,8 +78,26 @@ public sealed partial class MainWindow : Window
         _verificationCompletion = null;
     }
 
-    private async void MainWindow_Closed(object sender, WindowEventArgs args)
+    private async void MainWindow_Closing(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
     {
-        await _store.DisposeAsync();
+        if (_closeReady)
+        {
+            return;
+        }
+
+        args.Cancel = true;
+        try
+        {
+            await _store.DisposeAsync();
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Debug.WriteLine($"Final reader progress save failed: {exception.Message}");
+        }
+        finally
+        {
+            _closeReady = true;
+            Close();
+        }
     }
 }
