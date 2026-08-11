@@ -12,11 +12,11 @@ YYReader 是一款以正文为中心的原生 macOS 小说阅读器。粘贴小�
 - 为 `qidiy.com` 提供专用解析；其他小说网站使用通用解析器。
 - 遇到 Cloudflare 或 JavaScript 验证时，复用每个网站的持久 WebKit 会话。
 
-## 安装 v1.1.0
+## 安装 v1.1.2
 
-YYReader 1.1.0 支持 Apple 芯片 Mac，要求 macOS 15 或更高版本。
+YYReader 1.1.2 支持 Apple 芯片 Mac，要求 macOS 15 或更高版本。
 
-1. 从 [GitHub Releases](https://github.com/YangChen-cn/YYReader/releases/latest) 下载 `YYReader-1.1.0-arm64.dmg`。
+1. 从 [GitHub Releases](https://github.com/YangChen-cn/YYReader/releases/latest) 下载 `YYReader-1.1.2-arm64.dmg`。
 2. 打开 DMG，将 `YYReader` 拖入 `Applications`。
 3. 本版本使用 ad-hoc 签名且未经过 Apple 公证；首次启动时请在 Finder 中右键应用并选择“打开”，再确认启动。
 
@@ -32,6 +32,15 @@ YYReader 1.1.0 支持 Apple 芯片 Mac，要求 macOS 15 或更高版本。
 - 阅读模式返回箭头：退出沉浸阅读并回到书架。
 - `⌘L`：添加网页。
 - `⌘[` / `⌘]`：上一章 / 下一章。
+
+## 1.1.2 更新日志
+
+- 修复“继续阅读”恢复到章首的问题，改为恢复已保存的顶部段落；高级阅读设置新增“完成”按钮并支持 Escape 退出。
+- 为章节正文加入 8 章容量的 LRU 缓存，避免主题、布局或阅读会话变化时反复拆分整章文本。
+- 为大目录建立章节和位置索引，并按章节顺序选择可见目标，降低目录查询开销并稳定连续阅读定位。
+- 正文宽度改为相对字号的 em 模型，提供 38/48/58em 三档和 20～80em 自定义滑块；行距与段距也随字号缩放。
+- 收紧连续章节之间的视觉边界，并按主题使用分隔线或纸书装饰；抓取阶段完成段落清理，读取阶段只做轻量拆分。
+- 构建脚本在 Debug 交付和 Release DMG 校验后清理中间 App，减少本地构建残留。
 
 ## 1.1.0 更新日志
 
@@ -82,9 +91,9 @@ xcodebuild test \
 ./script/package_release.sh
 ```
 
-产物位于：
+1.1.2 产物位于：
 
-- `dist/YYReader-1.1.0-arm64.dmg`
+- `dist/YYReader-1.1.2-arm64.dmg`
 
 构建脚本只编译 Apple 芯片 arm64 架构，移除调试记录和绝对 RPATH，并检查挂载后的 DMG 内不包含开发机 `/Users/...` 路径。发布产物只包含 DMG，不生成 ZIP。
 

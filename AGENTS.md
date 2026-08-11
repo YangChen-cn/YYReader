@@ -176,6 +176,8 @@ Fixture 必须精简且使用自造段落，不提交完整版权章节内容。
 - GitHub 发布前确认仓库可见性；未经用户明确要求不创建公开仓库。
 - 仅在发布任务中执行 Release 验收；Release 必须为 arm64、ad-hoc 签名，并通过
   `codesign --verify --strict` 和 DMG 完整性检查。
+- 发布新版本时必须同步更新 `project.yml` 的版本号、`README.md`、`RELEASE_NOTES.md` 和 About 页可见的更新内容；运行 `xcodegen generate` 后提交重新生成的工程文件。
+- 发布流程必须记录 Release Notes，使用 `./script/package_release.sh` 生成 `dist/YYReader-<version>-arm64.dmg`，验证 DMG 后再创建版本标签并推送 `main` 与标签。
 
 ## 完成标准
 
