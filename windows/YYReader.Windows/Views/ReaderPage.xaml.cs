@@ -10,6 +10,7 @@ using Windows.UI.Core;
 using YYReader.Windows.Core.Models;
 using YYReader.Windows.Core.Reading;
 using YYReader.Windows.Core.Collections;
+using YYReader.Windows.Core.Services;
 using YYReader.Windows.Services;
 using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
@@ -18,6 +19,7 @@ namespace YYReader.Windows.Views;
 public sealed partial class ReaderPage : Page
 {
     private readonly Window _window;
+    private readonly OfflineDownloadManager _offlineDownloadManager;
     private readonly ReaderPreferencesStore _preferencesStore = new();
     private readonly DispatcherQueueTimer _progressTimer;
     private readonly Dictionary<int, UIElement> _realizedElements = new();
@@ -31,9 +33,10 @@ public sealed partial class ReaderPage : Page
     private bool _loadingNext;
     private bool _synchronizingAppearance;
 
-    public ReaderPage(LibraryStore store, Book book, Window window)
+    public ReaderPage(LibraryStore store, OfflineDownloadManager offlineDownloadManager, Book book, Window window)
     {
         Store = store;
+        _offlineDownloadManager = offlineDownloadManager;
         Book = book;
         _window = window;
         Items = new RangeObservableCollection<ReaderItem>();
@@ -45,6 +48,7 @@ public sealed partial class ReaderPage : Page
         Loaded += ReaderPage_Loaded;
         Unloaded += ReaderPage_Unloaded;
         ActualThemeChanged += ReaderPage_ActualThemeChanged;
+        _offlineDownloadManager.StateChanged += OfflineDownloadManager_StateChanged;
     }
 
     public LibraryStore Store { get; }
@@ -71,6 +75,7 @@ public sealed partial class ReaderPage : Page
     private async void ReaderPage_Unloaded(object sender, RoutedEventArgs e)
     {
         _progressTimer.Stop();
+        _offlineDownloadManager.StateChanged -= OfflineDownloadManager_StateChanged;
         CommitVisiblePosition();
         await FlushPreferencesAsync();
         await Store.FlushPendingProgressAsync();
@@ -582,6 +587,53 @@ public sealed partial class ReaderPage : Page
     }
 
     private void CancelCatalogRefresh_Click(object sender, RoutedEventArgs e) => Store.CancelCatalogRefresh();
+
+    private async void DownloadCurrentChapter_Click(object sender, RoutedEventArgs e) =>
+        await StartOfflineDownloadAsync(OfflineDownloadScope.CurrentChapter);
+
+    private async void DownloadNext20_Click(object sender, RoutedEventArgs e) =>
+        await StartOfflineDownloadAsync(OfflineDownloadScope.Next20Chapters);
+
+    private async void DownloadAll_Click(object sender, RoutedEventArgs e) =>
+        await StartOfflineDownloadAsync(OfflineDownloadScope.AllChapters);
+
+    private async Task StartOfflineDownloadAsync(OfflineDownloadScope scope)
+    {
+        if (Store.SelectedBook is not { } book || Store.SelectedChapter is not { } chapter) return;
+        await _offlineDownloadManager.DownloadAsync(book, chapter, scope);
+    }
+
+    private void CancelDownload_Click(object sender, RoutedEventArgs e) => _offlineDownloadManager.Cancel();
+
+    private async void ClearOfflineCache_Click(object sender, RoutedEventArgs e)
+    {
+        if (Store.SelectedBook is not { } book) return;
+        var dialog = new ContentDialog
+        {
+            Title = "删除离线缓存？",
+            Content = "书籍、目录和阅读进度会保留；已下载正文将被删除。",
+            PrimaryButtonText = "删除缓存",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        {
+            await _offlineDownloadManager.ClearOfflineCacheAsync(book);
+        }
+    }
+
+    private void OfflineDownloadManager_StateChanged(object? sender, OfflineDownloadState state)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            DownloadStatusButton.Visibility = state.IsActive ? Visibility.Visible : Visibility.Collapsed;
+            DownloadStatusText.Text = state.IsActive
+                ? $"{state.CurrentChapter}\n已完成 {state.Completed} / {state.Total}" + (state.Failed > 0 ? $"，失败 {state.Failed}" : "")
+                : "";
+            DownloadProgressBar.Value = state.Total <= 0 ? 0 : (double)(state.Completed + state.Failed) / state.Total;
+        });
+    }
 
     private void AppearanceFlyout_Opened(object sender, object e)
     {

@@ -5,6 +5,7 @@ using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using WinRT.Interop;
 using YYReader.Windows.Core.Models;
+using YYReader.Windows.Core.Services;
 using YYReader.Windows.Core.Transfer;
 using YYReader.Windows.Services;
 
@@ -13,14 +14,17 @@ namespace YYReader.Windows.Views;
 public sealed partial class LibraryPage : Page
 {
     private readonly Window _window;
+    private readonly OfflineDownloadManager _offlineDownloadManager;
 
-    public LibraryPage(LibraryStore store, Window window)
+    public LibraryPage(LibraryStore store, OfflineDownloadManager offlineDownloadManager, Window window)
     {
         Store = store;
+        _offlineDownloadManager = offlineDownloadManager;
         _window = window;
         InitializeComponent();
         Store.PropertyChanged += Store_PropertyChanged;
         Store.Books.CollectionChanged += (_, _) => RefreshView();
+        _offlineDownloadManager.StateChanged += OfflineDownloadManager_StateChanged;
         RefreshView();
     }
 
@@ -213,6 +217,42 @@ public sealed partial class LibraryPage : Page
         Store.SelectBook(book);
         await Store.RefreshSelectedCatalogAsync();
         RefreshView();
+    }
+
+    private async void DownloadAllBook_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as MenuFlyoutItem)?.Tag is not Book book || book.CurrentChapter is not { } chapter) return;
+        await _offlineDownloadManager.DownloadAsync(book, chapter, OfflineDownloadScope.AllChapters);
+    }
+
+    private async void ClearBookCache_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as MenuFlyoutItem)?.Tag is not Book book) return;
+        await _offlineDownloadManager.ClearOfflineCacheAsync(book);
+        StatusInfoBar.Message = "离线正文已删除，书籍和阅读进度已保留。";
+        StatusInfoBar.Severity = InfoBarSeverity.Success;
+        StatusInfoBar.IsOpen = true;
+    }
+
+    private void OfflineDownloadManager_StateChanged(object? sender, OfflineDownloadState state)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (state.IsActive)
+            {
+                StatusInfoBar.Message = $"正在下载 {state.CurrentChapter} · {state.Completed}/{state.Total}";
+                StatusInfoBar.Severity = InfoBarSeverity.Informational;
+                StatusInfoBar.IsOpen = true;
+            }
+            else if (state.Total > 0)
+            {
+                StatusInfoBar.Message = state.WasCancelled
+                    ? $"下载已取消，已保留 {state.Completed} 章。"
+                    : $"离线下载完成：{state.Completed} 章" + (state.Failed > 0 ? $"，失败 {state.Failed} 章" : "");
+                StatusInfoBar.Severity = state.Failed > 0 ? InfoBarSeverity.Warning : InfoBarSeverity.Success;
+                StatusInfoBar.IsOpen = true;
+            }
+        });
     }
 
     private void LibraryPage_KeyDown(object sender, KeyRoutedEventArgs e)

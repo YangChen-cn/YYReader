@@ -13,6 +13,7 @@ public sealed partial class MainWindow : Window
     private readonly HttpHtmlLoader _httpLoader;
     private readonly WebView2HtmlLoader _webViewLoader;
     private readonly LibraryStore _store;
+    private readonly OfflineDownloadManager _offlineDownloadManager;
     private readonly LibraryPage _libraryPage;
     private TaskCompletionSource<bool>? _verificationCompletion;
     private bool _closeReady;
@@ -43,8 +44,10 @@ public sealed partial class MainWindow : Window
             VerificationRequested = ShowVerificationAsync
         };
         var loader = new HybridHtmlLoader(_httpLoader, _webViewLoader);
-        _store = new LibraryStore(repository, new NovelImportCoordinator(loader));
-        _libraryPage = new LibraryPage(_store, this);
+        var coordinator = new NovelImportCoordinator(loader);
+        _store = new LibraryStore(repository, coordinator);
+        _offlineDownloadManager = new OfflineDownloadManager(repository, coordinator);
+        _libraryPage = new LibraryPage(_store, _offlineDownloadManager, this);
         _libraryPage.OpenBookRequested += OpenBookRequested;
         ContentFrame.Content = _libraryPage;
         AppWindow.Closing += MainWindow_Closing;
@@ -59,7 +62,7 @@ public sealed partial class MainWindow : Window
 
     private void OpenBookRequested(object? sender, BookRequestedEventArgs args)
     {
-        ContentFrame.Content = new ReaderPage(_store, args.Book, this);
+        ContentFrame.Content = new ReaderPage(_store, _offlineDownloadManager, args.Book, this);
     }
 
     public void ShowLibrary()

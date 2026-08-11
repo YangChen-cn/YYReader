@@ -159,6 +159,15 @@ public sealed class SqliteLibraryRepository
         return value is null or DBNull ? null : Convert.ToString(value, CultureInfo.InvariantCulture);
     }
 
+    public async Task ClearChapterBodiesAsync(string bookId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE Chapters SET BodyText = NULL, CachedAt = NULL WHERE BookId = $book;";
+        command.Parameters.AddWithValue("$book", bookId);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<Book?> FindBookBySourceUrlAsync(string sourceBookUrl, CancellationToken cancellationToken = default)
     {
         var key = UrlCanonicalizer.Canonicalize(sourceBookUrl).AbsoluteUri;

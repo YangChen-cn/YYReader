@@ -70,6 +70,8 @@
                                     <MenuFlyout>
                                         <MenuFlyoutItem Text="打开" Tag="{x:Bind}" Click="OpenBookMenu_Click" />
                                         <MenuFlyoutItem Text="刷新目录" Tag="{x:Bind}" Click="RefreshBookCatalog_Click" />
+                                        <MenuFlyoutItem Text="下载全部章节" Tag="{x:Bind}" Click="DownloadAllBook_Click" />
+                                        <MenuFlyoutItem Text="删除离线缓存" Tag="{x:Bind}" Click="ClearBookCache_Click" />
                                         <MenuFlyoutSeparator />
                                         <MenuFlyoutItem Text="删除小说" Tag="{x:Bind}" Click="DeleteBook_Click" />
                                     </MenuFlyout>
