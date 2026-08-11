@@ -1,112 +1,89 @@
-# YYReader
+<div align="center">
+  <img src="YYReader/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128@2x.png" width="120" height="120" alt="YYReader 图标">
+  <h1>YYReader</h1>
+  <p><strong>原生、安静、适合长时间阅读的跨平台小说阅读器</strong></p>
+  <p>粘贴章节网页，YYReader 会识别书籍、目录与正文，并以系统原生控件呈现干净的阅读界面。</p>
 
-YYReader 是一款以正文为中心的原生小说阅读器，现提供 macOS 与 Windows 客户端。粘贴小说章节网页 URL 后，应用会识别书籍、作者、章节正文、前后章节与目录，并将网站拆分的章节分页合并为完整内容，再使用平台原生界面呈现。
+  <p>
+    <a href="https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.0"><img src="https://img.shields.io/badge/release-v1.2.0-2ea44f?style=flat-square" alt="Release v1.2.0"></a>
+    <img src="https://img.shields.io/badge/macOS-15%2B-111111?style=flat-square&logo=apple" alt="macOS 15+">
+    <img src="https://img.shields.io/badge/Windows-10%201809%2B-0078D4?style=flat-square&logo=windows11" alt="Windows 10 1809+">
+    <img src="https://img.shields.io/badge/Swift-6-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 6">
+    <img src="https://img.shields.io/badge/.NET-8-512BD4?style=flat-square&logo=dotnet&logoColor=white" alt=".NET 8">
+  </p>
+</div>
 
-## 功能
+## 快速下载
 
-- macOS 使用 SwiftUI，Windows 使用 WinUI 3；正文均由原生文本控件渲染，不使用 WebView 作为阅读器。
-- 书架、可搜索目录与沉浸式阅读模式。
-- 自动合并章节分页，支持上一章、下一章和可选的连续章节阅读。
-- 阅读进度、章节缓存、主动下载与离线重开。
-- 可选择任意共享文件夹自动同步，或通过 `.yyreader`/JSON 文件在 macOS 与 Windows 间手动导入、导出书架和阅读位置。
-- 字体、字号、行距、正文宽度、段首缩进和明暗主题设置。
-- 为 `qidiy.com` 提供专用解析；其他小说网站使用通用解析器。
-- 遇到 Cloudflare 或 JavaScript 验证时，macOS 使用 WebKit、Windows 使用 WebView2 获取 rendered DOM，正文仍回到原生阅读器。
+| 平台 | 安装包 | 系统要求 |
+| --- | --- | --- |
+| **macOS** | [下载 YYReader 1.2.0 arm64 DMG](https://github.com/YangChen-cn/YYReader/releases/download/v1.2.0/YYReader-1.2.0-arm64.dmg) | Apple 芯片，macOS 15 或更高版本 |
+| **Windows** | [下载 YYReader 1.2.0 x64 安装程序](https://github.com/YangChen-cn/YYReader/releases/download/v1.2.0/YYReader-Setup-x64-1.2.0.exe) | x64 Windows 10 1809 或更高版本，推荐 Windows 11 |
 
-## 安装 Windows v1.2.0
+也可以前往 [YYReader 1.2.0 Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.0) 查看校验信息和完整发布说明。
 
-Windows 版本支持 x64 Windows 10 1809 或更高版本，推荐 Windows 11。
+> macOS 版本使用 ad-hoc 签名且尚未经过 Apple 公证，首次启动时可能需要在 Finder 中右键 YYReader 并选择“打开”。Windows 安装程序尚未使用商业代码签名，SmartScreen 可能提示“未知发布者”。
 
-1. 从 [YYReader Windows 1.2.0 Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.0) 下载 `YYReader-Setup-x64-1.2.0.exe`。
-2. 运行中文安装向导；默认创建开始菜单入口，可选择创建桌面快捷方式。
-3. 安装包已包含 .NET 8 与 Windows App Runtime，无需另外安装运行库。
+## 为什么选择 YYReader
 
-安装程序目前没有商业代码签名，Windows SmartScreen 可能提示“未知发布者”。
+| 原生阅读 | 本地优先 | 连续沉浸 | 跨端同步 |
+| --- | --- | --- | --- |
+| macOS 使用 SwiftUI，Windows 使用 WinUI 3；正文不由 WebView 渲染 | 书架、正文缓存和进度保存在本机，支持离线重开 | 支持目录搜索、连续章节、键盘翻页、主题和排版调节 | 通过用户选择的共享文件夹或 `.yyreader` 文件交换书架与阅读位置 |
 
-## 安装 macOS v1.2.0
+- 自动识别书名、作者、章节正文、前后章节与目录，并合并网站拆分的章节分页。
+- 支持当前章节、后续章节或整本目录的离线下载；后台预取不会阻塞当前阅读。
+- 提供字体、字号、行距、段距、正文宽度、段首缩进及明暗主题设置。
+- 为 `qidiy.com` 提供专用解析器，其他站点使用通用语义和正文密度解析。
+- 遇到必要的 JavaScript 或 Cloudflare 验证时，macOS 使用 WebKit、Windows 使用 WebView2 获取最终页面；提取后的正文仍回到原生阅读器。
 
-YYReader 1.2.0 支持 Apple 芯片 Mac，要求 macOS 15 或更高版本。
+## 文件夹同步
 
-1. 从 [YYReader 1.2.0 Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.0) 下载 `YYReader-1.2.0-arm64.dmg`。
-2. 打开 DMG，将 `YYReader` 拖入 `Applications`。
-3. 本版本使用 ad-hoc 签名且未经过 Apple 公证；首次启动时请在 Finder 中右键应用并选择“打开”，再确认启动。
+YYReader 不绑定 iCloud 或任何云服务。你可以选择 iCloud Drive、Dropbox、OneDrive、Syncthing、NAS 或普通共享目录，应用会在其中使用以下结构：
 
-应用不会自动解决 CAPTCHA，也不会绕过登录、付费墙或网站访问控制。第三方网站的结构和访问策略可能随时变化，通用解析无法保证支持所有站点。
+```text
+YYReaderSync/
+├── mac.json
+└── windows.json
+```
 
-## 使用
+- Mac 只写 `mac.json`，Windows 只写 `windows.json`，双方读取对端快照。
+- 书籍按 canonical source URL 合并；阅读位置只向目录中更后的章节或同章更后的段落推进。
+- 不同步正文缓存、Cookie、登录信息或 WebView 状态。
+- 本地变化只发布本机快照；完整合并仅在启动、回到前台、手动同步或检测到对端文件变化时执行。
+- 共享文件夹暂时不可访问时不会修改或清空本地书架。
 
-点击工具栏中的“添加网页”，粘贴任意章节 URL。当前章节成功解析后即可立即开始阅读，完整目录可随后按需加载或手动刷新。
+不想使用自动同步时，也可以通过 `.yyreader`、JSON 文件或剪贴板手动导入、导出书架。格式说明见 [BookshelfTransfer v1](shared/bookshelf-transfer/README.md) 和 [SyncSnapshot](shared/folder-sync/README.md)。
 
-- 单击书籍或章节：在书架模式中选择并预览。
-- 双击章节、按 Return，或点击“继续阅读”：进入沉浸阅读。
-- 阅读模式左侧系统按钮：显示或隐藏章节目录。
-- 阅读模式返回箭头：退出沉浸阅读并回到书架。
+## 基本使用
+
+1. 点击工具栏中的“添加网页”，粘贴小说章节 URL。
+2. 当前章节解析完成后即可阅读；完整目录可随后按需加载或手动刷新。
+3. 双击章节、按 Return，或点击“继续阅读”进入沉浸模式。
+4. 在阅读设置中调整主题、字体、间距和正文宽度。
+5. 如需跨设备使用，在同步设置中选择双方都能访问的共享文件夹。
+
+macOS 快捷键：
+
 - `⌘L`：添加网页。
 - `⌘[` / `⌘]`：上一章 / 下一章。
+- 方向键：整页或小幅滚动正文。
 
-在“设置 → 同步”中启用“文件夹同步”并选择任意共享目录。YYReader 会在其中创建
-`YYReaderSync/mac.json`，同时读取 Windows 客户端维护的 `windows.json`。该功能不绑定
-iCloud，也可配合 Dropbox、OneDrive、Syncthing 或普通局域网共享目录使用；正文缓存、
-Cookie 和网页验证状态不会进入同步文件。
-同步阅读位置时优先保留目录中更后的章节，同一章只会向更后的段落前进；
-对端文件和本地内容都没有变化时不会重复写入同步文件。
+## 技术架构
 
-书架模式工具栏的“更多”菜单还可以导入 `.yyreader` 或 `.json` 文件、从剪贴板导入、
-复制书架 JSON，或导出 `.yyreader` 文件。导入前会显示新书、已存在、无效和重复条目数量；
-手动传输同样不包含正文缓存、Cookie 或网页验证状态。
+| | macOS | Windows |
+| --- | --- | --- |
+| UI | SwiftUI | WinUI 3 |
+| 语言 | Swift 6，严格并发检查 | C#，.NET 8 |
+| 数据 | SwiftData | SQLite |
+| 网页验证 | WebKit | WebView2 |
+| 正文渲染 | `ScrollView` + `LazyVStack` + `Text` | WinUI 原生文本控件 |
 
-Windows 客户端支持目录搜索、连续阅读、离线下载、书架导入导出，以及与 macOS 共用文件夹的 SyncSnapshot v2 同步。详细构建和使用说明见 [Windows README](windows/README.md)。
+两个客户端共用 URL canonicalization、BookshelfTransfer 和 SyncSnapshot 数据约定。macOS 使用 SwiftSoup 2.13.5 与 XcodeGen；Windows 的详细结构和开发要求见 [Windows README](windows/README.md)。
 
-## 1.2.0 更新日志
+<details>
+<summary><strong>从源码构建 macOS</strong></summary>
 
-### macOS
-
-- 新增可选的文件夹自动同步，可通过 iCloud Drive、Dropbox、OneDrive、Syncthing 或任意共享目录与 Windows 交换书架和阅读位置。
-- 新增 `.yyreader`/JSON 文件及剪贴板的手动导入导出；导入前显示新增、已有、无效和重复条目。
-- 同步位置按章节目录顺序和段落前进方向合并，避免旧章节或旧位置覆盖较新的阅读进度。
-- 本地书架和进度变化只发布 `mac.json`，不会读取 `windows.json` 或重建正在阅读的会话。
-- 修复对端文件读取失败后无法重试、后台重复同步、同步触发跳章，以及当前阅读书被远端删除时会话被打断的问题。
-
-### Windows
-
-- 完成原生 WinUI 3 书架、目录、阅读器、连续章节、阅读位置恢复和 SQLite 本地存储。
-- 支持 qidiy.com 与通用小说页面解析，并在必要时使用 WebView2 完成验证和 rendered DOM fallback。
-- 新增完整目录刷新、章节预取、当前/后 20 章/整书离线下载，以及非阻塞错误重试。
-- 新增 BookshelfTransfer 导入导出和 SyncSnapshot v2 文件夹同步；同步不会抢走正在阅读的章节或重建正文。
-- 采用统一 Windows 11 标题栏、Mica 书架外壳、原生阅读主题、目录侧栏和即时 Aa 设置。
-- 提供中文完整自包含安装程序，修复应用、安装程序和快捷方式图标，并移除未使用的 ONNX/DirectML 依赖。
-
-## 1.1.2 更新日志
-
-- 修复“继续阅读”恢复到章首的问题，改为恢复已保存的顶部段落；高级阅读设置新增“完成”按钮并支持 Escape 退出。
-- 为章节正文加入 8 章容量的 LRU 缓存，避免主题、布局或阅读会话变化时反复拆分整章文本。
-- 为大目录建立章节和位置索引，并按章节顺序选择可见目标，降低目录查询开销并稳定连续阅读定位。
-- 正文宽度改为相对字号的 em 模型，提供 38/48/58em 三档和 20～80em 自定义滑块；行距与段距也随字号缩放。
-- 收紧连续章节之间的视觉边界，并按主题使用分隔线或纸书装饰；抓取阶段完成段落清理，读取阶段只做轻量拆分。
-- 构建脚本在 Debug 交付和 Release DMG 校验后清理中间 App，减少本地构建残留。
-
-## 1.1.0 更新日志
-
-- 新增可选连续阅读：进入章节后提前预取下一章，接近底部时平滑衔接，并保持稳定的阅读会话。
-- 新增“下载到本地”：支持当前章节、后续 20 章或整本目录的低并发下载，可取消并在后台查看进度。
-- 增强通用网站兼容性：支持直接导入目录页、无目录小说、多卷目录，以及静态解析失败后的安全 rendered DOM 回退。
-- 改进阅读体验：支持方向键逐段滚动、轻量章节进度、目录跟随当前章节和上次阅读书籍恢复。
-- 修复连续阅读中的跨章连跳、章节切换闪烁及章节边界轻微滚动跳动。
-
-## 项目信息
-
-- 作者：YangChen
-- GitHub：[YangChen-cn/YYReader](https://github.com/YangChen-cn/YYReader)
-
-## 从源码构建 macOS
-
-开发环境：
-
-- macOS 15+
-- Xcode 26+（Swift 6）
-- [XcodeGen](https://github.com/yonaskolb/XcodeGen)
-
-生成、构建并运行 arm64 Debug 版本：
+环境要求：macOS 15+、Xcode 26+、XcodeGen。
 
 ```bash
 ./script/build_and_run.sh run
@@ -123,41 +100,34 @@ xcodebuild test \
   -derivedDataPath DerivedData
 ```
 
-生成 ad-hoc 签名的 arm64 Release DMG：
+生成经过便携性、签名和 DMG 完整性检查的 arm64 安装包：
 
 ```bash
 ./script/package_release.sh
 ```
 
-1.2.0 产物位于：
+</details>
 
-- `dist/YYReader-1.2.0-arm64.dmg`
+<details>
+<summary><strong>从源码构建 Windows</strong></summary>
 
-构建脚本只编译 Apple 芯片 arm64 架构，移除调试记录和绝对 RPATH，并检查挂载后的 DMG 内不包含开发机 `/Users/...` 路径。发布产物只包含 DMG，不生成 ZIP。
-
-Windows 版要求 .NET 8 SDK、Visual Studio 2022 的 C++/Windows 开发工具、Windows SDK、Windows App SDK 与 Inno Setup 6。构建、测试和生成完整安装包：
+需要 .NET 8 SDK、Visual Studio 2022 的 C++/Windows 开发工具、Windows SDK、Windows App SDK 与 Inno Setup 6。
 
 ```powershell
 dotnet test .\windows\YYReader.Windows.Tests\YYReader.Windows.Tests.csproj
 .\windows\scripts\package-release.ps1
 ```
 
-Windows 1.2.0 安装包位于 `dist/windows/YYReader-Setup-x64-1.2.0.exe`。
+</details>
 
-## 技术结构
+## 隐私与使用边界
 
-- macOS：Swift 6、SwiftUI、SwiftData
-- Windows：C#、.NET 8、WinUI 3、Windows App SDK、SQLite
-- SwiftSoup 2.13.5
-- XcodeGen 工程配置
-- App Sandbox，仅开放出站网络
+YYReader 不包含或分发小说正文，也不会提交抓取后的网页、Cookie 或验证凭据。应用不会自动解决 CAPTCHA，不会绕过登录、付费墙或网站访问控制。第三方网站结构和访问策略可能变化，请遵守目标网站的服务条款与内容版权要求。
 
-正文始终由 `ScrollView`、`LazyVStack` 和 `Text` 原生渲染。`WKWebView` 仅用于完成必要的网站验证并提取最终 HTML，解析层不依赖具体加载方式。
+## 项目
 
-## 隐私与内容
-
-书架、缓存和阅读进度保存在本机。YYReader 不包含小说正文，也不提交抓取后的网页或 Cloudflare Cookie。请遵守目标网站的服务条款和内容版权要求。
-
-## 许可证
+- 作者：YangChen
+- 仓库：[YangChen-cn/YYReader](https://github.com/YangChen-cn/YYReader)
+- 发布说明：[RELEASE_NOTES.md](RELEASE_NOTES.md)
 
 当前仓库尚未声明开源许可证。源代码公开不等于自动授予复制、修改或再分发许可。
