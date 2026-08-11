@@ -191,8 +191,12 @@ struct LibraryRootView: View {
     private var readerDetail: some View {
         ReaderView(store: store)
             .inspector(isPresented: $showingAppearanceInspector) {
-                AppearanceInspectorView()
+                AppearanceInspectorView(dismiss: hideAdvancedAppearance)
                     .inspectorColumnWidth(min: 260, ideal: 300, max: 360)
             }
+    }
+
+    private func hideAdvancedAppearance() {
+        showingAppearanceInspector = false
     }
 }
