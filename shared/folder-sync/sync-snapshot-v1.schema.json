@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yyreader.local/schemas/sync-snapshot-v1.schema.json",
+  "title": "YYReader SyncSnapshot v1",
+  "type": "object",
+  "required": ["format", "version", "device", "updatedAt", "books"],
+  "properties": {
+    "format": { "const": "yyreader-sync" },
+    "version": { "const": 1 },
+    "device": { "enum": ["mac", "windows"] },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "books": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sourceURL", "title", "author", "paragraphIndex", "progress", "updatedAt"],
+        "properties": {
+          "sourceURL": { "type": "string", "format": "uri" },
+          "title": { "type": "string" },
+          "author": { "type": "string" },
+          "currentChapterURL": { "type": ["string", "null"], "format": "uri" },
+          "paragraphIndex": { "type": "integer", "minimum": 0 },
+          "progress": { "type": "number", "minimum": 0, "maximum": 1 },
+          "lastReadAt": { "type": ["string", "null"], "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "deletedAt": { "type": ["string", "null"], "format": "date-time" }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

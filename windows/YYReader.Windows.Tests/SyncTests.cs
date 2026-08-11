@@ -43,7 +43,7 @@ public sealed class SyncTests
             var syncDirectory = SyncEngine.ResolveSyncDirectory(root);
             Directory.CreateDirectory(syncDirectory);
             await File.WriteAllTextAsync(Path.Combine(syncDirectory, SyncEngine.MacFileName), SyncSnapshotCodec.Encode(
-                new SyncSnapshot { Device = "mac", UpdatedAt = DateTimeOffset.UtcNow, Books = [Book("https://example.com/book/", "书", "章", 1, 0.1, "2026-01-01", "2026-01-01")] }));
+                new SyncSnapshot { Device = "mac", UpdatedAt = DateTimeOffset.UtcNow, Books = [Book("https://example.com/book/", "书", "https://example.com/book/1.html", 1, 0.1, "2026-01-01", "2026-01-01")] }));
             SyncSnapshot? received = null;
             var engine = new SyncEngine(
                 _ => Task.FromResult(new SyncSnapshot { Device = "windows", UpdatedAt = DateTimeOffset.UtcNow }),

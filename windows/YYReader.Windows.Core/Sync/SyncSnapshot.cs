@@ -100,9 +100,14 @@ public static class SyncSnapshotCodec
             {
                 throw new SyncSnapshotException("同步书籍包含无效 sourceURL。");
             }
-            if (book.ParagraphIndex < 0 || book.Progress is < 0 or > 1 || double.IsNaN(book.Progress))
+            if (book.ParagraphIndex < 0 || book.Progress is < 0 or > 1 || double.IsNaN(book.Progress) || double.IsInfinity(book.Progress))
             {
                 throw new SyncSnapshotException("同步书籍包含无效阅读位置。");
+            }
+            if (book.CurrentChapterUrl is not null
+                && (!Uri.TryCreate(book.CurrentChapterUrl, UriKind.Absolute, out var chapter) || !UrlCanonicalizer.IsHttp(chapter)))
+            {
+                throw new SyncSnapshotException("同步书籍包含无效 currentChapterURL。");
             }
         }
         return snapshot;

@@ -169,6 +169,7 @@ public sealed class PersistenceTests
 
             await repository.DeleteBookAsync(book.Id);
             await repository.ApplySyncSnapshotAsync(stale);
+            await repository.SaveProgressAsync(book.Id, chapterUrl.AbsoluteUri, 3, 0.5, DateTimeOffset.UtcNow);
 
             Assert.AreEqual(0, (await repository.GetBooksAsync()).Count);
             Assert.IsNotNull((await repository.BuildSyncSnapshotAsync("windows")).Books.Single().DeletedAt);

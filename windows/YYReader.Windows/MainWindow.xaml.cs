@@ -12,11 +12,14 @@ public sealed partial class MainWindow : Window
 {
     private readonly HttpHtmlLoader _httpLoader;
     private readonly WebView2HtmlLoader _webViewLoader;
+    private readonly SqliteLibraryRepository _repository;
     private readonly LibraryStore _store;
     private readonly OfflineDownloadManager _offlineDownloadManager;
+    private readonly FolderSyncService _folderSyncService;
     private readonly LibraryPage _libraryPage;
     private TaskCompletionSource<bool>? _verificationCompletion;
     private bool _closeReady;
+    private bool _syncReloadPending;
 
     public MainWindow()
     {
@@ -39,7 +42,7 @@ public sealed partial class MainWindow : Window
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "YYReader");
         Directory.CreateDirectory(databaseDirectory);
-        var repository = new SqliteLibraryRepository(Path.Combine(databaseDirectory, "library.db"));
+        _repository = new SqliteLibraryRepository(Path.Combine(databaseDirectory, "library.db"));
         _httpLoader = new HttpHtmlLoader();
         _webViewLoader = new WebView2HtmlLoader(VerificationWebView, _httpLoader)
         {
@@ -47,18 +50,21 @@ public sealed partial class MainWindow : Window
         };
         var loader = new HybridHtmlLoader(_httpLoader, _webViewLoader);
         var coordinator = new NovelImportCoordinator(loader);
-        _store = new LibraryStore(repository, coordinator);
-        _offlineDownloadManager = new OfflineDownloadManager(repository, coordinator);
-        _libraryPage = new LibraryPage(_store, _offlineDownloadManager, this);
+        _store = new LibraryStore(_repository, coordinator);
+        _offlineDownloadManager = new OfflineDownloadManager(_repository, coordinator);
+        _folderSyncService = new FolderSyncService(_repository, _store, DispatcherQueue, RemoteSyncAppliedAsync);
+        _libraryPage = new LibraryPage(_store, _offlineDownloadManager, _folderSyncService, this);
         _libraryPage.OpenBookRequested += OpenBookRequested;
         ContentFrame.Content = _libraryPage;
         AppWindow.Closing += MainWindow_Closing;
+        Activated += MainWindow_Activated;
         _ = InitializeStoreAsync();
     }
 
     private async Task InitializeStoreAsync()
     {
         await _store.InitializeAsync();
+        await _folderSyncService.InitializeAsync();
         _libraryPage.RefreshView();
     }
 
@@ -70,6 +76,36 @@ public sealed partial class MainWindow : Window
     public void ShowLibrary()
     {
         ContentFrame.Content = _libraryPage;
+        if (_syncReloadPending) _ = RefreshLibraryAfterSyncAsync();
+    }
+
+    private async Task RemoteSyncAppliedAsync()
+    {
+        if (ReferenceEquals(ContentFrame.Content, _libraryPage))
+        {
+            await _store.ReloadAsync();
+            _libraryPage.RefreshView();
+        }
+        else
+        {
+            _syncReloadPending = true;
+        }
+    }
+
+    private async Task RefreshLibraryAfterSyncAsync()
+    {
+        _syncReloadPending = false;
+        await _store.FlushPendingProgressAsync();
+        await _store.ReloadAsync();
+        _libraryPage.RefreshView();
+    }
+
+    private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
+    {
+        if (args.WindowActivationState != WindowActivationState.Deactivated)
+        {
+            _folderSyncService.OnAppActivated();
+        }
     }
 
     public void SetPageTitleBar(UIElement content, bool showBrand)
@@ -129,6 +165,7 @@ public sealed partial class MainWindow : Window
         args.Cancel = true;
         try
         {
+            await _folderSyncService.DisposeAsync();
             await _store.DisposeAsync();
         }
         catch (Exception exception)

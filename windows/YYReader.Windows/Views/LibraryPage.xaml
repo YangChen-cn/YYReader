@@ -25,6 +25,8 @@
                     <FontIcon Glyph="&#xE712;" FontSize="16" />
                     <Button.Flyout>
                         <MenuFlyout>
+                            <MenuFlyoutItem Text="文件夹同步" Click="FolderSync_Click" />
+                            <MenuFlyoutSeparator />
                             <MenuFlyoutItem Text="导入书架" Click="ImportBookshelf_Click" />
                             <MenuFlyoutSeparator />
                             <MenuFlyoutItem Text="复制书架导出 JSON" Click="CopyBookshelfExport_Click" />

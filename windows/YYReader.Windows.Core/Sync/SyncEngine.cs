@@ -18,7 +18,12 @@ public sealed class SyncEngine(
         if (File.Exists(macPath))
         {
             var json = await ReadWithRetryAsync(macPath, cancellationToken).ConfigureAwait(false);
-            await mergeRemoteSnapshot(SyncSnapshotCodec.Decode(json), cancellationToken).ConfigureAwait(false);
+            var remote = SyncSnapshotCodec.Decode(json);
+            if (!string.Equals(remote.Device, "mac", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new SyncSnapshotException("mac.json 的 device 必须为 mac。");
+            }
+            await mergeRemoteSnapshot(remote, cancellationToken).ConfigureAwait(false);
         }
 
         var snapshot = await buildLocalSnapshot(cancellationToken).ConfigureAwait(false);

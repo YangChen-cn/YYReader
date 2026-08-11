@@ -15,13 +15,19 @@ public sealed partial class LibraryPage : Page
 {
     private readonly Window _window;
     private readonly OfflineDownloadManager _offlineDownloadManager;
+    private readonly FolderSyncService _folderSyncService;
     private CancellationTokenSource? _downloadNoticeCancellation;
     private bool _isSubscribed;
 
-    public LibraryPage(LibraryStore store, OfflineDownloadManager offlineDownloadManager, Window window)
+    public LibraryPage(
+        LibraryStore store,
+        OfflineDownloadManager offlineDownloadManager,
+        FolderSyncService folderSyncService,
+        Window window)
     {
         Store = store;
         _offlineDownloadManager = offlineDownloadManager;
+        _folderSyncService = folderSyncService;
         _window = window;
         InitializeComponent();
         Loaded += LibraryPage_Loaded;
@@ -57,6 +63,7 @@ public sealed partial class LibraryPage : Page
             Store.PropertyChanged += Store_PropertyChanged;
             Store.Books.CollectionChanged += Books_CollectionChanged;
             _offlineDownloadManager.StateChanged += OfflineDownloadManager_StateChanged;
+            _folderSyncService.StateChanged += FolderSyncService_StateChanged;
             _isSubscribed = true;
         }
         RefreshBookRows();
@@ -71,6 +78,7 @@ public sealed partial class LibraryPage : Page
         Store.PropertyChanged -= Store_PropertyChanged;
         Store.Books.CollectionChanged -= Books_CollectionChanged;
         _offlineDownloadManager.StateChanged -= OfflineDownloadManager_StateChanged;
+        _folderSyncService.StateChanged -= FolderSyncService_StateChanged;
         _isSubscribed = false;
         _downloadNoticeCancellation?.Cancel();
         _downloadNoticeCancellation?.Dispose();
@@ -119,6 +127,107 @@ public sealed partial class LibraryPage : Page
         {
             await ShowTransferPreviewAsync(json);
         }
+    }
+
+    private async void FolderSync_Click(object sender, RoutedEventArgs e)
+    {
+        var selectedPath = _folderSyncService.Preferences.FolderPath;
+        var enabledToggle = new ToggleSwitch
+        {
+            Header = "启用同步",
+            IsOn = _folderSyncService.Preferences.IsEnabled
+        };
+        var pathText = new TextBlock
+        {
+            Text = selectedPath ?? "尚未选择文件夹",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.66
+        };
+        var chooseButton = new Button
+        {
+            Content = selectedPath is null ? "选择同步文件夹" : "更换文件夹",
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
+        chooseButton.Click += async (_, _) =>
+        {
+            var picker = new global::Windows.Storage.Pickers.FolderPicker
+            {
+                SuggestedStartLocation = global::Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary
+            };
+            picker.FileTypeFilter.Add("*");
+            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(_window));
+            var folder = await picker.PickSingleFolderAsync();
+            if (folder is null) return;
+            selectedPath = folder.Path;
+            pathText.Text = folder.Path;
+            chooseButton.Content = "更换文件夹";
+        };
+        var lastSync = new TextBlock
+        {
+            Text = _folderSyncService.Preferences.LastSyncAt is { } at
+                ? $"最近同步：{at.ToLocalTime():yyyy-MM-dd HH:mm:ss}"
+                : "尚未同步",
+            Opacity = 0.58
+        };
+        var content = new StackPanel { Width = 440, Spacing = 12 };
+        content.Children.Add(enabledToggle);
+        content.Children.Add(pathText);
+        content.Children.Add(chooseButton);
+        content.Children.Add(lastSync);
+        content.Children.Add(new TextBlock
+        {
+            Text = "YYReader 会在所选位置使用 YYReaderSync 文件夹。Windows 只写 windows.json，并只读取 mac.json。",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.58
+        });
+        var dialog = new ContentDialog
+        {
+            Title = "文件夹同步",
+            Content = content,
+            PrimaryButtonText = "保存",
+            SecondaryButtonText = "立即同步",
+            CloseButtonText = "取消",
+            XamlRoot = XamlRoot
+        };
+        var result = await dialog.ShowAsync();
+        if (result is not (ContentDialogResult.Primary or ContentDialogResult.Secondary)) return;
+        if (enabledToggle.IsOn && string.IsNullOrWhiteSpace(selectedPath))
+        {
+            StatusInfoBar.Message = "启用文件夹同步前，请先选择一个文件夹。";
+            StatusInfoBar.Severity = InfoBarSeverity.Warning;
+            StatusInfoBar.IsOpen = true;
+            return;
+        }
+        await _folderSyncService.ConfigureAsync(enabledToggle.IsOn, selectedPath);
+        if (result == ContentDialogResult.Secondary)
+        {
+            await _folderSyncService.SynchronizeNowAsync();
+        }
+    }
+
+    private void FolderSyncService_StateChanged(object? sender, FolderSyncState state)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (state.IsSyncing)
+            {
+                StatusInfoBar.Message = "正在同步书架与阅读位置…";
+                StatusInfoBar.Severity = InfoBarSeverity.Informational;
+                StatusInfoBar.IsOpen = true;
+            }
+            else if (!string.IsNullOrWhiteSpace(state.ErrorMessage))
+            {
+                StatusInfoBar.Message = $"文件夹同步暂时不可用：{state.ErrorMessage}";
+                StatusInfoBar.Severity = InfoBarSeverity.Warning;
+                StatusInfoBar.IsOpen = true;
+            }
+            else if (state.LastSyncAt is { } syncedAt)
+            {
+                StatusInfoBar.Message = $"文件夹同步完成 · {syncedAt.ToLocalTime():HH:mm:ss}";
+                StatusInfoBar.Severity = InfoBarSeverity.Success;
+                StatusInfoBar.IsOpen = true;
+            }
+        });
     }
 
     private async Task<string?> ReadTransferTextAsync()

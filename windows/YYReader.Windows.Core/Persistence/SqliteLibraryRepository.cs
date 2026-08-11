@@ -398,6 +398,13 @@ public sealed class SqliteLibraryRepository
     {
         var canonicalChapterUrl = UrlCanonicalizer.CanonicalizeChapter(chapterUrl).AbsoluteUri;
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using (var existence = connection.CreateCommand())
+        {
+            existence.CommandText = "SELECT 1 FROM Chapters WHERE BookId = $book AND SourceUrl = $chapter;";
+            existence.Parameters.AddWithValue("$book", bookId);
+            existence.Parameters.AddWithValue("$chapter", canonicalChapterUrl);
+            if (await existence.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is null) return;
+        }
         using var transaction = connection.BeginTransaction();
         await ExecuteAsync(connection, transaction, """
             INSERT INTO ReaderProgress (BookId, ChapterUrl, ParagraphIndex, Progress, LastReadAt)
@@ -468,10 +475,12 @@ public sealed class SqliteLibraryRepository
         };
     }
 
-    public async Task ApplySyncSnapshotAsync(SyncSnapshot remote, CancellationToken cancellationToken = default)
+    public async Task<bool> ApplySyncSnapshotAsync(SyncSnapshot remote, CancellationToken cancellationToken = default)
     {
         var local = await BuildSyncSnapshotAsync("windows", cancellationToken).ConfigureAwait(false);
         var merged = SyncMergePlanner.Merge(local.Books, remote.Books);
+        var normalizedLocal = SyncMergePlanner.Merge(local.Books, []);
+        if (normalizedLocal.SequenceEqual(merged)) return false;
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction();
         foreach (var entry in merged)
@@ -536,6 +545,7 @@ public sealed class SqliteLibraryRepository
             }
         }
         transaction.Commit();
+        return true;
     }
 
     private async Task<SqliteConnection> OpenAsync(CancellationToken cancellationToken)
