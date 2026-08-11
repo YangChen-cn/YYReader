@@ -17,6 +17,7 @@ public sealed class WebView2HtmlLoader : IRenderedDomFallbackLoading
     private readonly HttpHtmlLoader _staticLoader;
     private readonly string _userDataFolder;
     private readonly SemaphoreSlim _loadGate = new(1, 1);
+    private readonly HostRateLimiter _rateLimiter = new();
     private readonly Dictionary<string, int> _verificationAttempts = new(StringComparer.OrdinalIgnoreCase);
     private CoreWebView2? _coreWebView;
 
@@ -49,6 +50,7 @@ public sealed class WebView2HtmlLoader : IRenderedDomFallbackLoading
         await _loadGate.WaitAsync(cancellationToken).ConfigureAwait(true);
         try
         {
+            await _rateLimiter.WaitAsync(url, cancellationToken).ConfigureAwait(true);
             return await RunOnUiThreadAsync(
                 () => LoadRenderedDomOnUiThreadAsync(url, cancellationToken),
                 cancellationToken).ConfigureAwait(false);
@@ -163,7 +165,9 @@ public sealed class WebView2HtmlLoader : IRenderedDomFallbackLoading
             var result = await completion.Task.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(true);
             if (!result.IsSuccess)
             {
-                throw new HtmlLoadException(HtmlLoadErrorKind.InvalidResponse, result.WebErrorStatus.ToString());
+                throw new HtmlLoadException(
+                    HtmlLoadErrorKind.InvalidResponse,
+                    WebNavigationFailureMessage(result.WebErrorStatus));
             }
             return _webView.Source ?? url;
         }
@@ -176,6 +180,19 @@ public sealed class WebView2HtmlLoader : IRenderedDomFallbackLoading
             _webView.NavigationCompleted -= handler;
         }
     }
+
+    private static string WebNavigationFailureMessage(CoreWebView2WebErrorStatus status) => status switch
+    {
+        CoreWebView2WebErrorStatus.Timeout => "浏览器加载网页超时，请稍后重试。",
+        CoreWebView2WebErrorStatus.HostNameNotResolved => "无法解析网站地址，请检查网络连接。",
+        CoreWebView2WebErrorStatus.Disconnected => "网络连接已断开，请恢复网络后重试。",
+        CoreWebView2WebErrorStatus.ConnectionAborted or CoreWebView2WebErrorStatus.ConnectionReset =>
+            "网站中断了连接，请稍后重试。",
+        CoreWebView2WebErrorStatus.CannotConnect => "无法连接到网站，请稍后重试。",
+        CoreWebView2WebErrorStatus.OperationCanceled => "网页导航被取消，请重试。",
+        CoreWebView2WebErrorStatus.Unknown => "浏览器未能完成网页加载，可能是网站临时限制，请稍后重试。",
+        _ => $"浏览器加载网页失败（{status}），请稍后重试。"
+    };
 
     private async Task<string> ReadHtmlAsync()
     {

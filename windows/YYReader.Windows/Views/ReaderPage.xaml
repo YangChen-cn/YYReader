@@ -147,9 +147,6 @@
                             <FontIcon Glyph="&#xE712;" FontSize="16" />
                             <Button.Flyout>
                                 <MenuFlyout>
-                                    <MenuFlyoutItem Text="上一章" Click="PreviousChapter_Click" />
-                                    <MenuFlyoutItem Text="下一章" Click="NextChapter_Click" />
-                                    <MenuFlyoutSeparator />
                                     <MenuFlyoutItem Text="刷新目录" Click="RefreshCatalog_Click" />
                                     <MenuFlyoutSeparator />
                                     <MenuFlyoutItem Text="下载当前章节" Click="DownloadCurrentChapter_Click" />

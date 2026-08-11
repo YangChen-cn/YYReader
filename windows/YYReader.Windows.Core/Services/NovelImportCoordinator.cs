@@ -18,7 +18,7 @@ public sealed class NovelImportCoordinator
     {
         _loader = loader;
         _parser = parser ?? new NovelParserRegistry();
-        _catalogRefreshTimeout = catalogRefreshTimeout ?? TimeSpan.FromSeconds(180);
+        _catalogRefreshTimeout = catalogRefreshTimeout ?? TimeSpan.FromMinutes(10);
     }
 
     public async Task<NovelImportResult> ImportNovelAsync(Uri inputUrl, CancellationToken cancellationToken = default)
@@ -223,7 +223,10 @@ public sealed class NovelImportCoordinator
             }
 
             onPageStarted?.Invoke(visited.Count);
-            var document = await _loader.LoadAsync(nextUrl, cancellationToken).ConfigureAwait(false);
+            var document = await LoadCatalogDocumentWithRetryAsync(
+                nextUrl,
+                visited.Count,
+                cancellationToken).ConfigureAwait(false);
             CheckCatalogDeadline(stopwatch, cancellationToken);
             var page = await ParseCatalogPageAsync(document, cancellationToken).ConfigureAwait(false);
             if (title.Length == 0) title = page.Title;
@@ -243,6 +246,42 @@ public sealed class NovelImportCoordinator
         var ordered = chapters.Select((seed, index) => seed with { SortIndex = index + 1 }).ToArray();
         return new ParsedBookCatalog(title, author, ordered, null);
     }
+
+    private async Task<LoadedHtml> LoadCatalogDocumentWithRetryAsync(
+        Uri url,
+        int pageNumber,
+        CancellationToken cancellationToken)
+    {
+        const int maximumAttempts = 2;
+        for (var attempt = 1; attempt <= maximumAttempts; attempt++)
+        {
+            try
+            {
+                return await _loader.LoadAsync(url, cancellationToken).ConfigureAwait(false);
+            }
+            catch (HtmlLoadException ex) when (attempt < maximumAttempts && IsTransientCatalogFailure(ex))
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
+            }
+            catch (HtmlLoadException ex)
+            {
+                throw CatalogPageFailure(pageNumber, ex);
+            }
+        }
+
+        throw new InvalidOperationException("目录分页重试状态异常。");
+    }
+
+    private static bool IsTransientCatalogFailure(HtmlLoadException exception) =>
+        exception.Kind is HtmlLoadErrorKind.InvalidResponse or HtmlLoadErrorKind.RequestTimedOut
+        || (exception.Kind == HtmlLoadErrorKind.HttpStatus && exception.StatusCode >= 500);
+
+    private static HtmlLoadException CatalogPageFailure(int pageNumber, HtmlLoadException exception) =>
+        new(
+            exception.Kind,
+            $"目录第 {pageNumber} 页加载失败：{exception.Message}",
+            exception.StatusCode,
+            exception.RetryAfterSeconds);
 
     private async Task<ParsedBookCatalog?> StaticCatalogAsync(LoadedHtml document, CancellationToken cancellationToken)
     {

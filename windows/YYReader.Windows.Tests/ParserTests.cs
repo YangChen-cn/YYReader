@@ -94,6 +94,36 @@ public sealed class ParserTests
         Assert.IsFalse(HtmlChallengeDetector.IsChallenge("<article>普通正文</article>"));
     }
 
+    [TestMethod]
+    public async Task CatalogRefreshRetriesOneTransientPageFailure()
+    {
+        var first = new Uri("https://example.com/book/");
+        var second = new Uri("https://example.com/book/page-2/");
+        var loader = new TransientCatalogLoader(first, second, failSecondPageOnce: true);
+        var coordinator = new NovelImportCoordinator(loader);
+
+        var catalog = await coordinator.RefreshCatalogAsync(first);
+
+        Assert.AreEqual(2, catalog.Chapters.Count);
+        Assert.AreEqual(2, loader.SecondPageAttempts);
+    }
+
+    [TestMethod]
+    public async Task CatalogRefreshFailureIncludesPageNumberAndFriendlyCause()
+    {
+        var first = new Uri("https://example.com/book/");
+        var second = new Uri("https://example.com/book/page-2/");
+        var loader = new TransientCatalogLoader(first, second, failSecondPageOnce: false);
+        var coordinator = new NovelImportCoordinator(loader);
+
+        var error = await Assert.ThrowsExceptionAsync<HtmlLoadException>(
+            () => coordinator.RefreshCatalogAsync(first));
+
+        StringAssert.Contains(error.Message, "目录第 2 页加载失败");
+        StringAssert.Contains(error.Message, "浏览器未能完成网页加载");
+        Assert.AreEqual(2, loader.SecondPageAttempts);
+    }
+
     private static string ReadFixture(string name) =>
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", $"{name}.html"));
 
@@ -115,5 +145,45 @@ public sealed class ParserTests
             }
             return Task.FromResult(new LoadedHtml(url, url, html, HtmlRetrievalKind.UrlSession));
         }
+    }
+
+    private sealed class TransientCatalogLoader(Uri first, Uri second, bool failSecondPageOnce) : IHtmlDocumentLoader
+    {
+        public int SecondPageAttempts { get; private set; }
+
+        public void BeginOperation()
+        {
+        }
+
+        public Task<LoadedHtml> LoadAsync(Uri url, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (url == first)
+            {
+                return Task.FromResult(new LoadedHtml(url, url, CatalogPage(
+                    "<a href='/book/1.html'>第1章</a>",
+                    "<a href='/book/page-2/'>下一页</a>"), HtmlRetrievalKind.UrlSession));
+            }
+
+            SecondPageAttempts++;
+            if (url != second || !failSecondPageOnce || SecondPageAttempts == 1)
+            {
+                throw new HtmlLoadException(
+                    HtmlLoadErrorKind.InvalidResponse,
+                    "浏览器未能完成网页加载，可能是网站临时限制，请稍后重试。");
+            }
+
+            return Task.FromResult(new LoadedHtml(url, url, CatalogPage(
+                "<a href='/book/2.html'>第2章</a>",
+                ""), HtmlRetrievalKind.UrlSession));
+        }
+
+        private static string CatalogPage(string chapters, string navigation) => $$"""
+            <html><body>
+              <h1>分页测试</h1>
+              <ul class="section-list">{{chapters}}</ul>
+              {{navigation}}
+            </body></html>
+            """;
     }
 }
