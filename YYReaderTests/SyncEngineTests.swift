@@ -371,6 +371,74 @@ struct SyncEngineTests {
     }
 
     @Test @MainActor
+    func folderSyncDoesNotReplaceActiveContinuousReaderSession() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        context.autosaveEnabled = false
+        let book = Book(
+            title: "阅读中的书",
+            author: "作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/book/active/",
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+        let first = Chapter(
+            sourceURL: "https://example.com/book/active/1.html",
+            title: "第1章",
+            sortIndex: 1,
+            bodyText: "第一章正文",
+            cachedAt: Date(timeIntervalSince1970: 100),
+            lastReadAt: Date(timeIntervalSince1970: 100),
+            topParagraphIndex: 0,
+            readingProgress: 0,
+            book: book
+        )
+        let second = Chapter(
+            sourceURL: "https://example.com/book/active/2.html",
+            title: "第2章",
+            sortIndex: 2,
+            bodyText: "第二章第一段\n\n第二章第二段",
+            cachedAt: Date(timeIntervalSince1970: 100),
+            book: book
+        )
+        book.chapters = [first, second]
+        book.currentChapterID = first.id
+        context.insert(book)
+        context.insert(first)
+        context.insert(second)
+        try context.save()
+        let store = LibraryStore(
+            modelContext: context,
+            coordinator: NovelImportCoordinator(loader: MockHTMLLoader(documents: [:]))
+        )
+        store.restoreSelection(bookID: book.id, chapterID: first.id)
+        store.configureContinuousReading(true)
+        store.prepareContinuousChapterAttachment(after: first.id)
+        let entriesBeforeSync = store.readerSession.entries.map(\.chapter.id)
+        let incoming = SyncBookRecord(
+            sourceURL: book.sourceBookURL,
+            title: book.title,
+            author: book.author,
+            currentChapterURL: second.sourceURL,
+            currentChapterIndex: second.sortIndex,
+            paragraphIndex: 1,
+            progress: 1,
+            lastReadAt: Date(timeIntervalSince1970: 200),
+            updatedAt: book.updatedAt
+        )
+
+        try store.applySyncRecords([incoming])
+
+        // Persist the newer cross-device position for the next restoration, but
+        // never replace the live SwiftUI scroll hierarchy while the user reads.
+        #expect(book.currentChapterID == second.id)
+        #expect(store.selectedChapterID == first.id)
+        #expect(store.readerSession.entries.map(\.chapter.id) == entriesBeforeSync)
+        #expect(!context.hasChanges)
+    }
+
+    @Test @MainActor
     func libraryStoreAppliesTombstoneIdempotently() throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)

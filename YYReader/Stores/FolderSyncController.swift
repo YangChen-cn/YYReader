@@ -18,6 +18,8 @@ final class FolderSyncController {
     private var windowsChangeCheckTask: Task<Void, Never>?
     private var lastWindowsFileSignature: SyncFileSignature?
     private var syncAgainAfterCurrentRun = false
+    private var debounceShouldApplyMergedRecords = false
+    private var queuedSyncShouldApplyMergedRecords = false
 
     var isEnabled: Bool {
         didSet {
@@ -88,11 +90,11 @@ final class FolderSyncController {
     }
 
     func scheduleLocalChange() {
-        scheduleSync(after: .seconds(1.5))
+        scheduleSync(after: .seconds(1.5), applyMergedRecords: false)
     }
 
     func progressDidPersist() {
-        scheduleSync(after: .seconds(1.5))
+        scheduleSync(after: .seconds(1.5), applyMergedRecords: false)
     }
 
     func recordDeletion(_ record: SyncBookRecord) {
@@ -105,14 +107,15 @@ final class FolderSyncController {
         guard isEnabled else { return }
         debounceTask?.cancel()
         debounceTask = nil
-        launchSync()
+        debounceShouldApplyMergedRecords = false
+        launchSync(applyMergedRecords: true)
     }
 
     private func activate() {
         restoreFolderAccess()
         startPolling()
         guard store != nil, selectedFolderURL != nil else { return }
-        scheduleSync(after: .zero)
+        scheduleSync(after: .zero, applyMergedRecords: true)
     }
 
     private func deactivate() {
@@ -127,6 +130,8 @@ final class FolderSyncController {
         monitor.stop()
         isSyncing = false
         syncAgainAfterCurrentRun = false
+        debounceShouldApplyMergedRecords = false
+        queuedSyncShouldApplyMergedRecords = false
         stopSecurityScopedAccess()
     }
 
@@ -160,8 +165,9 @@ final class FolderSyncController {
         didStartSecurityScopedAccess = false
     }
 
-    private func scheduleSync(after delay: Duration) {
+    private func scheduleSync(after delay: Duration, applyMergedRecords: Bool) {
         guard isEnabled else { return }
+        debounceShouldApplyMergedRecords = debounceShouldApplyMergedRecords || applyMergedRecords
         debounceTask?.cancel()
         debounceTask = Task { [weak self] in
             do {
@@ -171,32 +177,39 @@ final class FolderSyncController {
             }
             guard let self, !Task.isCancelled else { return }
             self.debounceTask = nil
-            self.launchSync()
+            let shouldApplyMergedRecords = self.debounceShouldApplyMergedRecords
+            self.debounceShouldApplyMergedRecords = false
+            self.launchSync(applyMergedRecords: shouldApplyMergedRecords)
         }
     }
 
-    private func launchSync() {
+    private func launchSync(applyMergedRecords: Bool) {
         guard isEnabled, selectedFolderURL != nil, store != nil else { return }
         guard syncTask == nil else {
             syncAgainAfterCurrentRun = true
+            queuedSyncShouldApplyMergedRecords = queuedSyncShouldApplyMergedRecords || applyMergedRecords
             return
         }
         isSyncing = true
         syncTask = Task { [weak self] in
-            await self?.runSyncLoop()
+            await self?.runSyncLoop(applyMergedRecords: applyMergedRecords)
         }
     }
 
-    private func runSyncLoop() async {
-        repeat {
+    private func runSyncLoop(applyMergedRecords: Bool) async {
+        var shouldApplyMergedRecords = applyMergedRecords
+        while !Task.isCancelled {
             syncAgainAfterCurrentRun = false
-            await performSingleSync()
-        } while syncAgainAfterCurrentRun && !Task.isCancelled
+            queuedSyncShouldApplyMergedRecords = false
+            await performSingleSync(applyMergedRecords: shouldApplyMergedRecords)
+            guard syncAgainAfterCurrentRun else { break }
+            shouldApplyMergedRecords = queuedSyncShouldApplyMergedRecords
+        }
         isSyncing = false
         syncTask = nil
     }
 
-    private func performSingleSync() async {
+    private func performSingleSync(applyMergedRecords: Bool) async {
         guard let selectedFolderURL, let store else { return }
         let chapterRanksByBook = store.syncChapterRanks()
         let localBooks = SyncMerger.merge(
@@ -210,7 +223,9 @@ final class FolderSyncController {
                 chapterRanksByBook: chapterRanksByBook
             )
             guard !Task.isCancelled, isEnabled else { return }
-            try store.applySyncRecords(result.books)
+            if applyMergedRecords {
+                try store.applySyncRecords(result.books)
+            }
             tombstones = Dictionary(
                 uniqueKeysWithValues: result.books
                     .filter(\.isDeleted)
@@ -219,7 +234,11 @@ final class FolderSyncController {
             persistTombstones()
             lastSyncAt = result.synchronizedAt
             defaults.set(result.synchronizedAt, forKey: SyncPreferenceKeys.lastSyncAt)
-            lastWindowsFileSignature = result.windowsFileSignature
+            // A local-only export must not acknowledge a Windows change before
+            // that remote snapshot has actually been applied to the store.
+            if applyMergedRecords {
+                lastWindowsFileSignature = result.windowsFileSignature
+            }
             errorMessage = nil
             startDirectoryMonitor()
         } catch is CancellationError {

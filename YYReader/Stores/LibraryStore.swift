@@ -533,6 +533,10 @@ final class LibraryStore {
 
     func applySyncRecords(_ records: [SyncBookRecord]) throws {
         let previousBookID = selectedBookID
+        let previousChapterID = selectedChapterID
+        let canPreserveReaderSession = previousChapterID.map { chapterID in
+            readerSession.entries.contains { $0.chapter.id == chapterID }
+        } ?? false
         let chapterRanksByBook = syncChapterRanks()
         let mergedRecords = SyncMerger.merge(
             syncRecords() + records,
@@ -570,7 +574,10 @@ final class LibraryStore {
                 bookByCanonicalURL[key] = book
             }
 
-            if record.updatedAt >= book.updatedAt {
+            if record.updatedAt >= book.updatedAt,
+               (book.title != record.title
+                || book.author != record.author
+                || book.updatedAt != record.updatedAt) {
                 book.title = record.title
                 book.author = record.author
                 book.updatedAt = record.updatedAt
@@ -583,8 +590,12 @@ final class LibraryStore {
         refreshBooks()
         selectedBookID = books.contains { $0.id == previousBookID } ? previousBookID : books.first?.id
         rebuildSelectedBookChapters()
-        selectInitialChapter(preferredID: nil)
-        refreshReaderSession()
+        selectInitialChapter(preferredID: previousChapterID)
+        let didPreserveSelection = selectedBookID == previousBookID
+            && selectedChapterID == previousChapterID
+        if !didPreserveSelection || !canPreserveReaderSession {
+            refreshReaderSession()
+        }
     }
 
     func dismissError() {
@@ -1055,9 +1066,18 @@ final class LibraryStore {
                 guard incomingIndex > currentChapter.sortIndex else { return }
             }
         }
-        chapter.topParagraphIndex = max(record.paragraphIndex ?? 0, 0)
-        chapter.readingProgress = min(max(record.progress ?? 0, 0), 1)
-        chapter.lastReadAt = [chapter.lastReadAt, record.lastReadAt].compactMap { $0 }.max()
+        let incomingParagraph = max(record.paragraphIndex ?? 0, 0)
+        let incomingProgress = min(max(record.progress ?? 0, 0), 1)
+        let mergedLastReadAt = [chapter.lastReadAt, record.lastReadAt].compactMap { $0 }.max()
+        guard chapter.topParagraphIndex != incomingParagraph
+                || chapter.readingProgress != incomingProgress
+                || chapter.lastReadAt != mergedLastReadAt
+                || book.currentChapterID != chapter.id else {
+            return
+        }
+        chapter.topParagraphIndex = incomingParagraph
+        chapter.readingProgress = incomingProgress
+        chapter.lastReadAt = mergedLastReadAt
         book.currentChapterID = chapter.id
     }
 
