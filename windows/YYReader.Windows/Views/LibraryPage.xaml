@@ -4,13 +4,9 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:YYReader.Windows.Core.Models">
     <Grid Background="Transparent" KeyDown="LibraryPage_KeyDown" IsTabStop="True">
-        <Grid MaxWidth="1080" HorizontalAlignment="Stretch" Padding="{StaticResource YYPagePadding}"
-              RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="20">
-            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                <StackPanel Spacing="2">
-                    <TextBlock Text="YYReader" FontSize="28" FontWeight="SemiBold" />
-                    <TextBlock Text="安静地读一本书" Style="{StaticResource YYSecondaryTextStyle}" />
-                </StackPanel>
+        <Grid x:Name="LibraryShell" MaxWidth="1080" HorizontalAlignment="Stretch" Padding="{StaticResource YYPagePadding}"
+              RowDefinitions="Auto,Auto,*,Auto" RowSpacing="20">
+            <Grid x:Name="LibraryToolbar" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                 <Button x:Name="AddBookButton" Grid.Column="1" Content="＋ 添加小说"
                         Style="{StaticResource AccentButtonStyle}">
                     <Button.Flyout>
@@ -38,7 +34,7 @@
                 </Button>
             </Grid>
 
-            <StackPanel Grid.Row="1" Spacing="10">
+            <StackPanel Grid.Row="0" Spacing="10">
                 <TextBlock Text="继续阅读" Style="{StaticResource YYSectionTitleStyle}" />
                 <Border x:Name="FeaturedBookPanel" Padding="20" CornerRadius="{StaticResource YYCornerMedium}"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
@@ -56,9 +52,9 @@
                 </Border>
             </StackPanel>
 
-            <TextBlock Grid.Row="2" Text="全部小说" Style="{StaticResource YYSectionTitleStyle}" />
+            <TextBlock Grid.Row="1" Text="全部小说" Style="{StaticResource YYSectionTitleStyle}" />
 
-            <Grid Grid.Row="3">
+            <Grid Grid.Row="2">
                 <ListView x:Name="BookListView" ItemsSource="{x:Bind Store.Books, Mode=OneWay}"
                           SelectionMode="Single" IsItemClickEnabled="False"
                           SelectionChanged="BookListView_SelectionChanged"
@@ -99,7 +95,7 @@
                 </StackPanel>
             </Grid>
 
-            <InfoBar x:Name="StatusInfoBar" Grid.Row="4" IsOpen="False" IsClosable="True"
+            <InfoBar x:Name="StatusInfoBar" Grid.Row="3" IsOpen="False" IsClosable="True"
                      Closed="StatusInfoBar_Closed" />
         </Grid>
     </Grid>

@@ -49,6 +49,8 @@ public sealed partial class LibraryPage : Page
 
     private void LibraryPage_Loaded(object sender, RoutedEventArgs e)
     {
+        if (LibraryToolbar.Parent is Panel parent) parent.Children.Remove(LibraryToolbar);
+        if (_window is MainWindow mainWindow) mainWindow.SetPageTitleBar(LibraryToolbar, showBrand: true);
         if (!_isSubscribed)
         {
             Store.PropertyChanged += Store_PropertyChanged;
@@ -63,6 +65,7 @@ public sealed partial class LibraryPage : Page
 
     private void LibraryPage_Unloaded(object sender, RoutedEventArgs e)
     {
+        if (_window is MainWindow mainWindow) mainWindow.ClearPageTitleBar(LibraryToolbar);
         if (!_isSubscribed) return;
         Store.PropertyChanged -= Store_PropertyChanged;
         Store.Books.CollectionChanged -= Books_CollectionChanged;

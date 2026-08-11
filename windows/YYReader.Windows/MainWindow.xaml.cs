@@ -70,6 +70,19 @@ public sealed partial class MainWindow : Window
         ContentFrame.Content = _libraryPage;
     }
 
+    public void SetPageTitleBar(UIElement content, bool showBrand)
+    {
+        PageTitleBarContent.Content = content;
+        TitleBarBrand.Visibility = showBrand ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public void ClearPageTitleBar(UIElement content)
+    {
+        if (!ReferenceEquals(PageTitleBarContent.Content, content)) return;
+        PageTitleBarContent.Content = null;
+        TitleBarBrand.Visibility = Visibility.Visible;
+    }
+
     private async Task<bool> ShowVerificationAsync(Uri url)
     {
         _verificationCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);

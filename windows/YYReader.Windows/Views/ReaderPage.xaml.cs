@@ -57,6 +57,8 @@ public sealed partial class ReaderPage : Page
 
     private async void ReaderPage_Loaded(object sender, RoutedEventArgs e)
     {
+        if (ReaderToolbar.Parent is Panel parent) parent.Children.Remove(ReaderToolbar);
+        if (_window is MainWindow titleWindow) titleWindow.SetPageTitleBar(ReaderToolbar, showBrand: false);
         _preferences = await _preferencesStore.LoadAsync();
         ApplyPreferences();
         Store.ConfigureNextChapterPrefetch(_preferences.PrefetchNextChapter);
@@ -74,6 +76,7 @@ public sealed partial class ReaderPage : Page
 
     private async void ReaderPage_Unloaded(object sender, RoutedEventArgs e)
     {
+        if (_window is MainWindow mainWindow) mainWindow.ClearPageTitleBar(ReaderToolbar);
         _progressTimer.Stop();
         _offlineDownloadManager.StateChanged -= OfflineDownloadManager_StateChanged;
         CommitVisiblePosition();

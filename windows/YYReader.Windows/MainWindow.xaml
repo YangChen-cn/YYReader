@@ -5,9 +5,13 @@
     xmlns:controls="using:Microsoft.UI.Xaml.Controls"
     Title="YYReader">
     <Grid x:Name="RootGrid" RowDefinitions="Auto,*">
-        <Grid x:Name="AppTitleBar" Height="36" Padding="12,0" ColumnDefinitions="Auto,Auto,*">
-            <Image Source="/Assets/AppIcon.png" Width="18" Height="18" VerticalAlignment="Center" />
-            <TextBlock Grid.Column="1" Text="YYReader" Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" />
+        <Grid x:Name="AppTitleBar" Height="44" Padding="12,0,8,0" ColumnDefinitions="Auto,*">
+            <StackPanel x:Name="TitleBarBrand" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Image Source="/Assets/AppIcon.png" Width="18" Height="18" />
+                <TextBlock Text="YYReader" VerticalAlignment="Center" FontWeight="SemiBold" />
+            </StackPanel>
+            <ContentPresenter x:Name="PageTitleBarContent" Grid.Column="1"
+                              HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" />
         </Grid>
         <Frame x:Name="ContentFrame" Grid.Row="1" />
 
