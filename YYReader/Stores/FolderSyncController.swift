@@ -217,35 +217,48 @@ final class FolderSyncController {
             chapterRanksByBook: chapterRanksByBook
         )
         do {
+            if !applyMergedRecords {
+                let publishedAt = try await engine.publishLocal(
+                    selectedFolder: selectedFolderURL,
+                    localBooks: localBooks
+                )
+                guard !Task.isCancelled, isEnabled else { return }
+                tombstones = Dictionary(
+                    uniqueKeysWithValues: localBooks
+                        .filter(\.isDeleted)
+                        .map { ($0.canonicalSourceURL, $0) }
+                )
+                finishSuccessfulOperation(at: publishedAt)
+                return
+            }
+
             let result = try await engine.synchronize(
                 selectedFolder: selectedFolderURL,
                 localBooks: localBooks,
                 chapterRanksByBook: chapterRanksByBook
             )
             guard !Task.isCancelled, isEnabled else { return }
-            if applyMergedRecords {
-                try store.applySyncRecords(result.books)
-            }
+            try store.applySyncRecords(result.books)
             tombstones = Dictionary(
                 uniqueKeysWithValues: result.books
                     .filter(\.isDeleted)
                     .map { ($0.canonicalSourceURL, $0) }
             )
-            persistTombstones()
-            lastSyncAt = result.synchronizedAt
-            defaults.set(result.synchronizedAt, forKey: SyncPreferenceKeys.lastSyncAt)
-            // A local-only export must not acknowledge a Windows change before
-            // that remote snapshot has actually been applied to the store.
-            if applyMergedRecords {
-                lastWindowsFileSignature = result.windowsFileSignature
-            }
-            errorMessage = nil
-            startDirectoryMonitor()
+            lastWindowsFileSignature = result.windowsFileSignature
+            finishSuccessfulOperation(at: result.synchronizedAt)
         } catch is CancellationError {
             return
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func finishSuccessfulOperation(at date: Date) {
+        persistTombstones()
+        lastSyncAt = date
+        defaults.set(date, forKey: SyncPreferenceKeys.lastSyncAt)
+        errorMessage = nil
+        startDirectoryMonitor()
     }
 
     private func startDirectoryMonitor() {
@@ -283,7 +296,6 @@ final class FolderSyncController {
             do {
                 let signature = try await self.engine.windowsFileSignature(selectedFolder: selectedFolderURL)
                 if signature != self.lastWindowsFileSignature {
-                    self.lastWindowsFileSignature = signature
                     self.syncNow()
                 }
             } catch {

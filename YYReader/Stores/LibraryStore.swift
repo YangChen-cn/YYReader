@@ -20,6 +20,8 @@ final class LibraryStore {
     private var pendingContinuousAttachmentChapterID: UUID?
     private var isReaderScrolling = false
     private var hasPendingProgressChanges = false
+    private var isReaderPresented = false
+    private var deferredRemoteTombstones: [String: SyncBookRecord] = [:]
 
     let readerSession = ContinuousReaderSession()
     let offlineDownloads: OfflineDownloadManager
@@ -75,6 +77,25 @@ final class LibraryStore {
         refreshReaderSession()
         prefetchNextContinuousChapterIfNeeded()
         requestReaderScroll(.restore)
+    }
+
+    func beginReaderPresentation() {
+        isReaderPresented = true
+    }
+
+    func endReaderPresentation() {
+        isReaderPresented = false
+        guard !deferredRemoteTombstones.isEmpty else { return }
+        let records = Array(deferredRemoteTombstones.values)
+        deferredRemoteTombstones.removeAll()
+        do {
+            try applySyncRecords(records)
+        } catch {
+            for record in records {
+                deferredRemoteTombstones[record.canonicalSourceURL] = record
+            }
+            presentedError = PresentedError(message: "应用延迟的同步删除失败：\(error.localizedDescription)")
+        }
     }
 
     func selectBook(_ id: UUID?) {
@@ -551,10 +572,16 @@ final class LibraryStore {
             let key = record.canonicalSourceURL
             if record.isDeleted {
                 if let book = bookByCanonicalURL.removeValue(forKey: key) {
+                    if isReaderPresented, book.id == selectedBookID {
+                        deferredRemoteTombstones[key] = record
+                        bookByCanonicalURL[key] = book
+                        continue
+                    }
                     modelContext.delete(book)
                 }
                 continue
             }
+            deferredRemoteTombstones.removeValue(forKey: key)
 
             let book: Book
             if let existing = bookByCanonicalURL[key] {

@@ -11,6 +11,23 @@ actor SyncEngine {
         self.fileManager = fileManager
     }
 
+    func publishLocal(
+        selectedFolder: URL,
+        localBooks: [SyncBookRecord],
+        now: Date = .now
+    ) throws -> Date {
+        let directory = selectedFolder.appendingPathComponent(Self.directoryName, isDirectory: true)
+        try ensureDirectory(directory)
+
+        let macURL = directory.appendingPathComponent(Self.macFileName)
+        let previousMac = try readSnapshotIfPresent(at: macURL, expectedDevice: .mac)
+        let snapshot = SyncSnapshot(device: .mac, updatedAt: now, books: localBooks)
+        if previousMac?.version != SyncSnapshot.currentVersion || previousMac?.books != localBooks {
+            try atomicWrite(try SyncSnapshotCodec.encode(snapshot), to: macURL)
+        }
+        return now
+    }
+
     func synchronize(
         selectedFolder: URL,
         localBooks: [SyncBookRecord],

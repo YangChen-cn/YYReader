@@ -138,6 +138,7 @@ struct LibraryRootView: View {
 
     private func enterReader() {
         guard store.selectedChapter != nil else { return }
+        store.beginReaderPresentation()
         readerColumnVisibility = .detailOnly
         isReading = true
     }
@@ -146,6 +147,7 @@ struct LibraryRootView: View {
         store.resetContinuousReaderWindow()
         libraryColumnVisibility = .all
         isReading = false
+        store.endReaderPresentation()
         showingAppearancePopover = false
         showingAppearanceInspector = false
         showingDownloadProgress = false

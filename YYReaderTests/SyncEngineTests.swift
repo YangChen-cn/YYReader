@@ -232,6 +232,37 @@ struct SyncEngineTests {
     }
 
     @Test
+    func publishLocalDoesNotReadOrParseWindowsSnapshot() async throws {
+        let selectedFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("YYReaderLocalPublishTests-\(UUID().uuidString)", isDirectory: true)
+        let syncDirectory = selectedFolder.appendingPathComponent(SyncEngine.directoryName, isDirectory: true)
+        try FileManager.default.createDirectory(at: syncDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: selectedFolder) }
+        let windowsURL = syncDirectory.appendingPathComponent(SyncEngine.windowsFileName)
+        let invalidWindowsData = Data("{".utf8)
+        try invalidWindowsData.write(to: windowsURL)
+        let local = SyncBookRecord(
+            sourceURL: "https://example.com/local/",
+            title: "Mac 本地书籍",
+            author: "作者",
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+        let engine = SyncEngine()
+
+        let publishedAt = try await engine.publishLocal(
+            selectedFolder: selectedFolder,
+            localBooks: [local],
+            now: Date(timeIntervalSince1970: 200)
+        )
+
+        #expect(publishedAt == Date(timeIntervalSince1970: 200))
+        #expect(try Data(contentsOf: windowsURL) == invalidWindowsData)
+        let macURL = syncDirectory.appendingPathComponent(SyncEngine.macFileName)
+        let snapshot = try SyncSnapshotCodec.decode(Data(contentsOf: macURL), expectedDevice: .mac)
+        #expect(snapshot.books == [local])
+    }
+
+    @Test
     func unreadableWindowsSnapshotDoesNotOverwriteMacSnapshot() async throws {
         let selectedFolder = FileManager.default.temporaryDirectory
             .appendingPathComponent("YYReaderSyncFailureTests-\(UUID().uuidString)", isDirectory: true)
@@ -249,6 +280,18 @@ struct SyncEngineTests {
             _ = try await engine.synchronize(selectedFolder: selectedFolder, localBooks: [])
         }
         #expect(try Data(contentsOf: macURL) == originalMacData)
+
+        let windowsBook = SyncBookRecord(
+            sourceURL: "https://example.com/retry/",
+            title: "重试成功",
+            author: "作者",
+            updatedAt: Date(timeIntervalSince1970: 200)
+        )
+        try SyncSnapshotCodec.encode(SyncSnapshot(device: .windows, books: [windowsBook]))
+            .write(to: windowsURL)
+        let retried = try await engine.synchronize(selectedFolder: selectedFolder, localBooks: [])
+        #expect(retried.books == [windowsBook])
+        #expect(retried.windowsFileSignature != nil)
     }
 
     @Test @MainActor
@@ -470,6 +513,62 @@ struct SyncEngineTests {
         try store.applySyncRecords([tombstone])
 
         #expect(store.books.isEmpty)
+        #expect(!context.hasChanges)
+    }
+
+    @Test @MainActor
+    func remoteTombstoneWaitsUntilActiveReaderExits() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        context.autosaveEnabled = false
+        let updatedAt = Date(timeIntervalSince1970: 100)
+        let book = Book(
+            title: "正在阅读",
+            author: "作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/reading/",
+            updatedAt: updatedAt
+        )
+        let chapter = Chapter(
+            sourceURL: "https://example.com/reading/1.html",
+            title: "第1章",
+            sortIndex: 1,
+            bodyText: "正文",
+            cachedAt: updatedAt,
+            book: book
+        )
+        book.chapters = [chapter]
+        book.currentChapterID = chapter.id
+        context.insert(book)
+        context.insert(chapter)
+        try context.save()
+        let store = LibraryStore(
+            modelContext: context,
+            coordinator: NovelImportCoordinator(loader: MockHTMLLoader(documents: [:]))
+        )
+        store.restoreSelection(bookID: book.id, chapterID: chapter.id)
+        store.beginReaderPresentation()
+        let tombstone = SyncBookRecord(
+            sourceURL: book.sourceBookURL,
+            title: book.title,
+            author: book.author,
+            updatedAt: updatedAt,
+            deletedAt: Date(timeIntervalSince1970: 200)
+        )
+
+        try store.applySyncRecords([tombstone])
+
+        #expect(store.books.map(\.id) == [book.id])
+        #expect(store.selectedChapterID == chapter.id)
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapter.id])
+        #expect(!context.hasChanges)
+
+        store.endReaderPresentation()
+
+        #expect(store.books.isEmpty)
+        #expect(store.selectedChapterID == nil)
+        #expect(store.readerSession.entries.isEmpty)
         #expect(!context.hasChanges)
     }
 }

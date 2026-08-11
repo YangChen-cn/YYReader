@@ -135,7 +135,7 @@ xcodebuild test \
 - 写入必须使用同目录临时文件和原子替换；文件夹暂不可访问、文件无效或版本不支持时不得删除、覆盖或清空本地书架。
 - 同步 I/O、JSON 编解码与合并必须在独立 actor 中运行，不得进入 Reader 滚动热路径。阅读进度先完成本地 debounce 保存，再延迟 1～2 秒触发同步。
 - 监听对端文件变化，只有对端文件签名改变时才读取合并，并以低频轮询兜底；合并内容未变时不重写本端文件，重复同步必须幂等。
-- 本地书架和进度变化只导出 Mac 快照，不反向重建正在阅读的 Reader session；远端合并落库时也必须保留当前屏幕选择和滚动视图结构，新位置在下次恢复时生效。
+- 本地书架和进度变化必须走独立 `publishLocal()`，只写 Mac 快照，不读取/解析 Windows 文件，不反向重建正在阅读的 Reader session。对端 signature 仅在完整同步读取、合并、落库成功后确认，失败不得阻断 watcher/轮询重试。当前阅读书的远端 tombstone 必须延迟到退出 Reader 或其他安全时机再刷新 UI。
 - 手动书架传输遵循 `shared/bookshelf-transfer/bookshelf-transfer-v1.schema.json`，兼容 Windows 的 `.yyreader`、普通 JSON 和剪贴板文本；导入前预览新书、已存在、无效与重复条目。
 - 手动导入按 canonical `sourceURL` 更新或新建书籍，保留本地正文缓存；导出仅包含书籍身份、元数据和阅读位置。
 
