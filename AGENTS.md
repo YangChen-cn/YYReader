@@ -130,11 +130,11 @@ xcodebuild test \
 - 文件夹同步不得绑定或硬编码 iCloud、Dropbox、OneDrive、Syncthing 等路径；用户必须通过 `NSOpenPanel` 选择任意共享文件夹。
 - App Sandbox 下保存并恢复 security-scoped bookmark，访问期间配对调用 `startAccessingSecurityScopedResource()` 与 `stopAccessingSecurityScopedResource()`。
 - 同步目录固定为 `YYReaderSync/`。Mac 只写 `mac.json`、读取 `windows.json`；Windows 端反向操作。
-- 两端遵循 `shared/sync/sync-snapshot-v1.schema.json`。书籍按 canonical `sourceURL` 合并，阅读位置以 `lastReadAt` 为准，元数据以 `updatedAt` 为准，删除以 `deletedAt` tombstone 为准。
+- 两端遵循 `shared/sync/sync-snapshot-v2.schema.json`，并允许读取旧 v1。书籍按 canonical `sourceURL` 合并；阅读位置先按 `currentChapterIndex` 选更后章节，同章只接受更大的段落索引/进度，`lastReadAt` 不参与位置决策；元数据以 `updatedAt` 为准，删除以 `deletedAt` tombstone 为准。
 - 同步文件不得包含正文缓存、Cookie、WebKit 状态、验证令牌或其他隐私数据。
 - 写入必须使用同目录临时文件和原子替换；文件夹暂不可访问、文件无效或版本不支持时不得删除、覆盖或清空本地书架。
 - 同步 I/O、JSON 编解码与合并必须在独立 actor 中运行，不得进入 Reader 滚动热路径。阅读进度先完成本地 debounce 保存，再延迟 1～2 秒触发同步。
-- 监听对端文件变化，并以低频轮询兜底；重复同步必须幂等。
+- 监听对端文件变化，只有对端文件签名改变时才读取合并，并以低频轮询兜底；合并内容未变时不重写本端文件，重复同步必须幂等。
 - 手动书架传输遵循 `shared/bookshelf-transfer/bookshelf-transfer-v1.schema.json`，兼容 Windows 的 `.yyreader`、普通 JSON 和剪贴板文本；导入前预览新书、已存在、无效与重复条目。
 - 手动导入按 canonical `sourceURL` 更新或新建书籍，保留本地正文缓存；导出仅包含书籍身份、元数据和阅读位置。
 

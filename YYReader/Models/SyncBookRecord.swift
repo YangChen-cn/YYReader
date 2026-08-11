@@ -5,6 +5,7 @@ struct SyncBookRecord: Codable, Equatable, Sendable {
     var title: String
     var author: String
     var currentChapterURL: String?
+    var currentChapterIndex: Int?
     var paragraphIndex: Int?
     var progress: Double?
     var lastReadAt: Date?
@@ -13,6 +14,7 @@ struct SyncBookRecord: Codable, Equatable, Sendable {
 
     init(
         transfer: BookshelfTransferBook,
+        currentChapterIndex: Int? = nil,
         lastReadAt: Date?,
         updatedAt: Date,
         deletedAt: Date? = nil
@@ -21,6 +23,7 @@ struct SyncBookRecord: Codable, Equatable, Sendable {
         title = transfer.title
         author = transfer.author
         currentChapterURL = transfer.currentChapterURL
+        self.currentChapterIndex = currentChapterIndex
         paragraphIndex = transfer.paragraphIndex
         progress = transfer.progress
         self.lastReadAt = lastReadAt
@@ -33,6 +36,7 @@ struct SyncBookRecord: Codable, Equatable, Sendable {
         title: String,
         author: String,
         currentChapterURL: String? = nil,
+        currentChapterIndex: Int? = nil,
         paragraphIndex: Int? = nil,
         progress: Double? = nil,
         lastReadAt: Date? = nil,
@@ -43,6 +47,7 @@ struct SyncBookRecord: Codable, Equatable, Sendable {
         self.title = title
         self.author = author
         self.currentChapterURL = currentChapterURL
+        self.currentChapterIndex = currentChapterIndex
         self.paragraphIndex = paragraphIndex
         self.progress = progress
         self.lastReadAt = lastReadAt

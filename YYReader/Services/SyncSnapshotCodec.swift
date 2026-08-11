@@ -34,7 +34,7 @@ enum SyncSnapshotCodec {
         guard snapshot.format == SyncSnapshot.currentFormat else {
             throw SyncError.invalidFormat(snapshot.format)
         }
-        guard snapshot.version == SyncSnapshot.currentVersion else {
+        guard (1...SyncSnapshot.currentVersion).contains(snapshot.version) else {
             throw SyncError.unsupportedVersion(snapshot.version)
         }
         if let expectedDevice, snapshot.device != expectedDevice {
@@ -54,6 +54,9 @@ enum SyncSnapshotCodec {
         }
         if let paragraphIndex = book.paragraphIndex, paragraphIndex < 0 {
             throw SyncError.invalidBook("paragraphIndex 不能为负数。")
+        }
+        if let currentChapterIndex = book.currentChapterIndex, currentChapterIndex < 0 {
+            throw SyncError.invalidBook("currentChapterIndex 不能为负数。")
         }
         if let progress = book.progress,
            !progress.isFinite || !(0...1).contains(progress) {

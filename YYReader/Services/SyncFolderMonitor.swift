@@ -14,7 +14,10 @@ final class SyncFolderMonitor {
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: descriptor,
             eventMask: [.write, .extend, .attrib, .rename, .delete],
-            queue: .global(qos: .utility)
+            // This type is MainActor-isolated. Dispatch invokes both the event and
+            // cancellation handlers on the source queue, so they must use the same
+            // executor instead of a global queue that trips Swift 6 isolation checks.
+            queue: .main
         )
         source.setEventHandler(handler: onChange)
         source.setCancelHandler {

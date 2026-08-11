@@ -198,11 +198,16 @@ final class FolderSyncController {
 
     private func performSingleSync() async {
         guard let selectedFolderURL, let store else { return }
-        let localBooks = SyncMerger.merge(store.syncRecords() + Array(tombstones.values))
+        let chapterRanksByBook = store.syncChapterRanks()
+        let localBooks = SyncMerger.merge(
+            store.syncRecords() + Array(tombstones.values),
+            chapterRanksByBook: chapterRanksByBook
+        )
         do {
             let result = try await engine.synchronize(
                 selectedFolder: selectedFolderURL,
-                localBooks: localBooks
+                localBooks: localBooks,
+                chapterRanksByBook: chapterRanksByBook
             )
             guard !Task.isCancelled, isEnabled else { return }
             try store.applySyncRecords(result.books)
@@ -260,8 +265,6 @@ final class FolderSyncController {
                 let signature = try await self.engine.windowsFileSignature(selectedFolder: selectedFolderURL)
                 if signature != self.lastWindowsFileSignature {
                     self.lastWindowsFileSignature = signature
-                    self.syncNow()
-                } else if self.errorMessage != nil {
                     self.syncNow()
                 }
             } catch {

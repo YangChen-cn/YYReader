@@ -444,6 +444,18 @@ final class LibraryStore {
             .sorted { $0.canonicalSourceURL < $1.canonicalSourceURL }
     }
 
+    func syncChapterRanks() -> SyncMerger.ChapterRanksByBook {
+        var result: SyncMerger.ChapterRanksByBook = [:]
+        for book in books {
+            var ranks: [String: Int] = [:]
+            for chapter in book.chapters {
+                ranks[URLCanonicalizer.canonicalChapterString(chapter.sourceURL)] = chapter.sortIndex
+            }
+            result[URLCanonicalizer.canonicalString(book.sourceBookURL)] = ranks
+        }
+        return result
+    }
+
     func bookshelfTransferDocument(exportedAt: Date = .now) -> BookshelfTransferDocument {
         BookshelfTransferDocument(
             exportedAt: exportedAt,
@@ -521,12 +533,17 @@ final class LibraryStore {
 
     func applySyncRecords(_ records: [SyncBookRecord]) throws {
         let previousBookID = selectedBookID
+        let chapterRanksByBook = syncChapterRanks()
+        let mergedRecords = SyncMerger.merge(
+            syncRecords() + records,
+            chapterRanksByBook: chapterRanksByBook
+        )
         var bookByCanonicalURL: [String: Book] = [:]
         for book in books {
             bookByCanonicalURL[URLCanonicalizer.canonicalString(book.sourceBookURL)] = book
         }
 
-        for record in SyncMerger.merge(records) {
+        for record in mergedRecords {
             let key = record.canonicalSourceURL
             if record.isDeleted {
                 if let book = bookByCanonicalURL.removeValue(forKey: key) {
@@ -941,6 +958,7 @@ final class LibraryStore {
         }
         return SyncBookRecord(
             transfer: transfer,
+            currentChapterIndex: chapter?.sortIndex,
             lastReadAt: chapter?.lastReadAt,
             updatedAt: book.updatedAt,
             deletedAt: deletedAt
@@ -1011,7 +1029,8 @@ final class LibraryStore {
             let chapter = Chapter(
                 sourceURL: canonicalChapterURL,
                 title: "当前章节",
-                sortIndex: (book.chapters.map(\.sortIndex).max() ?? 0) + 1,
+                sortIndex: record.currentChapterIndex
+                    ?? (book.chapters.map(\.sortIndex).max() ?? 0) + 1,
                 book: nil
             )
             modelContext.insert(chapter)
@@ -1020,12 +1039,25 @@ final class LibraryStore {
             return chapter
         }()
 
-        let currentLastReadAt = chapter.lastReadAt ?? .distantPast
-        let incomingLastReadAt = record.lastReadAt ?? .distantPast
-        guard incomingLastReadAt >= currentLastReadAt else { return }
+        if let currentChapter = book.currentChapterID.flatMap({ chapterID in
+            book.chapters.first { $0.id == chapterID }
+        }) {
+            if currentChapter.id == chapter.id {
+                let incomingParagraph = max(record.paragraphIndex ?? 0, 0)
+                let incomingProgress = min(max(record.progress ?? 0, 0), 1)
+                guard incomingParagraph > currentChapter.topParagraphIndex
+                        || (incomingParagraph == currentChapter.topParagraphIndex
+                            && incomingProgress >= currentChapter.readingProgress) else {
+                    return
+                }
+            } else {
+                let incomingIndex = record.currentChapterIndex ?? chapter.sortIndex
+                guard incomingIndex > currentChapter.sortIndex else { return }
+            }
+        }
         chapter.topParagraphIndex = max(record.paragraphIndex ?? 0, 0)
         chapter.readingProgress = min(max(record.progress ?? 0, 0), 1)
-        chapter.lastReadAt = record.lastReadAt
+        chapter.lastReadAt = [chapter.lastReadAt, record.lastReadAt].compactMap { $0 }.max()
         book.currentChapterID = chapter.id
     }
 

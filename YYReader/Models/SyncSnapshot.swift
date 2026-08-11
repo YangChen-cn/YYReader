@@ -2,7 +2,7 @@ import Foundation
 
 struct SyncSnapshot: Codable, Equatable, Sendable {
     static let currentFormat = "yyreader-sync"
-    static let currentVersion = 1
+    static let currentVersion = 2
 
     var format: String
     var version: Int

@@ -38,6 +38,8 @@ YYReader 1.1.2 支持 Apple 芯片 Mac，要求 macOS 15 或更高版本。
 `YYReaderSync/mac.json`，同时读取 Windows 客户端维护的 `windows.json`。该功能不绑定
 iCloud，也可配合 Dropbox、OneDrive、Syncthing 或普通局域网共享目录使用；正文缓存、
 Cookie 和网页验证状态不会进入同步文件。
+同步阅读位置时优先保留目录中更后的章节，同一章只会向更后的段落前进；
+对端文件和本地内容都没有变化时不会重复写入同步文件。
 
 书架模式工具栏的“更多”菜单还可以导入 `.yyreader` 或 `.json` 文件、从剪贴板导入、
 复制书架 JSON，或导出 `.yyreader` 文件。导入前会显示新书、已存在、无效和重复条目数量；

@@ -4,6 +4,22 @@ import Testing
 @testable import YYReader
 
 struct SyncEngineTests {
+    @Test @MainActor
+    func folderMonitorCancellationStaysOnMainExecutor() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("YYReaderMonitorTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let monitor = SyncFolderMonitor()
+
+        monitor.start(directory: directory) {}
+        monitor.stop()
+
+        // DispatchSource cancellation is asynchronous. Yield long enough for its
+        // handler to run so executor violations fail this regression test.
+        try await Task.sleep(for: .milliseconds(50))
+    }
+
     @Test
     func snapshotV1DecodesWindowsDatesAndIgnoresUnknownFields() throws {
         let data = Data(#"""
@@ -34,7 +50,28 @@ struct SyncEngineTests {
         #expect(snapshot.version == 1)
         #expect(snapshot.device == .windows)
         #expect(snapshot.books.count == 1)
+        #expect(snapshot.books[0].currentChapterIndex == nil)
         #expect(snapshot.books[0].paragraphIndex == 12)
+    }
+
+    @Test
+    func snapshotV2EncodesChapterIndex() throws {
+        let record = SyncBookRecord(
+            sourceURL: "https://example.com/book/",
+            title: "测试书",
+            author: "作者",
+            currentChapterURL: "https://example.com/book/9.html",
+            currentChapterIndex: 9,
+            paragraphIndex: 12,
+            progress: 0.5,
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+
+        let data = try SyncSnapshotCodec.encode(SyncSnapshot(device: .mac, books: [record]))
+        let decoded = try SyncSnapshotCodec.decode(data, expectedDevice: .mac)
+
+        #expect(decoded.version == 2)
+        #expect(decoded.books[0].currentChapterIndex == 9)
     }
 
     @Test
@@ -48,9 +85,10 @@ struct SyncEngineTests {
             title: "旧标题",
             author: "旧作者",
             currentChapterURL: "https://example.com/book/9.html",
+            currentChapterIndex: 9,
             paragraphIndex: 42,
             progress: 0.75,
-            lastReadAt: newerReadingDate,
+            lastReadAt: olderReadingDate,
             updatedAt: olderMetadataDate
         )
         let windows = SyncBookRecord(
@@ -58,9 +96,10 @@ struct SyncEngineTests {
             title: "新标题",
             author: "新作者",
             currentChapterURL: "https://example.com/book/3.html",
+            currentChapterIndex: 3,
             paragraphIndex: 8,
             progress: 0.25,
-            lastReadAt: olderReadingDate,
+            lastReadAt: newerReadingDate,
             updatedAt: metadataDate
         )
 
@@ -72,6 +111,40 @@ struct SyncEngineTests {
         #expect(merged.currentChapterURL == mac.currentChapterURL)
         #expect(merged.paragraphIndex == 42)
         #expect(merged.progress == 0.75)
+        #expect(merged.lastReadAt == newerReadingDate)
+    }
+
+    @Test
+    func mergeSameChapterOnlyMovesParagraphForwardRegardlessOfTime() throws {
+        let newerReadingDate = try #require(ISO8601DateFormatter().date(from: "2026-08-12T13:00:00Z"))
+        let olderReadingDate = try #require(ISO8601DateFormatter().date(from: "2026-08-12T11:00:00Z"))
+        let behind = SyncBookRecord(
+            sourceURL: "https://example.com/book/",
+            title: "书",
+            author: "作者",
+            currentChapterURL: "https://example.com/book/9.html",
+            currentChapterIndex: 9,
+            paragraphIndex: 4,
+            progress: 0.2,
+            lastReadAt: newerReadingDate,
+            updatedAt: newerReadingDate
+        )
+        let ahead = SyncBookRecord(
+            sourceURL: "https://example.com/book/",
+            title: "书",
+            author: "作者",
+            currentChapterURL: "https://example.com/book/9.html",
+            currentChapterIndex: 9,
+            paragraphIndex: 40,
+            progress: 0.8,
+            lastReadAt: olderReadingDate,
+            updatedAt: olderReadingDate
+        )
+
+        let merged = try #require(SyncMerger.merge([behind, ahead]).first)
+
+        #expect(merged.paragraphIndex == 40)
+        #expect(merged.progress == 0.8)
         #expect(merged.lastReadAt == newerReadingDate)
     }
 
@@ -137,6 +210,8 @@ struct SyncEngineTests {
             localBooks: [local],
             now: Date(timeIntervalSince1970: 130)
         )
+        let macURL = syncDirectory.appendingPathComponent(SyncEngine.macFileName)
+        let firstMacData = try Data(contentsOf: macURL)
         let second = try await engine.synchronize(
             selectedFolder: selectedFolder,
             localBooks: first.books,
@@ -146,7 +221,7 @@ struct SyncEngineTests {
         #expect(first.books == second.books)
         #expect(first.books.count == 2)
         #expect(try Data(contentsOf: windowsURL) == windowsData)
-        let macURL = syncDirectory.appendingPathComponent(SyncEngine.macFileName)
+        #expect(try Data(contentsOf: macURL) == firstMacData)
         let macSnapshot = try SyncSnapshotCodec.decode(Data(contentsOf: macURL), expectedDevice: .mac)
         #expect(macSnapshot.books == first.books)
         let names = try FileManager.default.contentsOfDirectory(atPath: syncDirectory.path)
@@ -184,7 +259,7 @@ struct SyncEngineTests {
         context.autosaveEnabled = false
         let oldDate = Date(timeIntervalSince1970: 100)
         let newDate = Date(timeIntervalSince1970: 200)
-        let readDate = Date(timeIntervalSince1970: 300)
+        let readDate = Date(timeIntervalSince1970: 50)
         let book = Book(
             title: "旧标题",
             author: "旧作者",
@@ -214,6 +289,7 @@ struct SyncEngineTests {
             title: "新标题",
             author: "新作者",
             currentChapterURL: chapter.sourceURL,
+            currentChapterIndex: 3,
             paragraphIndex: 8,
             progress: 0.5,
             lastReadAt: readDate,
@@ -230,6 +306,67 @@ struct SyncEngineTests {
         #expect(store.books[0].chapters[0].bodyText == "本地缓存正文")
         #expect(store.books[0].chapters[0].topParagraphIndex == 8)
         #expect(store.books[0].chapters[0].readingProgress == 0.5)
+        #expect(store.books[0].chapters[0].lastReadAt == oldDate)
+        #expect(!context.hasChanges)
+    }
+
+    @Test @MainActor
+    func libraryStoreDoesNotMoveBackToEarlierChapterWithNewerTimestamp() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        context.autosaveEnabled = false
+        let book = Book(
+            title: "书",
+            author: "作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/book/",
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+        let earlier = Chapter(
+            sourceURL: "https://example.com/book/3.html",
+            title: "第3章",
+            sortIndex: 3,
+            lastReadAt: Date(timeIntervalSince1970: 300),
+            topParagraphIndex: 20,
+            readingProgress: 0.8,
+            book: book
+        )
+        let later = Chapter(
+            sourceURL: "https://example.com/book/9.html",
+            title: "第9章",
+            sortIndex: 9,
+            lastReadAt: Date(timeIntervalSince1970: 200),
+            topParagraphIndex: 4,
+            readingProgress: 0.2,
+            book: book
+        )
+        book.chapters = [earlier, later]
+        book.currentChapterID = later.id
+        context.insert(book)
+        context.insert(earlier)
+        context.insert(later)
+        try context.save()
+        let store = LibraryStore(
+            modelContext: context,
+            coordinator: NovelImportCoordinator(loader: MockHTMLLoader(documents: [:]))
+        )
+        let incoming = SyncBookRecord(
+            sourceURL: book.sourceBookURL,
+            title: book.title,
+            author: book.author,
+            currentChapterURL: earlier.sourceURL,
+            currentChapterIndex: earlier.sortIndex,
+            paragraphIndex: 30,
+            progress: 0.9,
+            lastReadAt: Date(timeIntervalSince1970: 400),
+            updatedAt: book.updatedAt
+        )
+
+        try store.applySyncRecords([incoming])
+
+        #expect(store.books[0].currentChapterID == later.id)
+        #expect(later.topParagraphIndex == 4)
         #expect(!context.hasChanges)
     }
 

@@ -14,6 +14,7 @@ actor SyncEngine {
     func synchronize(
         selectedFolder: URL,
         localBooks: [SyncBookRecord],
+        chapterRanksByBook: SyncMerger.ChapterRanksByBook = [:],
         now: Date = .now
     ) throws -> SyncResult {
         let directory = selectedFolder.appendingPathComponent(Self.directoryName, isDirectory: true)
@@ -24,10 +25,13 @@ actor SyncEngine {
         let previousMac = try readSnapshotIfPresent(at: macURL, expectedDevice: .mac)
         let windows = try readSnapshotIfPresent(at: windowsURL, expectedDevice: .windows)
         let mergedBooks = SyncMerger.merge(
-            (previousMac?.books ?? []) + localBooks + (windows?.books ?? [])
+            (previousMac?.books ?? []) + localBooks + (windows?.books ?? []),
+            chapterRanksByBook: chapterRanksByBook
         )
         let snapshot = SyncSnapshot(device: .mac, updatedAt: now, books: mergedBooks)
-        try atomicWrite(try SyncSnapshotCodec.encode(snapshot), to: macURL)
+        if previousMac?.version != SyncSnapshot.currentVersion || previousMac?.books != mergedBooks {
+            try atomicWrite(try SyncSnapshotCodec.encode(snapshot), to: macURL)
+        }
 
         return SyncResult(
             books: mergedBooks,
