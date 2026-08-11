@@ -60,6 +60,12 @@ public sealed class Chapter
         BodyText = null;
     }
 
+    public void ApplyOfflineMetadata(DateTimeOffset? cachedAt)
+    {
+        CachedAt = cachedAt;
+        if (cachedAt is null) BodyText = null;
+    }
+
     public void ApplyProgress(int paragraphIndex, int paragraphCount, DateTimeOffset at)
     {
         ParagraphIndex = Math.Max(paragraphIndex, 0);

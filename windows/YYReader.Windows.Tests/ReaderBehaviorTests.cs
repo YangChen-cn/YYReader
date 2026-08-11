@@ -75,6 +75,20 @@ public sealed class ReaderBehaviorTests
     }
 
     [TestMethod]
+    public void CatalogRefreshResetAllowsContinuousLoadingAfterPreviouslyReachingLatestChapter()
+    {
+        var state = new ReaderContinuousLoadState();
+        var now = DateTimeOffset.Parse("2026-08-12T00:00:00Z");
+
+        Assert.IsTrue(state.TryBegin("https://example.com/100.html", now));
+        Assert.IsFalse(state.TryBegin("https://example.com/100.html", now));
+
+        state.Reset();
+
+        Assert.IsTrue(state.TryBegin("https://example.com/100.html", now));
+    }
+
+    [TestMethod]
     public void BodyTextNormalizationProducesParagraphsWithoutEmptyRows()
     {
         var chapter = NewChapter("https://example.com/1.html", " 第一段 \r\n\r\n 第二段 ");

@@ -54,8 +54,14 @@ public sealed class OfflineDownloadManager
         {
             var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             _activeCancellation = linkedCancellation;
-            var chapters = SelectChapters(book, currentChapter, scope);
-            UpdateState(new OfflineDownloadState(true, Total: chapters.Count));
+            var chapters = SelectChapters(book, currentChapter, scope)
+                .Select(chapter => new DownloadChapter(
+                    chapter.SourceUrl,
+                    chapter.Title,
+                    chapter.SortIndex,
+                    chapter.IsAvailableOffline))
+                .ToArray();
+            UpdateState(new OfflineDownloadState(true, Total: chapters.Length));
             var completed = 0;
             var failed = 0;
             var cancelled = false;
@@ -71,12 +77,7 @@ public sealed class OfflineDownloadManager
                         try
                         {
                             var result = await _loadChapter(new Uri(chapter.SourceUrl), linkedCancellation.Token).ConfigureAwait(false);
-                            chapter.Title = result.Title;
-                            chapter.ReplaceBodyText(result.BodyText);
-                            chapter.PreviousUrl = result.PreviousChapterUrl?.AbsoluteUri;
-                            chapter.NextUrl = result.NextChapterUrl?.AbsoluteUri;
                             await _repository.SaveChapterAsync(book.Id, result, chapter.SortIndex, linkedCancellation.Token).ConfigureAwait(false);
-                            chapter.ReleaseLoadedBody();
                             succeeded = true;
                         }
                         catch (OperationCanceledException)
@@ -101,7 +102,7 @@ public sealed class OfflineDownloadManager
                 linkedCancellation.Dispose();
             }
 
-            UpdateState(new OfflineDownloadState(false, completed, chapters.Count, failed, null, cancelled));
+            UpdateState(new OfflineDownloadState(false, completed, chapters.Length, failed, null, cancelled));
             return State;
         }
         finally
@@ -119,7 +120,6 @@ public sealed class OfflineDownloadManager
         try
         {
             await _repository.ClearChapterBodiesAsync(book.Id, cancellationToken).ConfigureAwait(false);
-            foreach (var chapter in book.Chapters) chapter.MarkUncached();
         }
         finally
         {
@@ -145,4 +145,6 @@ public sealed class OfflineDownloadManager
         State = state;
         StateChanged?.Invoke(this, state);
     }
+
+    private sealed record DownloadChapter(string SourceUrl, string Title, int SortIndex, bool IsAvailableOffline);
 }

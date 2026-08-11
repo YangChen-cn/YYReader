@@ -162,6 +162,17 @@ public sealed partial class ReaderPage : Page
         }
     }
 
+    private void ReapplyRealizedItemStyles()
+    {
+        foreach (var (index, element) in _realizedElements.ToArray())
+        {
+            if (index >= 0 && index < Items.Count)
+            {
+                ApplyRealizedItemStyle(element, Items[index]);
+            }
+        }
+    }
+
     private void ReaderScrollViewer_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
     {
         _progressTimer.Stop();
@@ -564,6 +575,7 @@ public sealed partial class ReaderPage : Page
 
     private async Task RefreshCatalogAsync()
     {
+        CatalogList.IsEnabled = false;
         CatalogProgress.IsActive = true;
         CatalogCancelButton.Visibility = Visibility.Visible;
         CatalogStatusText.Text = "正在刷新完整目录…";
@@ -572,6 +584,9 @@ public sealed partial class ReaderPage : Page
             if (await Store.RefreshSelectedCatalogAsync())
             {
                 RefreshCatalogList();
+                _continuousLoadState.Reset();
+                Store.RearmSelectedChapterPrefetch();
+                HideContinuationBoundary();
                 CatalogStatusText.Text = $"已更新，共 {Store.SelectedBook?.Chapters.Count ?? 0} 章";
             }
             else
@@ -581,6 +596,7 @@ public sealed partial class ReaderPage : Page
         }
         finally
         {
+            CatalogList.IsEnabled = true;
             CatalogProgress.IsActive = false;
             CatalogCancelButton.Visibility = Visibility.Collapsed;
         }
@@ -601,6 +617,7 @@ public sealed partial class ReaderPage : Page
     {
         if (Store.SelectedBook is not { } book || Store.SelectedChapter is not { } chapter) return;
         await _offlineDownloadManager.DownloadAsync(book, chapter, scope);
+        await Store.RefreshOfflineMetadataAsync(book.Id);
     }
 
     private void CancelDownload_Click(object sender, RoutedEventArgs e) => _offlineDownloadManager.Cancel();
@@ -620,6 +637,7 @@ public sealed partial class ReaderPage : Page
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
             await _offlineDownloadManager.ClearOfflineCacheAsync(book);
+            await Store.RefreshOfflineMetadataAsync(book.Id);
         }
     }
 
@@ -686,10 +704,20 @@ public sealed partial class ReaderPage : Page
 
     private void ApplyAppearanceChange()
     {
+        var anchor = CaptureReaderAnchor();
         _continuousLoadState.Reset();
         Store.ConfigureNextChapterPrefetch(_preferences.PrefetchNextChapter);
         ApplyPreferences();
-        RebuildItems();
+        ReapplyRealizedItemStyles();
+        if (anchor is not null)
+        {
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                ReaderRepeater.UpdateLayout();
+                ReaderScrollViewer.UpdateLayout();
+                RestoreReaderAnchor(anchor);
+            });
+        }
         SchedulePreferencesSave();
     }
 
@@ -793,7 +821,9 @@ public sealed partial class ReaderPage : Page
 
     private void ReaderPage_ActualThemeChanged(FrameworkElement sender, object args)
     {
-        if (_preferences.Theme == "system") ApplyPreferences();
+        if (_preferences.Theme != "system") return;
+        ApplyPreferences();
+        ReapplyRealizedItemStyles();
     }
 
     private FontFamily ReaderFontFamily() => _preferences.FontFamily switch

@@ -199,6 +199,26 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         }
     }
 
+    public void RearmSelectedChapterPrefetch() => ScheduleNextChapterPrefetch();
+
+    public async Task RefreshOfflineMetadataAsync(string bookId, CancellationToken cancellationToken = default)
+    {
+        var storedBook = (await _repository.GetBooksAsync(cancellationToken).ConfigureAwait(true))
+            .FirstOrDefault(book => book.Id == bookId);
+        var liveBook = Books.FirstOrDefault(book => book.Id == bookId);
+        if (storedBook is null || liveBook is null) return;
+
+        var storedByUrl = storedBook.Chapters.ToDictionary(chapter => chapter.SourceUrl, StringComparer.Ordinal);
+        foreach (var chapter in liveBook.Chapters)
+        {
+            if (storedByUrl.TryGetValue(chapter.SourceUrl, out var stored))
+            {
+                chapter.ApplyOfflineMetadata(stored.CachedAt);
+            }
+        }
+        BooksChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     public async Task<Chapter?> PrepareNextChapterAsync(CancellationToken cancellationToken = default)
     {
         if (SelectedBook is null || SelectedChapter is null)

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using YYReader.Windows.Core.Models;
 using YYReader.Windows.Core.Parsing;
 
@@ -7,7 +8,7 @@ public sealed class HybridHtmlLoader : IRenderedDomFallbackLoading
 {
     private readonly IHtmlDocumentLoader _staticLoader;
     private readonly IRenderedDomFallbackLoading _browserLoader;
-    private readonly HashSet<string> _browserPreferredHosts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, byte> _browserPreferredHosts = new(StringComparer.OrdinalIgnoreCase);
 
     public HybridHtmlLoader(IHtmlDocumentLoader staticLoader, IRenderedDomFallbackLoading browserLoader)
     {
@@ -15,7 +16,7 @@ public sealed class HybridHtmlLoader : IRenderedDomFallbackLoading
         _browserLoader = browserLoader;
     }
 
-    public IReadOnlySet<string> BrowserPreferredHosts => _browserPreferredHosts;
+    public IReadOnlyCollection<string> BrowserPreferredHosts => _browserPreferredHosts.Keys.ToArray();
 
     public void BeginOperation()
     {
@@ -30,7 +31,7 @@ public sealed class HybridHtmlLoader : IRenderedDomFallbackLoading
             throw new NovelParsingException(NovelParsingErrorKind.UnsupportedUrl);
         }
 
-        if (_browserPreferredHosts.Contains(url.DnsSafeHost))
+        if (_browserPreferredHosts.ContainsKey(url.DnsSafeHost))
         {
             return await _browserLoader.LoadAsync(url, cancellationToken).ConfigureAwait(false);
         }
@@ -41,7 +42,7 @@ public sealed class HybridHtmlLoader : IRenderedDomFallbackLoading
         }
         catch (HtmlLoadException ex) when (ex.Kind == HtmlLoadErrorKind.VerificationRequired)
         {
-            _browserPreferredHosts.Add(url.DnsSafeHost);
+            _browserPreferredHosts.TryAdd(url.DnsSafeHost, 0);
             return await _browserLoader.LoadAsync(url, cancellationToken).ConfigureAwait(false);
         }
     }
@@ -49,5 +50,5 @@ public sealed class HybridHtmlLoader : IRenderedDomFallbackLoading
     public Task<LoadedHtml> LoadRenderedDomAsync(Uri url, CancellationToken cancellationToken = default) =>
         _browserLoader.LoadRenderedDomAsync(url, cancellationToken);
 
-    public void PromoteRenderedDomHost(Uri url) => _browserPreferredHosts.Add(url.DnsSafeHost);
+    public void PromoteRenderedDomHost(Uri url) => _browserPreferredHosts.TryAdd(url.DnsSafeHost, 0);
 }

@@ -124,6 +124,24 @@ public sealed class ParserTests
         Assert.AreEqual(2, loader.SecondPageAttempts);
     }
 
+    [TestMethod]
+    public async Task HybridLoaderPreferredHostsAllowParallelPromotionAndReads()
+    {
+        var loader = new HybridHtmlLoader(new ConstantHtmlLoader(), new ConstantRenderedLoader());
+        var urls = Enumerable.Range(0, 200)
+            .Select(index => new Uri($"https://host-{index % 12}.example/book/"))
+            .ToArray();
+
+        await Task.WhenAll(urls.Select(async url =>
+        {
+            loader.PromoteRenderedDomHost(url);
+            await loader.LoadAsync(url);
+            _ = loader.BrowserPreferredHosts.Count;
+        }));
+
+        Assert.AreEqual(12, loader.BrowserPreferredHosts.Count);
+    }
+
     private static string ReadFixture(string name) =>
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", $"{name}.html"));
 
@@ -185,5 +203,23 @@ public sealed class ParserTests
               {{navigation}}
             </body></html>
             """;
+    }
+
+    private sealed class ConstantHtmlLoader : IHtmlDocumentLoader
+    {
+        public void BeginOperation() { }
+
+        public Task<LoadedHtml> LoadAsync(Uri url, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new LoadedHtml(url, url, "<html></html>", HtmlRetrievalKind.UrlSession));
+    }
+
+    private sealed class ConstantRenderedLoader : IRenderedDomFallbackLoading
+    {
+        public void BeginOperation() { }
+        public void PromoteRenderedDomHost(Uri url) { }
+        public Task<LoadedHtml> LoadAsync(Uri url, CancellationToken cancellationToken = default) =>
+            LoadRenderedDomAsync(url, cancellationToken);
+        public Task<LoadedHtml> LoadRenderedDomAsync(Uri url, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new LoadedHtml(url, url, "<html></html>", HtmlRetrievalKind.WebView2));
     }
 }

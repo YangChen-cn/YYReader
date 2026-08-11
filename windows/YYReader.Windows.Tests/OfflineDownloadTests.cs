@@ -37,6 +37,7 @@ public sealed class OfflineDownloadTests
             Assert.IsTrue(reloaded.Chapters[1].IsAvailableOffline);
             Assert.AreEqual("2.html 正文", await repository.LoadChapterBodyAsync(book.Id, reloaded.Chapters[1].SourceUrl));
             Assert.IsFalse(reloaded.Chapters[2].IsAvailableOffline);
+            Assert.IsFalse(book.Chapters[1].IsAvailableOffline, "下载器不应从后台线程直接修改 UI model");
         }
         finally
         {
@@ -62,6 +63,7 @@ public sealed class OfflineDownloadTests
             Assert.AreEqual(0.5, reloaded.Chapters[0].Progress, 0.0001);
             Assert.IsFalse(reloaded.Chapters.Any(chapter => chapter.IsAvailableOffline));
             Assert.IsNull(await repository.LoadChapterBodyAsync(book.Id, book.Chapters[0].SourceUrl));
+            Assert.IsTrue(book.Chapters[0].IsAvailableOffline, "清理器不应从后台线程直接修改 UI model");
         }
         finally
         {
