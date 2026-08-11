@@ -810,14 +810,7 @@ public sealed partial class ReaderPage : Page
 
     private async void More_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new ContentDialog
-        {
-            Title = "阅读",
-            Content = new TextBlock { Text = "正文始终由 WinUI 原生文本控件渲染。网页验证只在需要时使用 WebView2。", TextWrapping = TextWrapping.Wrap },
-            CloseButtonText = "知道了",
-            XamlRoot = XamlRoot
-        };
-        await dialog.ShowAsync();
+        await AboutDialogContent.ShowAsync(XamlRoot);
     }
 
     private Task ShowChapterLoadFailureAsync()

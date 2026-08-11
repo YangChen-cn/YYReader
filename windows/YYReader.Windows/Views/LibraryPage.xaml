@@ -31,6 +31,8 @@
                             <MenuFlyoutSeparator />
                             <MenuFlyoutItem Text="复制书架导出 JSON" Click="CopyBookshelfExport_Click" />
                             <MenuFlyoutItem Text="导出为 .yyreader 文件" Click="SaveBookshelfExport_Click" />
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem Text="关于 YYReader" Click="About_Click" />
                         </MenuFlyout>
                     </Button.Flyout>
                 </Button>

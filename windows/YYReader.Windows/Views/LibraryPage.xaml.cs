@@ -515,6 +515,9 @@ public sealed partial class LibraryPage : Page
         await dialog.ShowAsync();
     }
 
+    private async void About_Click(object sender, RoutedEventArgs e) =>
+        await AboutDialogContent.ShowAsync(XamlRoot);
+
     private void Store_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => RefreshView();
 }
 

@@ -159,7 +159,7 @@
                                     <MenuFlyoutItem Text="取消下载" Click="CancelDownload_Click" />
                                     <MenuFlyoutItem Text="删除离线缓存" Click="ClearOfflineCache_Click" />
                                     <MenuFlyoutSeparator />
-                                    <MenuFlyoutItem Text="关于原生阅读" Click="More_Click" />
+                                    <MenuFlyoutItem Text="关于 YYReader" Click="More_Click" />
                                 </MenuFlyout>
                             </Button.Flyout>
                         </Button>
