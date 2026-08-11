@@ -21,13 +21,13 @@ public sealed partial class ReaderPage : Page
     private readonly ReaderPreferencesStore _preferencesStore = new();
     private readonly DispatcherQueueTimer _progressTimer;
     private readonly Dictionary<int, UIElement> _realizedElements = new();
+    private readonly ReaderContinuousLoadState _continuousLoadState = new();
     private ReaderPreferences _preferences = ReaderPreferences.Defaults;
     private ReaderThemePalette _palette = ReaderThemePalette.FromName("system");
     private bool _initialized;
     private bool _changingChapter;
     private bool _synchronizingChapterPicker;
     private bool _loadingNext;
-    private string? _continuousLoadAttemptedAfterChapterUrl;
 
     public ReaderPage(LibraryStore store, Book book, Window window)
     {
@@ -42,6 +42,7 @@ public sealed partial class ReaderPage : Page
         _progressTimer.Tick += ProgressTimer_Tick;
         Loaded += ReaderPage_Loaded;
         Unloaded += ReaderPage_Unloaded;
+        ActualThemeChanged += ReaderPage_ActualThemeChanged;
     }
 
     public LibraryStore Store { get; }
@@ -54,7 +55,11 @@ public sealed partial class ReaderPage : Page
         ApplyPreferences();
         Store.ConfigureNextChapterPrefetch(_preferences.PrefetchNextChapter);
         Store.SelectBook(Book);
-        await Store.EnsureSelectedChapterLoadedAsync();
+        if (!await Store.EnsureSelectedChapterLoadedAsync())
+        {
+            if (_window is MainWindow mainWindow) mainWindow.ShowLibrary();
+            return;
+        }
         RefreshChapterPicker();
         RebuildItems(ReaderRebuildPosition.RestoreProgress);
         _initialized = true;
@@ -68,9 +73,9 @@ public sealed partial class ReaderPage : Page
         await Store.FlushPendingProgressAsync();
     }
 
-    private void RebuildItems(ReaderRebuildPosition position = ReaderRebuildPosition.PreserveOffset)
+    private void RebuildItems(ReaderRebuildPosition position = ReaderRebuildPosition.PreserveAnchor)
     {
-        var savedOffset = ReaderScrollViewer.VerticalOffset;
+        var anchor = position == ReaderRebuildPosition.PreserveAnchor ? CaptureReaderAnchor() : null;
         Items.Clear();
         var entries = Store.ReaderSession.Entries;
         for (var entryIndex = 0; entryIndex < entries.Count; entryIndex++)
@@ -90,9 +95,8 @@ public sealed partial class ReaderPage : Page
                 case ReaderRebuildPosition.RestoreProgress:
                     RestorePosition();
                     break;
-                default:
-                    var offset = Math.Min(savedOffset, ReaderScrollViewer.ScrollableHeight);
-                    ReaderScrollViewer.ChangeView(null, offset, null, true);
+                case ReaderRebuildPosition.PreserveAnchor:
+                    if (anchor is not null) RestoreReaderAnchor(anchor);
                     break;
             }
         });
@@ -164,38 +168,11 @@ public sealed partial class ReaderPage : Page
     private async void ProgressTimer_Tick(DispatcherQueueTimer sender, object args)
     {
         CommitVisiblePosition();
-        if (_preferences.ContinuousReading && !_loadingNext && IsNearEndOfLoadedEntries())
+        if (_preferences.ContinuousReading
+            && !_loadingNext
+            && IsNearEndOfLoadedEntries())
         {
-            var lastLoadedUrl = Store.ReaderSession.Entries.LastOrDefault()?.Chapter.SourceUrl;
-            if (lastLoadedUrl is null || _continuousLoadAttemptedAfterChapterUrl == lastLoadedUrl)
-            {
-                return;
-            }
-
-            _continuousLoadAttemptedAfterChapterUrl = lastLoadedUrl;
-            _loadingNext = true;
-            SetNavigationEnabled(false);
-            try
-            {
-                var before = Store.ReaderSession.Entries.Count;
-                await Store.PrepareNextChapterAsync();
-                if (Store.ReaderSession.Entries.Count > before)
-                {
-                    var stableOffset = ReaderScrollViewer.VerticalOffset;
-                    AddEntryItems(Store.ReaderSession.Entries[^1], false);
-                    RefreshChapterPicker();
-                    DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-                    {
-                        ReaderRepeater.UpdateLayout();
-                        ReaderScrollViewer.ChangeView(null, stableOffset, null, true);
-                    });
-                }
-            }
-            finally
-            {
-                _loadingNext = false;
-                SetNavigationEnabled(true);
-            }
+            await LoadNextContinuousChapterAsync(false);
         }
     }
 
@@ -280,6 +257,113 @@ public sealed partial class ReaderPage : Page
         ReaderScrollViewer.ChangeView(null, ReaderScrollViewer.ScrollableHeight * progress, null, true);
     }
 
+    private ReaderAnchor? CaptureReaderAnchor()
+    {
+        var visible = FindVisibleParagraph();
+        if (visible is null) return null;
+        var itemIndex = Items.IndexOf(visible);
+        if (!_realizedElements.TryGetValue(itemIndex, out var element) || element is not FrameworkElement frameworkElement)
+        {
+            return new ReaderAnchor(visible.ChapterUrl, visible.ParagraphIndex);
+        }
+
+        var top = frameworkElement.TransformToVisual(ReaderScrollViewer).TransformPoint(new Point(0, 0)).Y;
+        var relativeOffset = ReaderScrollViewer.ActualHeight <= 0 ? 0 : Math.Clamp(top / ReaderScrollViewer.ActualHeight, 0, 1);
+        return new ReaderAnchor(visible.ChapterUrl, visible.ParagraphIndex, relativeOffset);
+    }
+
+    private void RestoreReaderAnchor(ReaderAnchor anchor)
+    {
+        var paragraphCount = Items.Count(item => item.IsParagraph && item.ChapterUrl == anchor.ChapterUrl);
+        var normalized = anchor.Normalized(paragraphCount);
+        for (var index = 0; index < Items.Count; index++)
+        {
+            if (Items[index] is not { IsParagraph: true } item
+                || item.ChapterUrl != normalized.ChapterUrl
+                || item.ParagraphIndex != normalized.ParagraphIndex)
+            {
+                continue;
+            }
+
+            ReaderRepeater.GetOrCreateElement(index).StartBringIntoView(new BringIntoViewOptions
+            {
+                AnimationDesired = false,
+                VerticalAlignmentRatio = normalized.ViewportRelativeOffset
+            });
+            return;
+        }
+    }
+
+    private async Task LoadNextContinuousChapterAsync(bool explicitRetry)
+    {
+        var lastLoadedUrl = Store.ReaderSession.Entries.LastOrDefault()?.Chapter.SourceUrl;
+        if (!_continuousLoadState.TryBegin(lastLoadedUrl, DateTimeOffset.UtcNow, explicitRetry)) return;
+        _loadingNext = true;
+        SetNavigationEnabled(false);
+        ShowContinuationLoading();
+        try
+        {
+            var before = Store.ReaderSession.Entries.Count;
+            var next = await Store.PrepareNextChapterAsync();
+            if (next is not null && Store.ReaderSession.Entries.Count > before)
+            {
+                var stableOffset = ReaderScrollViewer.VerticalOffset;
+                AddEntryItems(Store.ReaderSession.Entries[^1], false);
+                RefreshChapterPicker();
+                HideContinuationBoundary();
+                DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+                {
+                    ReaderRepeater.UpdateLayout();
+                    ReaderScrollViewer.ChangeView(null, stableOffset, null, true);
+                });
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(Store.ErrorMessage))
+            {
+                ShowContinuationMessage("已到最新章节", false);
+                return;
+            }
+
+            _continuousLoadState.MarkFailed(DateTimeOffset.UtcNow);
+            ShowContinuationMessage("下一章加载失败", true);
+        }
+        finally
+        {
+            _loadingNext = false;
+            SetNavigationEnabled(true);
+        }
+    }
+
+    private async void ContinuationRetry_Click(object sender, RoutedEventArgs e)
+    {
+        await LoadNextContinuousChapterAsync(true);
+    }
+
+    private void ShowContinuationLoading()
+    {
+        ContinuationBoundary.Visibility = Visibility.Visible;
+        ContinuationProgress.IsActive = true;
+        ContinuationProgress.Visibility = Visibility.Visible;
+        ContinuationMessage.Text = "正在准备下一章…";
+        ContinuationRetryButton.Visibility = Visibility.Collapsed;
+    }
+
+    private void ShowContinuationMessage(string message, bool canRetry)
+    {
+        ContinuationBoundary.Visibility = Visibility.Visible;
+        ContinuationProgress.IsActive = false;
+        ContinuationProgress.Visibility = Visibility.Collapsed;
+        ContinuationMessage.Text = message;
+        ContinuationRetryButton.Visibility = canRetry ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void HideContinuationBoundary()
+    {
+        ContinuationProgress.IsActive = false;
+        ContinuationBoundary.Visibility = Visibility.Collapsed;
+    }
+
     private async void ChapterPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_initialized || _changingChapter || _synchronizingChapterPicker || ChapterPicker.SelectedItem is not Chapter chapter) return;
@@ -287,7 +371,7 @@ public sealed partial class ReaderPage : Page
         SetNavigationEnabled(false);
         try
         {
-            _continuousLoadAttemptedAfterChapterUrl = null;
+            _continuousLoadState.Reset();
             var selected = await Store.SelectChapterAsync(chapter);
             if (!selected)
             {
@@ -315,7 +399,7 @@ public sealed partial class ReaderPage : Page
         SetNavigationEnabled(false);
         try
         {
-            _continuousLoadAttemptedAfterChapterUrl = null;
+            _continuousLoadState.Reset();
             var chapter = await Store.NavigateChapterAsync(offset);
             if (chapter is null)
             {
@@ -425,7 +509,7 @@ public sealed partial class ReaderPage : Page
             ContinuousReading = continuous.IsOn,
             PrefetchNextChapter = prefetch.IsOn
         };
-        _continuousLoadAttemptedAfterChapterUrl = null;
+        _continuousLoadState.Reset();
         await _preferencesStore.SaveAsync(_preferences);
         Store.ConfigureNextChapterPrefetch(_preferences.PrefetchNextChapter);
         ApplyPreferences();
@@ -479,12 +563,22 @@ public sealed partial class ReaderPage : Page
     private void ApplyPreferences()
     {
         _preferences = _preferences.Normalized();
-        _palette = ReaderThemePalette.FromName(_preferences.Theme);
+        var systemTheme = ActualTheme == ElementTheme.Dark ? ElementTheme.Dark : ElementTheme.Light;
+        _palette = ReaderThemePalette.FromName(_preferences.Theme, systemTheme);
         ReaderRoot.RequestedTheme = _palette.ElementTheme;
         ReaderRoot.Background = _palette.Background;
         ReaderScrollViewer.Background = _palette.Background;
         ReaderContent.Width = ReaderLayout.EffectiveContentWidth(_preferences.ContentWidthEm, _preferences.FontSize, ActualWidth);
         ProgressText.Foreground = _palette.SecondaryForeground;
+        ContinuationBoundary.Background = _palette.Background;
+        ContinuationBoundary.BorderBrush = _palette.Separator;
+        ContinuationBoundary.BorderThickness = new Thickness(1);
+        ContinuationMessage.Foreground = _palette.SecondaryForeground;
+    }
+
+    private void ReaderPage_ActualThemeChanged(FrameworkElement sender, object args)
+    {
+        if (_preferences.Theme == "system") ApplyPreferences();
     }
 
     private FontFamily ReaderFontFamily() => _preferences.FontFamily switch
@@ -505,7 +599,7 @@ public sealed partial class ReaderPage : Page
 
     private enum ReaderRebuildPosition
     {
-        PreserveOffset,
+        PreserveAnchor,
         ChapterTop,
         RestoreProgress
     }

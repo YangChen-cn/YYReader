@@ -79,7 +79,7 @@
                       ViewChanged="ReaderScrollViewer_ViewChanged"
                       KeyDown="ReaderScrollViewer_KeyDown"
                       IsTabStop="True">
-            <Grid x:Name="ReaderContent" HorizontalAlignment="Center">
+            <Grid x:Name="ReaderContent" HorizontalAlignment="Center" RowDefinitions="Auto,Auto">
                 <ItemsRepeater x:Name="ReaderRepeater"
                                ItemsSource="{x:Bind Items}"
                                ItemTemplate="{StaticResource ReaderItemSelector}"
@@ -89,6 +89,22 @@
                         <StackLayout Spacing="0" />
                     </ItemsRepeater.Layout>
                 </ItemsRepeater>
+                <Border x:Name="ContinuationBoundary"
+                        Grid.Row="1"
+                        Visibility="Collapsed"
+                        Margin="0,18,0,28"
+                        Padding="12"
+                        CornerRadius="6"
+                        HorizontalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <ProgressRing x:Name="ContinuationProgress" Width="16" Height="16" IsActive="False" />
+                        <TextBlock x:Name="ContinuationMessage" VerticalAlignment="Center" />
+                        <Button x:Name="ContinuationRetryButton"
+                                Content="重试"
+                                Visibility="Collapsed"
+                                Click="ContinuationRetry_Click" />
+                    </StackPanel>
+                </Border>
             </Grid>
         </ScrollViewer>
 

@@ -137,15 +137,16 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         return true;
     }
 
-    public async Task AddUrlAsync(string input, CancellationToken cancellationToken = default)
+    public async Task<bool> AddUrlAsync(string input, CancellationToken cancellationToken = default)
     {
         var url = UrlCanonicalizer.NormalizeInput(input);
         if (url is null)
         {
             ErrorMessage = "请输入有效的 HTTP 或 HTTPS 小说 URL。";
-            return;
+            return false;
         }
 
+        var succeeded = false;
         await RunBusyAsync("正在下载并识别小说…", async () =>
         {
             var result = await _coordinator.ImportNovelAsync(url, cancellationToken).ConfigureAwait(true);
@@ -157,17 +158,31 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
             OnPropertyChanged(nameof(SelectedBook));
             OnPropertyChanged(nameof(SelectedChapter));
             ScheduleNextChapterPrefetch();
+            succeeded = true;
         }, cancellationToken).ConfigureAwait(true);
+        return succeeded;
     }
 
-    public async Task EnsureSelectedChapterLoadedAsync(CancellationToken cancellationToken = default)
+    public async Task<bool> EnsureSelectedChapterLoadedAsync(CancellationToken cancellationToken = default)
     {
-        if (SelectedChapter is not null && !SelectedChapter.IsCached)
+        if (SelectedChapter is null)
+        {
+            ErrorMessage = "这本小说还没有可阅读的章节。";
+            return false;
+        }
+
+        if (!SelectedChapter.IsCached)
         {
             await LoadChapterIntoMemoryAsync(SelectedChapter, cancellationToken).ConfigureAwait(true);
         }
+        if (!SelectedChapter.IsCached)
+        {
+            return false;
+        }
+
         ReaderSession.Reset(SelectedChapter);
         ScheduleNextChapterPrefetch();
+        return true;
     }
 
     public void ConfigureNextChapterPrefetch(bool isEnabled)
@@ -242,6 +257,7 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
             SelectedChapter = chapter;
             ReaderSession.UpdateVisibleChapter(chapter.SourceUrl);
             OnPropertyChanged(nameof(SelectedChapter));
+            ScheduleNextChapterPrefetch();
         }
         _pendingProgress = new PendingProgress(SelectedBook.Id, chapter.SourceUrl, chapter.ParagraphIndex, chapter.Progress, now);
         ScheduleProgressSave();
@@ -335,7 +351,7 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         chapter.ReplaceBodyText(result.BodyText);
         chapter.PreviousUrl = result.PreviousChapterUrl?.AbsoluteUri;
         chapter.NextUrl = result.NextChapterUrl?.AbsoluteUri;
-        await _repository.SaveChapterAsync(book.Id, result, cancellationToken).ConfigureAwait(true);
+        await _repository.SaveChapterAsync(book.Id, result, chapter.SortIndex, cancellationToken).ConfigureAwait(true);
         if (SelectedChapter?.SourceUrl == chapter.SourceUrl)
         {
             ReaderSession.Reset(SelectedChapter);

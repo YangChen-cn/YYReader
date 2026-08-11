@@ -39,8 +39,10 @@ public sealed partial class LibraryPage : Page
 
     private async void AddUrl_Click(object sender, RoutedEventArgs e)
     {
-        await Store.AddUrlAsync(UrlTextBox.Text);
-        UrlTextBox.Text = "";
+        if (await Store.AddUrlAsync(UrlTextBox.Text))
+        {
+            UrlTextBox.Text = "";
+        }
         RefreshView();
     }
 
@@ -49,8 +51,10 @@ public sealed partial class LibraryPage : Page
         if (e.Key == global::Windows.System.VirtualKey.Enter)
         {
             e.Handled = true;
-            await Store.AddUrlAsync(UrlTextBox.Text);
-            UrlTextBox.Text = "";
+            if (await Store.AddUrlAsync(UrlTextBox.Text))
+            {
+                UrlTextBox.Text = "";
+            }
             RefreshView();
         }
     }
@@ -137,8 +141,14 @@ public sealed partial class LibraryPage : Page
     {
         if ((sender as Button)?.Tag is not Book book) return;
         Store.SelectBook(book);
-        await Store.EnsureSelectedChapterLoadedAsync();
-        OpenBookRequested?.Invoke(this, new BookRequestedEventArgs(book));
+        if (await Store.EnsureSelectedChapterLoadedAsync())
+        {
+            OpenBookRequested?.Invoke(this, new BookRequestedEventArgs(book));
+        }
+        else
+        {
+            RefreshView();
+        }
     }
 
     private async void DeleteBook_Click(object sender, RoutedEventArgs e)

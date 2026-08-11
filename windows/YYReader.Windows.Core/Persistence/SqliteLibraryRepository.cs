@@ -230,6 +230,7 @@ public sealed class SqliteLibraryRepository
     public async Task SaveChapterAsync(
         string bookId,
         ChapterLoadResult result,
+        int sortIndex,
         CancellationToken cancellationToken = default)
     {
         var url = UrlCanonicalizer.CanonicalizeChapter(result.ChapterUrl).AbsoluteUri;
@@ -237,10 +238,7 @@ public sealed class SqliteLibraryRepository
         await using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT INTO Chapters (BookId, SourceUrl, Title, SortIndex, BodyText, PreviousUrl, NextUrl, CachedAt)
-            VALUES ($book, $url, $title,
-                COALESCE((SELECT SortIndex FROM Chapters WHERE BookId = $book AND SourceUrl = $url),
-                    COALESCE((SELECT MAX(SortIndex) + 1 FROM Chapters WHERE BookId = $book), 1)),
-                $body, $previous, $next, $cached)
+            VALUES ($book, $url, $title, $sort, $body, $previous, $next, $cached)
             ON CONFLICT(BookId, SourceUrl) DO UPDATE SET
                 Title = excluded.Title,
                 BodyText = excluded.BodyText,
@@ -251,6 +249,7 @@ public sealed class SqliteLibraryRepository
         command.Parameters.AddWithValue("$book", bookId);
         command.Parameters.AddWithValue("$url", url);
         command.Parameters.AddWithValue("$title", result.Title);
+        command.Parameters.AddWithValue("$sort", sortIndex);
         command.Parameters.AddWithValue("$body", ChapterText.NormalizeBodyText(result.BodyText));
         command.Parameters.AddWithValue("$previous", DbValue(result.PreviousChapterUrl is null ? null : UrlCanonicalizer.CanonicalizeChapter(result.PreviousChapterUrl).AbsoluteUri));
         command.Parameters.AddWithValue("$next", DbValue(result.NextChapterUrl is null ? null : UrlCanonicalizer.CanonicalizeChapter(result.NextChapterUrl).AbsoluteUri));

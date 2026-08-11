@@ -58,6 +58,20 @@ public sealed class ReaderBehaviorTests
     }
 
     [TestMethod]
+    public void ContinuousFailedLoadCanRetryAfterCooldownOrImmediatelyByUser()
+    {
+        var state = new ReaderContinuousLoadState(TimeSpan.FromSeconds(4));
+        var now = DateTimeOffset.Parse("2026-08-12T00:00:00Z");
+
+        Assert.IsTrue(state.TryBegin("https://example.com/1.html", now));
+        state.MarkFailed(now);
+        Assert.IsFalse(state.TryBegin("https://example.com/1.html", now.AddSeconds(2)));
+        Assert.IsTrue(state.TryBegin("https://example.com/1.html", now.AddSeconds(2), explicitRetry: true));
+        state.MarkFailed(now.AddSeconds(2));
+        Assert.IsTrue(state.TryBegin("https://example.com/1.html", now.AddSeconds(7)));
+    }
+
+    [TestMethod]
     public void BodyTextNormalizationProducesParagraphsWithoutEmptyRows()
     {
         var chapter = NewChapter("https://example.com/1.html", " 第一段 \r\n\r\n 第二段 ");
@@ -72,6 +86,18 @@ public sealed class ReaderBehaviorTests
         Assert.IsTrue(ReaderPreferences.Defaults.PrefetchNextChapter);
         Assert.AreEqual(48, ReaderPreferences.Defaults.ContentWidthEm);
         Assert.IsTrue(ReaderPreferences.Defaults.ParagraphIndent);
+    }
+
+    [TestMethod]
+    public void ReaderAnchorKeepsChapterAndClampsParagraphAfterLayoutChanges()
+    {
+        var anchor = new ReaderAnchor("https://example.com/2.html", 42, 0.25);
+
+        var restored = anchor.Normalized(20);
+
+        Assert.AreEqual("https://example.com/2.html", restored.ChapterUrl);
+        Assert.AreEqual(19, restored.ParagraphIndex);
+        Assert.AreEqual(0.25, restored.ViewportRelativeOffset, 0.0001);
     }
 
     private static Chapter NewChapter(string url, string body) =>
