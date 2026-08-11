@@ -346,16 +346,22 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
             return;
         }
 
+        if (chapter.IsAvailableOffline)
+        {
+            var storedBody = await _repository.LoadChapterBodyAsync(book.Id, chapter.SourceUrl, cancellationToken).ConfigureAwait(true);
+            if (!string.IsNullOrWhiteSpace(storedBody))
+            {
+                chapter.ReplaceBodyText(storedBody, chapter.CachedAt);
+                return;
+            }
+        }
+
         var result = await _coordinator.LoadChapterContentAsync(new Uri(chapter.SourceUrl), cancellationToken).ConfigureAwait(true);
         chapter.Title = result.Title;
         chapter.ReplaceBodyText(result.BodyText);
         chapter.PreviousUrl = result.PreviousChapterUrl?.AbsoluteUri;
         chapter.NextUrl = result.NextChapterUrl?.AbsoluteUri;
         await _repository.SaveChapterAsync(book.Id, result, chapter.SortIndex, cancellationToken).ConfigureAwait(true);
-        if (SelectedChapter?.SourceUrl == chapter.SourceUrl)
-        {
-            ReaderSession.Reset(SelectedChapter);
-        }
     }
 
     private void ScheduleNextChapterPrefetch()

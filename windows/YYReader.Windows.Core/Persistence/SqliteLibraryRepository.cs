@@ -92,7 +92,7 @@ public sealed class SqliteLibraryRepository
             SELECT
                 b.Id, b.SourceBookUrl, b.CatalogUrl, b.Title, b.Author, b.SourceHost,
                 b.HasCatalog, b.CreatedAt, b.UpdatedAt, b.CatalogFetchedAt, b.CurrentChapterUrl,
-                c.SourceUrl, c.Title, c.SortIndex, c.BodyText, c.PreviousUrl, c.NextUrl, c.CachedAt,
+                c.SourceUrl, c.Title, c.SortIndex, c.PreviousUrl, c.NextUrl, c.CachedAt,
                 p.ParagraphIndex, p.Progress, p.LastReadAt
             FROM Books b
             LEFT JOIN Chapters c ON c.BookId = b.Id
@@ -131,17 +131,32 @@ public sealed class SqliteLibraryRepository
                 reader.GetString(11),
                 reader.GetString(12),
                 reader.GetInt32(13),
+                null,
                 reader.IsDBNull(14) ? null : reader.GetString(14),
                 reader.IsDBNull(15) ? null : reader.GetString(15),
-                reader.IsDBNull(16) ? null : reader.GetString(16),
-                ParseNullableDate(reader, 17),
-                reader.IsDBNull(18) ? 0 : reader.GetInt32(18),
-                reader.IsDBNull(19) ? 0 : reader.GetDouble(19),
-                ParseNullableDate(reader, 20));
+                ParseNullableDate(reader, 16),
+                reader.IsDBNull(17) ? 0 : reader.GetInt32(17),
+                reader.IsDBNull(18) ? 0 : reader.GetDouble(18),
+                ParseNullableDate(reader, 19));
             book.Chapters.Add(chapter);
         }
 
         return books.Values.ToArray();
+    }
+
+    public async Task<string?> LoadChapterBodyAsync(
+        string bookId,
+        string chapterUrl,
+        CancellationToken cancellationToken = default)
+    {
+        var canonicalUrl = UrlCanonicalizer.CanonicalizeChapter(chapterUrl).AbsoluteUri;
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT BodyText FROM Chapters WHERE BookId = $book AND SourceUrl = $url;";
+        command.Parameters.AddWithValue("$book", bookId);
+        command.Parameters.AddWithValue("$url", canonicalUrl);
+        var value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return value is null or DBNull ? null : Convert.ToString(value, CultureInfo.InvariantCulture);
     }
 
     public async Task<Book?> FindBookBySourceUrlAsync(string sourceBookUrl, CancellationToken cancellationToken = default)

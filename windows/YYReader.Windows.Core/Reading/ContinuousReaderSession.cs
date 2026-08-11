@@ -46,15 +46,14 @@ public sealed class ContinuousReaderSession
 
     public sealed class Entry
     {
-        private readonly ChapterParagraphCache _paragraphCache;
-
         internal Entry(Chapter chapter, ChapterParagraphCache paragraphCache)
         {
             Chapter = chapter;
-            _paragraphCache = paragraphCache;
+            Paragraphs = paragraphCache.Get(chapter);
+            chapter.ReleaseLoadedBody();
         }
 
         public Chapter Chapter { get; }
-        public IReadOnlyList<string> Paragraphs => _paragraphCache.Get(Chapter);
+        public IReadOnlyList<string> Paragraphs { get; }
     }
 }

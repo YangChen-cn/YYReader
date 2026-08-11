@@ -38,6 +38,13 @@ public sealed class PersistenceTests
             Assert.AreEqual(1, loaded.Chapters.Count);
             Assert.AreEqual(1, loaded.Chapters[0].ParagraphIndex);
             Assert.AreEqual(0.5, loaded.Chapters[0].Progress, 0.0001);
+            Assert.IsTrue(loaded.Chapters[0].IsAvailableOffline);
+            Assert.IsFalse(loaded.Chapters[0].IsCached, "书架查询不应把正文加载进 RAM");
+
+            var storedBody = await repository.LoadChapterBodyAsync(book.Id, chapterUrl.AbsoluteUri);
+            Assert.AreEqual("第一段\n\n第二段\n\n第三段", storedBody);
+            loaded.Chapters[0].ReplaceBodyText(storedBody, loaded.Chapters[0].CachedAt);
+            CollectionAssert.AreEqual(new[] { "第一段", "第二段", "第三段" }, loaded.Chapters[0].Paragraphs.ToArray());
 
             await repository.DeleteBookAsync(book.Id);
             Assert.AreEqual(0, (await repository.GetBooksAsync()).Count);

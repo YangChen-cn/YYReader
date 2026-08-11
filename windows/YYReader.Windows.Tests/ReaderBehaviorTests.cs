@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using YYReader.Windows.Core.Models;
 using YYReader.Windows.Core.Reading;
+using YYReader.Windows.Core.Collections;
 
 namespace YYReader.Windows.Tests;
 
@@ -34,6 +35,8 @@ public sealed class ReaderBehaviorTests
         var third = NewChapter("https://example.com/3.html", "第三段");
 
         session.Reset(first);
+        Assert.IsFalse(first.IsCached, "连续会话解析段落后应释放聚合正文字符串");
+        CollectionAssert.AreEqual(new[] { "第一段" }, session.Entries[0].Paragraphs.ToArray());
         Assert.IsTrue(session.AttachNext(second));
         Assert.IsTrue(session.AttachNext(third));
         Assert.AreEqual(3, session.Entries.Count);
@@ -98,6 +101,19 @@ public sealed class ReaderBehaviorTests
         Assert.AreEqual("https://example.com/2.html", restored.ChapterUrl);
         Assert.AreEqual(19, restored.ParagraphIndex);
         Assert.AreEqual(0.25, restored.ViewportRelativeOffset, 0.0001);
+    }
+
+    [TestMethod]
+    public void RangeCollectionRaisesOneNotificationForAnAppendedChapter()
+    {
+        var collection = new RangeObservableCollection<int>();
+        var notifications = 0;
+        collection.CollectionChanged += (_, _) => notifications++;
+
+        collection.AddRange(Enumerable.Range(1, 500));
+
+        Assert.AreEqual(500, collection.Count);
+        Assert.AreEqual(1, notifications);
     }
 
     private static Chapter NewChapter(string url, string body) =>

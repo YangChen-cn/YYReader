@@ -38,6 +38,7 @@ public sealed class Chapter
     public DateTimeOffset? LastReadAt { get; set; }
     public int ContentRevision { get; private set; }
     public bool IsCached => !string.IsNullOrWhiteSpace(BodyText);
+    public bool IsAvailableOffline => CachedAt is not null;
     public IReadOnlyList<string> Paragraphs => ChapterText.ToParagraphs(BodyText);
 
     public void ReplaceBodyText(string? bodyText, DateTimeOffset? cachedAt = null)
@@ -52,6 +53,11 @@ public sealed class Chapter
         BodyText = null;
         CachedAt = null;
         ContentRevision++;
+    }
+
+    public void ReleaseLoadedBody()
+    {
+        BodyText = null;
     }
 
     public void ApplyProgress(int paragraphIndex, int paragraphCount, DateTimeOffset at)

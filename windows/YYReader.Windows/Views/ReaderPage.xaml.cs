@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
@@ -10,6 +9,7 @@ using Windows.System;
 using Windows.UI.Core;
 using YYReader.Windows.Core.Models;
 using YYReader.Windows.Core.Reading;
+using YYReader.Windows.Core.Collections;
 using YYReader.Windows.Services;
 using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
@@ -34,7 +34,7 @@ public sealed partial class ReaderPage : Page
         Store = store;
         Book = book;
         _window = window;
-        Items = new ObservableCollection<ReaderItem>();
+        Items = new RangeObservableCollection<ReaderItem>();
         InitializeComponent();
         _progressTimer = DispatcherQueue.CreateTimer();
         _progressTimer.Interval = TimeSpan.FromMilliseconds(280);
@@ -47,7 +47,7 @@ public sealed partial class ReaderPage : Page
 
     public LibraryStore Store { get; }
     public Book Book { get; }
-    public ObservableCollection<ReaderItem> Items { get; }
+    public RangeObservableCollection<ReaderItem> Items { get; }
 
     private async void ReaderPage_Loaded(object sender, RoutedEventArgs e)
     {
@@ -76,13 +76,7 @@ public sealed partial class ReaderPage : Page
     private void RebuildItems(ReaderRebuildPosition position = ReaderRebuildPosition.PreserveAnchor)
     {
         var anchor = position == ReaderRebuildPosition.PreserveAnchor ? CaptureReaderAnchor() : null;
-        Items.Clear();
-        var entries = Store.ReaderSession.Entries;
-        for (var entryIndex = 0; entryIndex < entries.Count; entryIndex++)
-        {
-            AddEntryItems(entries[entryIndex], entryIndex == 0);
-        }
-        ReaderRepeater.ItemsSource = Items;
+        Items.ReplaceAll(ReaderItemBuilder.Build(Store.ReaderSession.Entries));
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
             ReaderRepeater.UpdateLayout();
@@ -102,44 +96,6 @@ public sealed partial class ReaderPage : Page
         });
     }
 
-    private void AddEntryItems(ContinuousReaderSession.Entry entry, bool firstEntry)
-    {
-        var chapter = entry.Chapter;
-        var headingSize = firstEntry ? _preferences.FontSize * 1.35 : _preferences.FontSize * 1.12;
-        Items.Add(new ReaderItem
-        {
-            Kind = ReaderItemKind.Header,
-            Text = chapter.Title,
-            ChapterUrl = chapter.SourceUrl,
-            FontSize = headingSize,
-            LineHeight = headingSize * 1.3,
-            FontFamily = ReaderFontFamily(),
-            Foreground = _palette.Accent,
-            Margin = new Thickness(0, firstEntry ? 32 : 24, 0, firstEntry ? 20 : 10)
-        });
-
-        var paragraphs = entry.Paragraphs;
-        for (var index = 0; index < paragraphs.Count; index++)
-        {
-            var paragraph = _preferences.ParagraphIndent && !string.IsNullOrWhiteSpace(paragraphs[index])
-                ? $"\u3000\u3000{paragraphs[index]}"
-                : paragraphs[index];
-            Items.Add(new ReaderItem
-            {
-                Kind = ReaderItemKind.Paragraph,
-                Text = paragraph,
-                ChapterUrl = chapter.SourceUrl,
-                ParagraphIndex = index,
-                ParagraphCount = paragraphs.Count,
-                FontSize = _preferences.FontSize,
-                LineHeight = _preferences.FontSize * (1 + _preferences.LineSpacing),
-                FontFamily = ReaderFontFamily(),
-                Foreground = _palette.Foreground,
-                Margin = new Thickness(0, 0, 0, _preferences.FontSize * _preferences.ParagraphSpacing)
-            });
-        }
-    }
-
     private void ReaderRoot_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         ReaderContent.Width = ReaderLayout.EffectiveContentWidth(
@@ -150,13 +106,45 @@ public sealed partial class ReaderPage : Page
 
     private void ReaderRepeater_ElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
     {
-        _realizedElements[sender.GetElementIndex(args.Element)] = args.Element;
+        var index = sender.GetElementIndex(args.Element);
+        _realizedElements[index] = args.Element;
+        if (index >= 0 && index < Items.Count) ApplyRealizedItemStyle(args.Element, Items[index]);
     }
 
     private void ReaderRepeater_ElementClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
     {
         var index = sender.GetElementIndex(args.Element);
         if (index >= 0) _realizedElements.Remove(index);
+    }
+
+    private void ApplyRealizedItemStyle(UIElement element, ReaderItem item)
+    {
+        var fontFamily = ReaderFontFamily();
+        if (item.Kind == ReaderItemKind.Paragraph && element is TextBlock paragraph)
+        {
+            paragraph.Text = _preferences.ParagraphIndent && !string.IsNullOrWhiteSpace(item.Text)
+                ? $"\u3000\u3000{item.Text}"
+                : item.Text;
+            paragraph.FontSize = _preferences.FontSize;
+            paragraph.LineHeight = _preferences.FontSize * (1 + _preferences.LineSpacing);
+            paragraph.FontFamily = fontFamily;
+            paragraph.Foreground = _palette.Foreground;
+            paragraph.Margin = new Thickness(0, 0, 0, _preferences.FontSize * _preferences.ParagraphSpacing);
+            return;
+        }
+
+        if (item.Kind == ReaderItemKind.Header && element is StackPanel header)
+        {
+            var isFirst = Store.ReaderSession.Entries.FirstOrDefault()?.Chapter.SourceUrl == item.ChapterUrl;
+            var headingSize = _preferences.FontSize * (isFirst ? 1.35 : 1.12);
+            header.Margin = new Thickness(0, isFirst ? 32 : 24, 0, isFirst ? 20 : 10);
+            if (header.Children.OfType<TextBlock>().LastOrDefault() is { } title)
+            {
+                title.FontSize = headingSize;
+                title.FontFamily = fontFamily;
+                title.Foreground = _palette.Accent;
+            }
+        }
     }
 
     private void ReaderScrollViewer_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
@@ -308,7 +296,7 @@ public sealed partial class ReaderPage : Page
             if (next is not null && Store.ReaderSession.Entries.Count > before)
             {
                 var stableOffset = ReaderScrollViewer.VerticalOffset;
-                AddEntryItems(Store.ReaderSession.Entries[^1], false);
+                Items.AddRange(ReaderItemBuilder.BuildEntry(Store.ReaderSession.Entries[^1]));
                 RefreshChapterPicker();
                 HideContinuationBoundary();
                 DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>

@@ -1,6 +1,5 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using YYReader.Windows.Core.Models;
 
 namespace YYReader.Windows.Views;
@@ -12,18 +11,22 @@ public enum ReaderItemKind
     Footer
 }
 
-public sealed class ReaderItem
+public sealed class ReaderItem(
+    ReaderItemKind kind,
+    Chapter chapter,
+    int paragraphIndex = 0,
+    IReadOnlyList<string>? paragraphs = null)
 {
-    public ReaderItemKind Kind { get; set; }
-    public string Text { get; set; } = "";
-    public string ChapterUrl { get; set; } = "";
-    public int ParagraphIndex { get; set; }
-    public int ParagraphCount { get; set; }
-    public double FontSize { get; set; }
-    public double LineHeight { get; set; }
-    public FontFamily FontFamily { get; set; } = new("Microsoft YaHei UI");
-    public Thickness Margin { get; set; }
-    public Brush Foreground { get; set; } = new SolidColorBrush(Microsoft.UI.Colors.Black);
+    public ReaderItemKind Kind { get; } = kind;
+    public Chapter Chapter { get; } = chapter;
+    public int ParagraphIndex { get; } = paragraphIndex;
+    public string ChapterUrl => Chapter.SourceUrl;
+    public int ParagraphCount => paragraphs?.Count ?? 0;
+    public string Text => Kind == ReaderItemKind.Header
+        ? Chapter.Title
+        : paragraphs is not null && ParagraphIndex >= 0 && ParagraphIndex < paragraphs.Count
+            ? paragraphs[ParagraphIndex]
+            : "";
     public bool IsParagraph => Kind == ReaderItemKind.Paragraph;
 }
 
@@ -33,9 +36,8 @@ public sealed class ReaderItemTemplateSelector : DataTemplateSelector
     public DataTemplate? ParagraphTemplate { get; set; }
     public DataTemplate? FooterTemplate { get; set; }
 
-    protected override DataTemplate? SelectTemplateCore(object item, DependencyObject container)
-    {
-        return item is ReaderItem readerItem
+    protected override DataTemplate? SelectTemplateCore(object item, DependencyObject container) =>
+        item is ReaderItem readerItem
             ? readerItem.Kind switch
             {
                 ReaderItemKind.Header => HeaderTemplate,
@@ -43,5 +45,4 @@ public sealed class ReaderItemTemplateSelector : DataTemplateSelector
                 _ => ParagraphTemplate
             }
             : base.SelectTemplateCore(item, container);
-    }
 }

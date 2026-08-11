@@ -6,12 +6,9 @@
     xmlns:local="using:YYReader.Windows.Views">
     <Page.Resources>
         <DataTemplate x:Key="ReaderHeaderTemplate" x:DataType="local:ReaderItem">
-            <StackPanel Margin="{x:Bind Margin}" Spacing="10">
+            <StackPanel Spacing="10">
                 <TextBlock Text="◆" FontSize="8" Opacity="0.35" HorizontalAlignment="Center" />
                 <TextBlock Text="{x:Bind Text}"
-                           FontSize="{x:Bind FontSize}"
-                           FontFamily="{x:Bind FontFamily}"
-                           Foreground="{x:Bind Foreground}"
                            TextWrapping="Wrap"
                            TextAlignment="Center"
                            HorizontalAlignment="Center"
@@ -20,22 +17,14 @@
         </DataTemplate>
         <DataTemplate x:Key="ReaderParagraphTemplate" x:DataType="local:ReaderItem">
             <TextBlock Text="{x:Bind Text}"
-                       FontSize="{x:Bind FontSize}"
-                       LineHeight="{x:Bind LineHeight}"
-                       FontFamily="{x:Bind FontFamily}"
-                       Foreground="{x:Bind Foreground}"
                        TextWrapping="Wrap"
-                       IsTextSelectionEnabled="True"
-                       Margin="{x:Bind Margin}" />
+                       IsTextSelectionEnabled="True" />
         </DataTemplate>
         <DataTemplate x:Key="ReaderFooterTemplate" x:DataType="local:ReaderItem">
             <TextBlock Text="{x:Bind Text}"
-                       FontSize="{x:Bind FontSize}"
-                       FontFamily="{x:Bind FontFamily}"
-                       Foreground="{x:Bind Foreground}"
                        TextWrapping="Wrap"
                        HorizontalAlignment="Center"
-                       Margin="{x:Bind Margin}" />
+                       Margin="0,16" />
         </DataTemplate>
         <local:ReaderItemTemplateSelector x:Key="ReaderItemSelector"
             HeaderTemplate="{StaticResource ReaderHeaderTemplate}"
