@@ -680,6 +680,7 @@ public sealed partial class ReaderPage : Page
                         ? $"下载完成 {state.Completed} 章，失败 {state.Failed} 章。"
                         : "";
             DownloadProgressBar.Value = state.Total <= 0 ? 0 : (double)(state.Completed + state.Failed) / state.Total;
+            if (_window is MainWindow mainWindow) mainWindow.RefreshTitleBarHitTestRegions();
         });
     }
 

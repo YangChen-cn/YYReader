@@ -1,6 +1,10 @@
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
+using Windows.Foundation;
+using Windows.Graphics;
 using YYReader.Windows.Core.Persistence;
 using YYReader.Windows.Core.Services;
 using YYReader.Windows.Services;
@@ -21,6 +25,7 @@ public sealed partial class MainWindow : Window
     private bool _closeReady;
     private bool _syncReloadPending;
     private readonly HashSet<string> _pendingCatalogRefreshSources = new(StringComparer.Ordinal);
+    private RectInt32[] _titleBarPassthroughRects = [];
 
     public MainWindow()
     {
@@ -31,6 +36,8 @@ public sealed partial class MainWindow : Window
         // A separate full-width drag overlay can classify rapid button clicks as caption
         // double-clicks and unexpectedly maximize the window.
         SetTitleBar(AppTitleBar);
+        AppTitleBar.SizeChanged += (_, _) => UpdateTitleBarPassthroughRegions();
+        PageTitleBarContent.SizeChanged += (_, _) => UpdateTitleBarPassthroughRegions();
         AppWindow.Changed += AppWindow_Changed;
         UpdateTitleBarInsets();
         try
@@ -132,6 +139,7 @@ public sealed partial class MainWindow : Window
     {
         PageTitleBarContent.Content = content;
         TitleBarBrand.Visibility = showBrand ? Visibility.Visible : Visibility.Collapsed;
+        DispatcherQueue.TryEnqueue(UpdateTitleBarPassthroughRegions);
     }
 
     public void ClearPageTitleBar(UIElement content)
@@ -139,7 +147,11 @@ public sealed partial class MainWindow : Window
         if (!ReferenceEquals(PageTitleBarContent.Content, content)) return;
         PageTitleBarContent.Content = null;
         TitleBarBrand.Visibility = Visibility.Visible;
+        DispatcherQueue.TryEnqueue(UpdateTitleBarPassthroughRegions);
     }
+
+    public void RefreshTitleBarHitTestRegions() =>
+        DispatcherQueue.TryEnqueue(UpdateTitleBarPassthroughRegions);
 
     private void AppWindow_Changed(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowChangedEventArgs args) =>
         UpdateTitleBarInsets();
@@ -151,6 +163,55 @@ public sealed partial class MainWindow : Window
             0,
             8 + AppWindow.TitleBar.RightInset,
             0);
+    }
+
+    private void UpdateTitleBarPassthroughRegions()
+    {
+        if (AppTitleBar.XamlRoot is null || PageTitleBarContent.Content is not DependencyObject content) return;
+        var scale = AppTitleBar.XamlRoot.RasterizationScale;
+        var titleBarHeight = Math.Max(1, (int)Math.Ceiling(AppTitleBar.ActualHeight * scale));
+        var regions = Descendants(content)
+            .OfType<ButtonBase>()
+            .Where(button => button.Visibility == Visibility.Visible && button.ActualWidth > 0)
+            .Select(button =>
+            {
+                var origin = button.TransformToVisual(RootGrid).TransformPoint(new Point());
+                const double guard = 8;
+                var x = Math.Max(0, (int)Math.Floor((origin.X - guard) * scale));
+                var right = (int)Math.Ceiling((origin.X + button.ActualWidth + guard) * scale);
+                return new RectInt32(x, 0, Math.Max(1, right - x), titleBarHeight);
+            })
+            .OrderBy(rect => rect.X)
+            .ToArray();
+        if (SameRegions(_titleBarPassthroughRects, regions)) return;
+        InputNonClientPointerSource.GetForWindowId(AppWindow.Id)
+            .SetRegionRects(NonClientRegionKind.Passthrough, regions);
+        _titleBarPassthroughRects = regions;
+    }
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
+    {
+        yield return root;
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            foreach (var descendant in Descendants(VisualTreeHelper.GetChild(root, index)))
+            {
+                yield return descendant;
+            }
+        }
+    }
+
+    private static bool SameRegions(IReadOnlyList<RectInt32> first, IReadOnlyList<RectInt32> second)
+    {
+        if (first.Count != second.Count) return false;
+        for (var index = 0; index < first.Count; index++)
+        {
+            if (first[index].X != second[index].X
+                || first[index].Y != second[index].Y
+                || first[index].Width != second[index].Width
+                || first[index].Height != second[index].Height) return false;
+        }
+        return true;
     }
 
     private async Task<bool> ShowVerificationAsync(Uri url)

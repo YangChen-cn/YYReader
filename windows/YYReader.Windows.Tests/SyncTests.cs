@@ -166,6 +166,38 @@ public sealed class SyncTests
         }
     }
 
+    [TestMethod]
+    public async Task LocalPublishWritesWindowsSnapshotWithoutReadingOrApplyingMacSnapshot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"yyreader-sync-local-{Guid.NewGuid():N}");
+        var directory = SyncEngine.ResolveSyncDirectory(root);
+        Directory.CreateDirectory(directory);
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(directory, SyncEngine.MacFileName), "{");
+            var mergeCalls = 0;
+            var book = Book("https://example.com/book/", "书", "https://example.com/book/9.html", 3, 0.4, "2026-01-01", "2026-01-02", 9);
+            var engine = new SyncEngine(
+                _ => Task.FromResult(new SyncSnapshot { Device = "windows", UpdatedAt = DateTimeOffset.UtcNow, Books = [book] }),
+                (_, _) =>
+                {
+                    mergeCalls++;
+                    return Task.FromResult(SyncApplicationResult.None);
+                });
+
+            var result = await engine.PublishLocalAsync(root);
+
+            Assert.IsTrue(result.WindowsFileWritten);
+            Assert.AreEqual(0, mergeCalls);
+            Assert.AreEqual(2, SyncSnapshotCodec.Decode(
+                await File.ReadAllTextAsync(Path.Combine(directory, SyncEngine.WindowsFileName))).Version);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static SyncSnapshotBook Book(
         string source,
         string title,

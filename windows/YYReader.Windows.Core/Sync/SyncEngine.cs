@@ -10,9 +10,7 @@ public sealed class SyncEngine(
 
     public async Task<SyncExecutionResult> SynchronizeAsync(string selectedFolderPath, CancellationToken cancellationToken = default)
     {
-        var syncDirectory = ResolveSyncDirectory(selectedFolderPath);
-        if (!Directory.Exists(selectedFolderPath)) throw new DirectoryNotFoundException("同步文件夹暂时不可用。");
-        Directory.CreateDirectory(syncDirectory);
+        var syncDirectory = EnsureSyncDirectory(selectedFolderPath);
 
         var macPath = Path.Combine(syncDirectory, MacFileName);
         var application = SyncApplicationResult.None;
@@ -27,6 +25,22 @@ public sealed class SyncEngine(
             application = await mergeRemoteSnapshot(remote, cancellationToken).ConfigureAwait(false);
         }
 
+        var published = await PublishLocalCoreAsync(syncDirectory, cancellationToken).ConfigureAwait(false);
+        return published with { Application = application };
+    }
+
+    public async Task<SyncExecutionResult> PublishLocalAsync(
+        string selectedFolderPath,
+        CancellationToken cancellationToken = default)
+    {
+        var syncDirectory = EnsureSyncDirectory(selectedFolderPath);
+        return await PublishLocalCoreAsync(syncDirectory, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<SyncExecutionResult> PublishLocalCoreAsync(
+        string syncDirectory,
+        CancellationToken cancellationToken)
+    {
         var built = await buildLocalSnapshot(cancellationToken).ConfigureAwait(false);
         var snapshot = new SyncSnapshot
         {
@@ -54,7 +68,15 @@ public sealed class SyncEngine(
         {
             await WriteAtomicallyAsync(windowsPath, SyncSnapshotCodec.Encode(snapshot), cancellationToken).ConfigureAwait(false);
         }
-        return new SyncExecutionResult(snapshot, application, shouldWrite);
+        return new SyncExecutionResult(snapshot, SyncApplicationResult.None, shouldWrite);
+    }
+
+    private static string EnsureSyncDirectory(string selectedFolderPath)
+    {
+        if (!Directory.Exists(selectedFolderPath)) throw new DirectoryNotFoundException("同步文件夹暂时不可用。");
+        var syncDirectory = ResolveSyncDirectory(selectedFolderPath);
+        Directory.CreateDirectory(syncDirectory);
+        return syncDirectory;
     }
 
     public static string ResolveSyncDirectory(string selectedFolderPath) =>

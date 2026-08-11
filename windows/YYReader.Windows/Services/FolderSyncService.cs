@@ -20,7 +20,8 @@ public sealed class FolderSyncService : IAsyncDisposable
     private readonly SemaphoreSlim _syncGate = new(1, 1);
     private readonly CancellationTokenSource _lifetimeCancellation = new();
     private readonly Timer _pollTimer;
-    private CancellationTokenSource? _debounceCancellation;
+    private CancellationTokenSource? _localDebounceCancellation;
+    private CancellationTokenSource? _remoteDebounceCancellation;
     private FileSystemWatcher? _watcher;
     private DateTime _observedMacWriteTimeUtc;
     private long _observedMacLength = -1;
@@ -55,7 +56,7 @@ public sealed class FolderSyncService : IAsyncDisposable
         Preferences = await _preferencesStore.LoadAsync(cancellationToken);
         ConfigureWatcher();
         _pollTimer.Change(TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
-        if (Preferences.IsEnabled) ScheduleSync(TimeSpan.Zero);
+        if (Preferences.IsEnabled) ScheduleRemoteSync(TimeSpan.Zero, onlyIfMacChanged: false);
     }
 
     public async Task ConfigureAsync(bool enabled, string? folderPath, CancellationToken cancellationToken = default)
@@ -67,33 +68,48 @@ public sealed class FolderSyncService : IAsyncDisposable
         };
         await _preferencesStore.SaveAsync(Preferences, cancellationToken);
         ConfigureWatcher();
-        if (enabled) ScheduleSync(TimeSpan.Zero);
+        if (enabled) ScheduleRemoteSync(TimeSpan.Zero, onlyIfMacChanged: false);
     }
 
     public void OnAppActivated()
     {
-        if (Preferences.IsEnabled) ScheduleSync(TimeSpan.Zero);
+        if (!Preferences.IsEnabled) return;
+        ScheduleLocalPublish(TimeSpan.Zero);
+        ScheduleRemoteSync(TimeSpan.Zero, onlyIfMacChanged: true);
     }
 
-    public void ScheduleSync(TimeSpan? delay = null)
+    private void ScheduleLocalPublish(TimeSpan? delay = null)
     {
         if (_disposed || !Preferences.IsEnabled || string.IsNullOrWhiteSpace(Preferences.FolderPath)) return;
-        _debounceCancellation?.Cancel();
-        _debounceCancellation?.Dispose();
+        _localDebounceCancellation?.Cancel();
+        _localDebounceCancellation?.Dispose();
         var cancellation = new CancellationTokenSource();
-        _debounceCancellation = cancellation;
-        _ = SynchronizeAfterDelayAsync(delay ?? TimeSpan.FromMilliseconds(1500), cancellation);
+        _localDebounceCancellation = cancellation;
+        _ = PublishLocalAfterDelayAsync(delay ?? TimeSpan.FromMilliseconds(1500), cancellation);
+    }
+
+    private void ScheduleRemoteSync(TimeSpan? delay = null, bool onlyIfMacChanged = true)
+    {
+        if (_disposed || !Preferences.IsEnabled || string.IsNullOrWhiteSpace(Preferences.FolderPath)) return;
+        _remoteDebounceCancellation?.Cancel();
+        _remoteDebounceCancellation?.Dispose();
+        var cancellation = new CancellationTokenSource();
+        _remoteDebounceCancellation = cancellation;
+        _ = SynchronizeRemoteAfterDelayAsync(
+            delay ?? TimeSpan.FromMilliseconds(350),
+            onlyIfMacChanged,
+            cancellation);
     }
 
     public Task SynchronizeNowAsync(CancellationToken cancellationToken = default) =>
-        SynchronizeCoreAsync(userInitiated: true, cancellationToken);
+        SynchronizeRemoteCoreAsync(userInitiated: true, cancellationToken);
 
-    private async Task SynchronizeCoreAsync(bool userInitiated, CancellationToken cancellationToken = default)
+    private async Task SynchronizeRemoteCoreAsync(bool userInitiated, CancellationToken cancellationToken = default)
     {
         if (!Preferences.IsEnabled || string.IsNullOrWhiteSpace(Preferences.FolderPath)) return;
         using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeCancellation.Token);
         var operationToken = linkedCancellation.Token;
-        if (!await _syncGate.WaitAsync(0, operationToken)) return;
+        await _syncGate.WaitAsync(operationToken);
         try
         {
             UpdateState(new(true, Preferences.LastSyncAt, ShouldNotify: userInitiated));
@@ -127,16 +143,63 @@ public sealed class FolderSyncService : IAsyncDisposable
         }
     }
 
-    private async Task SynchronizeAfterDelayAsync(TimeSpan delay, CancellationTokenSource scheduled)
+    private async Task PublishLocalCoreAsync(CancellationToken cancellationToken)
+    {
+        if (!Preferences.IsEnabled || string.IsNullOrWhiteSpace(Preferences.FolderPath)) return;
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeCancellation.Token);
+        await _syncGate.WaitAsync(linkedCancellation.Token);
+        try
+        {
+            _suppressScheduling = true;
+            try { await RunOnUiThreadAsync(() => _store.FlushPendingProgressAsync(linkedCancellation.Token)); }
+            finally { _suppressScheduling = false; }
+            await Engine.PublishLocalAsync(Preferences.FolderPath, linkedCancellation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception)
+        {
+            UpdateState(new(false, Preferences.LastSyncAt, exception.Message, ShouldNotify: true));
+        }
+        finally
+        {
+            _syncGate.Release();
+        }
+    }
+
+    private async Task PublishLocalAfterDelayAsync(TimeSpan delay, CancellationTokenSource scheduled)
     {
         try
         {
             await Task.Delay(delay, scheduled.Token);
-            if (ReferenceEquals(_debounceCancellation, scheduled))
+            if (ReferenceEquals(_localDebounceCancellation, scheduled))
             {
-                _debounceCancellation = null;
-                await SynchronizeCoreAsync(userInitiated: false, scheduled.Token);
+                _localDebounceCancellation = null;
+                await PublishLocalCoreAsync(scheduled.Token);
             }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            scheduled.Dispose();
+        }
+    }
+
+    private async Task SynchronizeRemoteAfterDelayAsync(
+        TimeSpan delay,
+        bool onlyIfMacChanged,
+        CancellationTokenSource scheduled)
+    {
+        try
+        {
+            await Task.Delay(delay, scheduled.Token);
+            if (!ReferenceEquals(_remoteDebounceCancellation, scheduled)) return;
+            _remoteDebounceCancellation = null;
+            if (onlyIfMacChanged && !MacSnapshotSignatureChanged()) return;
+            await SynchronizeRemoteCoreAsync(userInitiated: false, scheduled.Token);
         }
         catch (OperationCanceledException)
         {
@@ -172,7 +235,8 @@ public sealed class FolderSyncService : IAsyncDisposable
         }
     }
 
-    private void MacSnapshotChanged(object sender, FileSystemEventArgs e) => ScheduleSync();
+    private void MacSnapshotChanged(object sender, FileSystemEventArgs e) =>
+        ScheduleRemoteSync(onlyIfMacChanged: true);
 
     private void Poll()
     {
@@ -185,7 +249,7 @@ public sealed class FolderSyncService : IAsyncDisposable
             var info = new FileInfo(path);
             if (info.LastWriteTimeUtc != _observedMacWriteTimeUtc || info.Length != _observedMacLength)
             {
-                ScheduleSync(TimeSpan.Zero);
+                ScheduleRemoteSync(TimeSpan.Zero, onlyIfMacChanged: true);
             }
         }
         catch
@@ -209,6 +273,15 @@ public sealed class FolderSyncService : IAsyncDisposable
         _observedMacLength = info.Length;
     }
 
+    private bool MacSnapshotSignatureChanged()
+    {
+        if (string.IsNullOrWhiteSpace(Preferences.FolderPath)) return false;
+        var path = Path.Combine(SyncEngine.ResolveSyncDirectory(Preferences.FolderPath), SyncEngine.MacFileName);
+        if (!File.Exists(path)) return false;
+        var info = new FileInfo(path);
+        return info.LastWriteTimeUtc != _observedMacWriteTimeUtc || info.Length != _observedMacLength;
+    }
+
     private Task RunOnUiThreadAsync(Func<Task> operation)
     {
         if (_dispatcherQueue.HasThreadAccess) return operation();
@@ -226,12 +299,12 @@ public sealed class FolderSyncService : IAsyncDisposable
 
     private void StoreBooksChanged(object? sender, EventArgs e)
     {
-        if (!_suppressScheduling) ScheduleSync();
+        if (!_suppressScheduling) ScheduleLocalPublish();
     }
 
     private void StoreProgressPersisted(object? sender, EventArgs e)
     {
-        if (!_suppressScheduling) ScheduleSync();
+        if (!_suppressScheduling) ScheduleLocalPublish();
     }
 
     private void UpdateState(FolderSyncState state)
@@ -246,8 +319,10 @@ public sealed class FolderSyncService : IAsyncDisposable
         _disposed = true;
         _store.BooksChanged -= StoreBooksChanged;
         _store.ProgressPersisted -= StoreProgressPersisted;
-        _debounceCancellation?.Cancel();
-        _debounceCancellation?.Dispose();
+        _localDebounceCancellation?.Cancel();
+        _localDebounceCancellation?.Dispose();
+        _remoteDebounceCancellation?.Cancel();
+        _remoteDebounceCancellation?.Dispose();
         _watcher?.Dispose();
         _pollTimer.Dispose();
         _lifetimeCancellation.Cancel();
