@@ -27,7 +27,10 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         ExtendsContentIntoTitleBar = true;
-        SetTitleBar(TitleBarDragRegion);
+        // Keep page toolbar controls inside the custom title bar's interactive subtree.
+        // A separate full-width drag overlay can classify rapid button clicks as caption
+        // double-clicks and unexpectedly maximize the window.
+        SetTitleBar(AppTitleBar);
         AppWindow.Changed += AppWindow_Changed;
         UpdateTitleBarInsets();
         try
