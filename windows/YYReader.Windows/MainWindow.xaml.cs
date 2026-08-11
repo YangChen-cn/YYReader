@@ -23,7 +23,7 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         ExtendsContentIntoTitleBar = true;
-        SetTitleBar(AppTitleBar);
+        SetTitleBar(TitleBarDragRegion);
         AppWindow.Changed += AppWindow_Changed;
         UpdateTitleBarInsets();
         try
