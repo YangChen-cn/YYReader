@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>YYReader.Windows.Core</AssemblyName>
+    <RootNamespace>YYReader.Windows.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AngleSharp" Version="1.7.1" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.21" />
+  </ItemGroup>
+</Project>

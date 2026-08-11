@@ -6,12 +6,21 @@
   "additionalProperties": true,
   "required": ["format", "version", "exportedAt", "books"],
   "properties": {
-    "format": { "const": "yyreader-bookshelf" },
-    "version": { "const": 1 },
-    "exportedAt": { "type": "string", "format": "date-time" },
+    "format": {
+      "const": "yyreader-bookshelf"
+    },
+    "version": {
+      "const": 1
+    },
+    "exportedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
     "books": {
       "type": "array",
-      "items": { "$ref": "#/$defs/book" }
+      "items": {
+        "$ref": "#/$defs/book"
+      }
     }
   },
   "$defs": {
@@ -25,11 +34,25 @@
           "format": "uri",
           "description": "Canonical book-level source URL, not the current chapter URL."
         },
-        "title": { "type": "string" },
-        "author": { "type": "string" },
-        "currentChapterURL": { "type": ["string", "null"], "format": "uri" },
-        "paragraphIndex": { "type": ["integer", "null"], "minimum": 0 },
-        "progress": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+        "title": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "currentChapterURL": {
+          "type": ["string", "null"],
+          "format": "uri"
+        },
+        "paragraphIndex": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "progress": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        }
       }
     }
   }

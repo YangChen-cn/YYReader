@@ -1,0 +1,110 @@
+<Page
+    x:Class="YYReader.Windows.Views.LibraryPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:YYReader.Windows.Core.Models">
+    <Grid Background="Transparent" KeyDown="LibraryPage_KeyDown" IsTabStop="True">
+        <Grid x:Name="LibraryShell" MaxWidth="1080" HorizontalAlignment="Stretch" Padding="{StaticResource YYPagePadding}"
+              RowDefinitions="Auto,Auto,*,Auto" RowSpacing="{StaticResource YYSectionSpacing}">
+            <Grid x:Name="LibraryToolbar" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                <Button x:Name="AddBookButton" Grid.Column="1" Content="＋ 添加小说"
+                        Style="{StaticResource AccentButtonStyle}">
+                    <Button.Flyout>
+                        <Flyout x:Name="AddBookFlyout">
+                            <StackPanel Width="420" Spacing="12">
+                                <TextBlock Text="添加小说" FontSize="18" FontWeight="SemiBold" />
+                                <TextBlock Text="粘贴章节页或目录页 URL" Style="{StaticResource YYSecondaryTextStyle}" />
+                                <TextBox x:Name="UrlTextBox" PlaceholderText="https://…" KeyDown="UrlTextBox_KeyDown" />
+                                <Button Content="添加到书架" HorizontalAlignment="Right"
+                                        Style="{StaticResource AccentButtonStyle}" Click="AddUrl_Click" />
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+                <Button Grid.Column="2" Width="{StaticResource YYTitleBarButtonSize}" Style="{StaticResource YYToolbarButtonStyle}" ToolTipService.ToolTip="更多">
+                    <FontIcon Glyph="&#xE712;" FontSize="16" />
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuFlyoutItem Text="文件夹同步" Click="FolderSync_Click" />
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem Text="导入书架" Click="ImportBookshelf_Click" />
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem Text="复制书架导出 JSON" Click="CopyBookshelfExport_Click" />
+                            <MenuFlyoutItem Text="导出为 .yyreader 文件" Click="SaveBookshelfExport_Click" />
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem Text="关于 YYReader" Click="About_Click" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+            </Grid>
+
+            <StackPanel Grid.Row="0" Spacing="10">
+                <TextBlock Text="继续阅读" Style="{StaticResource YYSectionTitleStyle}" />
+                <Border x:Name="FeaturedBookPanel" Padding="{StaticResource YYCardPadding}" CornerRadius="{StaticResource YYCornerMedium}"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <Border Width="54" Height="68" CornerRadius="{StaticResource YYCornerSmall}"
+                                Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                            <TextBlock x:Name="FeaturedMonogram" FontSize="25" FontWeight="SemiBold"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.72" />
+                        </Border>
+                        <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                            <TextBlock x:Name="FeaturedTitle" FontSize="19" FontWeight="SemiBold" />
+                            <TextBlock x:Name="FeaturedChapter" Style="{StaticResource YYSecondaryTextStyle}" />
+                            <TextBlock x:Name="FeaturedProgress" Opacity="0.48" FontSize="12" />
+                        </StackPanel>
+                        <Button x:Name="FeaturedOpenButton" Grid.Column="2" Content="继续阅读"
+                                Style="{StaticResource AccentButtonStyle}" Click="OpenBook_Click" />
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <TextBlock Grid.Row="1" Text="全部小说" Style="{StaticResource YYSectionTitleStyle}" />
+
+            <Grid Grid.Row="2">
+                <ListView x:Name="BookListView" ItemsSource="{x:Bind Store.Books, Mode=OneWay}"
+                          SelectionMode="Single" IsItemClickEnabled="False"
+                          SelectionChanged="BookListView_SelectionChanged"
+                          DoubleTapped="BookListView_DoubleTapped" KeyDown="BookListView_KeyDown">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="models:Book">
+                            <Grid Padding="12,11" ColumnDefinitions="42,*,Auto" ColumnSpacing="14">
+                                <Grid.ContextFlyout>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem Text="打开" Tag="{x:Bind}" Click="OpenBookMenu_Click" />
+                                        <MenuFlyoutItem Text="刷新目录" Tag="{x:Bind}" Click="RefreshBookCatalog_Click" />
+                                        <MenuFlyoutItem Text="下载全部章节" Tag="{x:Bind}" Click="DownloadAllBook_Click" />
+                                        <MenuFlyoutItem Text="删除离线缓存" Tag="{x:Bind}" Click="ClearBookCache_Click" />
+                                        <MenuFlyoutSeparator />
+                                        <MenuFlyoutItem Text="删除小说" Tag="{x:Bind}" Click="DeleteBook_Click" />
+                                    </MenuFlyout>
+                                </Grid.ContextFlyout>
+                                <Border Width="40" Height="46" CornerRadius="{StaticResource YYCornerSmall}"
+                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                                    <TextBlock Text="{x:Bind Monogram}" FontSize="17" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.7" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Spacing="3">
+                                    <TextBlock Text="{x:Bind Title}" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{x:Bind CurrentChapterTitle}" Opacity="0.66" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="2" Text="{x:Bind ProgressDisplay}" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Style="{StaticResource YYSecondaryTextStyle}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <StackPanel x:Name="EmptyState" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+                    <Image Source="/Assets/AppIcon.png" Width="68" Height="68" Opacity="0.9" />
+                    <TextBlock Text="书架还是空的" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                    <TextBlock Text="添加一本小说，开始阅读。" Style="{StaticResource YYSecondaryTextStyle}" />
+                </StackPanel>
+            </Grid>
+
+            <InfoBar x:Name="StatusInfoBar" Grid.Row="3" IsOpen="False" IsClosable="True"
+                     Closed="StatusInfoBar_Closed" />
+        </Grid>
+    </Grid>
+</Page>
