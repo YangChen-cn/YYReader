@@ -362,39 +362,27 @@ struct ReaderPresentationTests {
     }
 
     @Test @MainActor
-    func continuousReaderReclaimsOnlyWhenWindowIsLargeAndOldEntriesAreDistant() {
+    func continuousReaderEntriesDeriveParagraphsWithoutKeepingSnapshots() {
         let book = Book(
             title: "长时间连续阅读",
             author: "测试作者",
             sourceHost: "example.com",
             catalogURL: "https://example.com/book/long-session/"
         )
-        let chapters = (0..<32).map { index in
-            Chapter(
-                sourceURL: "https://example.com/book/long-session/\(index).html",
-                title: "第\(index + 1)章",
-                sortIndex: index,
-                bodyText: "第\(index + 1)章正文",
-                cachedAt: .now,
-                book: book
-            )
-        }
+        let chapter = Chapter(
+            sourceURL: "https://example.com/book/long-session/1.html",
+            title: "第1章",
+            sortIndex: 0,
+            bodyText: "第一段\n\n第二段",
+            cachedAt: .now,
+            book: book
+        )
         let session = ContinuousReaderSession()
-        session.reset(around: chapters[0])
-        for chapter in chapters.dropFirst() {
-            session.attachNext(chapter)
-        }
+        session.reset(around: chapter)
+        #expect(session.entries.first?.paragraphs == ["第一段", "第二段"])
 
-        #expect(session.entries.count == 32)
-        #expect(!session.reclaimDistantEntries(around: chapters[20].id))
-        #expect(session.entries.map(\.id) == chapters.map(\.id))
-
-        #expect(session.reclaimDistantEntries(around: chapters[30].id))
-        #expect(session.entries.count == ContinuousReaderSession.targetRetainedEntryCount)
-        #expect(session.entries.first?.id == chapters[12].id)
-        #expect(session.entries.contains(where: { $0.id == chapters[30].id }))
-        #expect(session.entries.last?.id == chapters[31].id)
-        #expect(!session.reclaimDistantEntries(around: chapters[30].id))
+        chapter.bodyText = "更新后的第一段\n\n更新后的第二段"
+        #expect(session.entries.first?.paragraphs == ["更新后的第一段", "更新后的第二段"])
     }
 
     @Test

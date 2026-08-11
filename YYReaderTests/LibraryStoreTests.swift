@@ -622,7 +622,7 @@ struct LibraryStoreTests {
     }
 
     @Test
-    func continuousReaderReclaimsItsLargeWindowOnlyWhenScrollTransactionEnds() throws {
+    func endingScrollTransactionNeverRemovesRenderedChaptersAboveViewport() throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
         let context = container.mainContext
@@ -662,9 +662,10 @@ struct LibraryStoreTests {
         #expect(store.readerSession.entries.count == 32)
 
         store.endReaderScrollTransaction(topVisibleChapterID: chapters[30].id)
-        #expect(store.readerSession.entries.count == ContinuousReaderSession.targetRetainedEntryCount)
-        #expect(store.readerSession.entries.first?.id == chapters[12].id)
-        #expect(store.readerSession.entries.last?.id == chapters[31].id)
+        #expect(store.readerSession.entries.map(\.id) == chapters.map(\.id))
+
+        store.resetContinuousReaderWindow()
+        #expect(store.readerSession.entries.map(\.id) == [chapters[0].id])
     }
 
     @Test

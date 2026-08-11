@@ -32,15 +32,17 @@ struct ReaderContentView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: paragraphSpacing) {
                     ForEach(entries) { entry in
+                        let paragraphs = entry.paragraphs
+
                         ReaderChapterHeader(
                             chapter: entry.chapter,
                             accent: theme.accent,
                             target: .chapterHeader(entry.chapter.id)
                         )
 
-                        ForEach(entry.paragraphs.indices, id: \.self) { index in
+                        ForEach(paragraphs.indices, id: \.self) { index in
                             ReaderParagraphView(
-                                paragraph: entry.paragraphs[index],
+                                paragraph: paragraphs[index],
                                 fontFamily: family,
                                 fontSize: fontSize,
                                 lineSpacing: lineSpacing,
