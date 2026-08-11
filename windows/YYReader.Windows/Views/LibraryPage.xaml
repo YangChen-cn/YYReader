@@ -52,6 +52,13 @@
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="models:Book">
                             <Grid Padding="14,13" ColumnDefinitions="48,*,Auto" ColumnSpacing="14">
+                                <Grid.ContextFlyout>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem Text="刷新目录" Tag="{x:Bind}" Click="RefreshBookCatalog_Click" />
+                                        <MenuFlyoutSeparator />
+                                        <MenuFlyoutItem Text="删除小说" Tag="{x:Bind}" Click="DeleteBook_Click" />
+                                    </MenuFlyout>
+                                </Grid.ContextFlyout>
                                 <Border Width="44" Height="44" CornerRadius="8" Background="#172D78D4" VerticalAlignment="Top">
                                     <FontIcon Glyph="&#xE82D;" FontSize="21" Foreground="#2D78D4" />
                                 </Border>

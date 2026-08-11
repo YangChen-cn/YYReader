@@ -16,6 +16,7 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
     private readonly NovelImportCoordinator _coordinator;
     private CancellationTokenSource? _progressSaveCancellation;
     private CancellationTokenSource? _prefetchCancellation;
+    private CancellationTokenSource? _catalogRefreshCancellation;
     private Task? _prefetchTask;
     private string? _prefetchTargetUrl;
     private PendingProgress? _pendingProgress;
@@ -306,6 +307,47 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
 
     public void ClearError() => ErrorMessage = null;
 
+    public async Task<bool> RefreshSelectedCatalogAsync(CancellationToken cancellationToken = default)
+    {
+        if (SelectedBook is not { HasCatalog: true } book || !Uri.TryCreate(book.CatalogUrl, UriKind.Absolute, out var catalogUrl))
+        {
+            ErrorMessage = "这本小说没有可刷新的目录地址。";
+            return false;
+        }
+
+        _catalogRefreshCancellation?.Cancel();
+        _catalogRefreshCancellation?.Dispose();
+        var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _catalogRefreshCancellation = linkedCancellation;
+        var succeeded = false;
+        var uiContext = SynchronizationContext.Current;
+        try
+        {
+            await RunBusyAsync("正在刷新完整目录…", async () =>
+            {
+                var catalog = await _coordinator.RefreshCatalogAsync(
+                    catalogUrl,
+                    page => uiContext?.Post(_ => StatusMessage = $"正在刷新目录，第 {page} 页…", null),
+                    linkedCancellation.Token).ConfigureAwait(true);
+                var refreshed = await _repository.UpsertCatalogAsync(book.Id, catalog, linkedCancellation.Token).ConfigureAwait(true);
+                MergeCatalog(book, refreshed);
+                BooksChanged?.Invoke(this, EventArgs.Empty);
+                succeeded = true;
+            }, linkedCancellation.Token).ConfigureAwait(true);
+        }
+        finally
+        {
+            if (ReferenceEquals(_catalogRefreshCancellation, linkedCancellation))
+            {
+                _catalogRefreshCancellation = null;
+            }
+            linkedCancellation.Dispose();
+        }
+        return succeeded;
+    }
+
+    public void CancelCatalogRefresh() => _catalogRefreshCancellation?.Cancel();
+
     public async Task<BookshelfTransferImportSummary> ImportTransferAsync(
         BookshelfTransferDocument document,
         CancellationToken cancellationToken = default)
@@ -447,6 +489,26 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         _ = SaveProgressAfterIdleAsync(cancellation);
     }
 
+    private static void MergeCatalog(Book target, Book refreshed)
+    {
+        target.Title = refreshed.Title;
+        target.Author = refreshed.Author;
+        target.HasCatalog = refreshed.HasCatalog;
+        target.CatalogFetchedAt = refreshed.CatalogFetchedAt;
+        target.UpdatedAt = refreshed.UpdatedAt;
+        var existingByUrl = target.Chapters.ToDictionary(chapter => chapter.SourceUrl, StringComparer.Ordinal);
+        foreach (var refreshedChapter in refreshed.Chapters)
+        {
+            if (existingByUrl.TryGetValue(refreshedChapter.SourceUrl, out var existing))
+            {
+                existing.Title = refreshedChapter.Title;
+                existing.SortIndex = refreshedChapter.SortIndex;
+                continue;
+            }
+            target.Chapters.Add(refreshedChapter);
+        }
+    }
+
     private async Task SaveProgressAfterIdleAsync(CancellationTokenSource scheduledSave)
     {
         try
@@ -507,6 +569,8 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         if (_disposed) return;
         _disposed = true;
         CancelPrefetch();
+        _catalogRefreshCancellation?.Cancel();
+        _catalogRefreshCancellation?.Dispose();
         await FlushPendingProgressAsync().ConfigureAwait(true);
         _progressSaveCancellation?.Dispose();
     }

@@ -153,7 +153,13 @@ public sealed partial class LibraryPage : Page
 
     private async void DeleteBook_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as Button)?.Tag is not Book book) return;
+        var book = sender switch
+        {
+            Button button => button.Tag as Book,
+            MenuFlyoutItem item => item.Tag as Book,
+            _ => null
+        };
+        if (book is null) return;
         var dialog = new ContentDialog
         {
             Title = "删除小说？",
@@ -168,6 +174,14 @@ public sealed partial class LibraryPage : Page
             await Store.DeleteBookAsync(book);
             RefreshView();
         }
+    }
+
+    private async void RefreshBookCatalog_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as MenuFlyoutItem)?.Tag is not Book book) return;
+        Store.SelectBook(book);
+        await Store.RefreshSelectedCatalogAsync();
+        RefreshView();
     }
 
     private void ClearError_Click(object sender, RoutedEventArgs e)

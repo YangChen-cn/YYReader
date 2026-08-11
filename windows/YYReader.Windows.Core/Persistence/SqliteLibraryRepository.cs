@@ -272,6 +272,43 @@ public sealed class SqliteLibraryRepository
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<Book> UpsertCatalogAsync(
+        string bookId,
+        ParsedBookCatalog catalog,
+        CancellationToken cancellationToken = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        using var transaction = connection.BeginTransaction();
+        await ExecuteAsync(connection, transaction, """
+            UPDATE Books
+            SET Title = $title, Author = $author, HasCatalog = 1,
+                UpdatedAt = $updated, CatalogFetchedAt = $fetched
+            WHERE Id = $book;
+            """, cancellationToken,
+            ("$title", catalog.Title), ("$author", catalog.Author),
+            ("$updated", now.ToString("O", CultureInfo.InvariantCulture)),
+            ("$fetched", now.ToString("O", CultureInfo.InvariantCulture)), ("$book", bookId)).ConfigureAwait(false);
+
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var seed in catalog.Chapters)
+        {
+            var url = UrlCanonicalizer.CanonicalizeChapter(seed.Url).AbsoluteUri;
+            if (!visited.Add(url)) continue;
+            await ExecuteAsync(connection, transaction, """
+                INSERT INTO Chapters (BookId, SourceUrl, Title, SortIndex, BodyText, PreviousUrl, NextUrl, CachedAt)
+                VALUES ($book, $url, $title, $sort, NULL, NULL, NULL, NULL)
+                ON CONFLICT(BookId, SourceUrl) DO UPDATE SET
+                    Title = excluded.Title,
+                    SortIndex = excluded.SortIndex;
+                """, cancellationToken,
+                ("$book", bookId), ("$url", url), ("$title", seed.Title), ("$sort", seed.SortIndex)).ConfigureAwait(false);
+        }
+
+        transaction.Commit();
+        return (await GetBooksAsync(cancellationToken).ConfigureAwait(false)).Single(book => book.Id == bookId);
+    }
+
     public async Task<Book> UpsertTransferBookAsync(
         BookshelfTransferBook transferBook,
         CancellationToken cancellationToken = default)

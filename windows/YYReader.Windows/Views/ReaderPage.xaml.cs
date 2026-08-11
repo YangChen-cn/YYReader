@@ -26,7 +26,7 @@ public sealed partial class ReaderPage : Page
     private ReaderThemePalette _palette = ReaderThemePalette.FromName("system");
     private bool _initialized;
     private bool _changingChapter;
-    private bool _synchronizingChapterPicker;
+    private bool _synchronizingCatalog;
     private bool _loadingNext;
 
     public ReaderPage(LibraryStore store, Book book, Window window)
@@ -60,7 +60,7 @@ public sealed partial class ReaderPage : Page
             if (_window is MainWindow mainWindow) mainWindow.ShowLibrary();
             return;
         }
-        RefreshChapterPicker();
+        RefreshCatalogList();
         RebuildItems(ReaderRebuildPosition.RestoreProgress);
         _initialized = true;
         ReaderScrollViewer.Focus(FocusState.Programmatic);
@@ -297,7 +297,7 @@ public sealed partial class ReaderPage : Page
             {
                 var stableOffset = ReaderScrollViewer.VerticalOffset;
                 Items.AddRange(ReaderItemBuilder.BuildEntry(Store.ReaderSession.Entries[^1]));
-                RefreshChapterPicker();
+                RefreshCatalogList();
                 HideContinuationBoundary();
                 DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
                 {
@@ -352,9 +352,9 @@ public sealed partial class ReaderPage : Page
         ContinuationBoundary.Visibility = Visibility.Collapsed;
     }
 
-    private async void ChapterPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void CatalogList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!_initialized || _changingChapter || _synchronizingChapterPicker || ChapterPicker.SelectedItem is not Chapter chapter) return;
+        if (!_initialized || _changingChapter || _synchronizingCatalog || CatalogList.SelectedItem is not Chapter chapter) return;
         _changingChapter = true;
         SetNavigationEnabled(false);
         try
@@ -363,11 +363,12 @@ public sealed partial class ReaderPage : Page
             var selected = await Store.SelectChapterAsync(chapter);
             if (!selected)
             {
-                RefreshChapterPicker();
+                RefreshCatalogList();
                 await ShowChapterLoadFailureAsync();
                 return;
             }
             RebuildItems(ReaderRebuildPosition.ChapterTop);
+            CatalogSplitView.IsPaneOpen = false;
         }
         finally
         {
@@ -391,11 +392,11 @@ public sealed partial class ReaderPage : Page
             var chapter = await Store.NavigateChapterAsync(offset);
             if (chapter is null)
             {
-                RefreshChapterPicker();
+                RefreshCatalogList();
                 await ShowChapterLoadFailureAsync();
                 return;
             }
-            RefreshChapterPicker();
+            RefreshCatalogList();
             RebuildItems(ReaderRebuildPosition.ChapterTop);
         }
         finally
@@ -409,21 +410,33 @@ public sealed partial class ReaderPage : Page
 
     private async void NextChapter_Click(object sender, RoutedEventArgs e) => await NavigateChapterAsync(1);
 
-    private void RefreshChapterPicker()
+    private void RefreshCatalogList()
     {
-        _synchronizingChapterPicker = true;
-        ChapterPicker.SelectionChanged -= ChapterPicker_SelectionChanged;
+        _synchronizingCatalog = true;
+        CatalogList.SelectionChanged -= CatalogList_SelectionChanged;
         try
         {
-            ChapterPicker.ItemsSource = Store.SelectedBook?.Chapters.OrderBy(chapter => chapter.SortIndex).ToArray();
-            ChapterPicker.SelectedItem = Store.SelectedChapter;
+            IEnumerable<Chapter> chapters = Store.SelectedBook is { } book
+                ? book.Chapters.OrderBy(chapter => chapter.SortIndex)
+                : Enumerable.Empty<Chapter>();
+            if (!string.IsNullOrWhiteSpace(CatalogSearchBox.Text))
+            {
+                chapters = chapters.Where(chapter => chapter.Title.Contains(CatalogSearchBox.Text, StringComparison.CurrentCultureIgnoreCase));
+            }
+            var visibleChapters = chapters.ToArray();
+            CatalogList.ItemsSource = visibleChapters;
+            CatalogList.SelectedItem = visibleChapters.FirstOrDefault(chapter => chapter.SourceUrl == Store.SelectedChapter?.SourceUrl);
         }
         finally
         {
-            ChapterPicker.SelectionChanged += ChapterPicker_SelectionChanged;
-            _synchronizingChapterPicker = false;
+            CatalogList.SelectionChanged += CatalogList_SelectionChanged;
+            _synchronizingCatalog = false;
         }
         ToolbarChapterTitle.Text = Store.SelectedChapter?.Title ?? "";
+        if (CatalogSplitView.IsPaneOpen && CatalogList.SelectedItem is not null)
+        {
+            DispatcherQueue.TryEnqueue(() => CatalogList.ScrollIntoView(CatalogList.SelectedItem, ScrollIntoViewAlignment.Leading));
+        }
     }
 
     private void ReaderScrollViewer_KeyDown(object sender, KeyRoutedEventArgs e)
@@ -463,6 +476,69 @@ public sealed partial class ReaderPage : Page
 
     private static bool IsShiftDown() =>
         (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift) & CoreVirtualKeyStates.Down) != 0;
+
+    private static bool IsControlDown() =>
+        (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & CoreVirtualKeyStates.Down) != 0;
+
+    private void ReaderPage_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key == VirtualKey.Escape && CatalogSplitView.IsPaneOpen)
+        {
+            CatalogSplitView.IsPaneOpen = false;
+            e.Handled = true;
+        }
+        else if (e.Key == VirtualKey.F && IsControlDown())
+        {
+            OpenCatalog(focusSearch: true);
+            e.Handled = true;
+        }
+        else if (e.Key == VirtualKey.R && IsControlDown())
+        {
+            _ = RefreshCatalogAsync();
+            e.Handled = true;
+        }
+    }
+
+    private void Catalog_Click(object sender, RoutedEventArgs e) => OpenCatalog(focusSearch: false);
+
+    private void OpenCatalog(bool focusSearch)
+    {
+        CatalogSplitView.IsPaneOpen = true;
+        RefreshCatalogList();
+        if (focusSearch) DispatcherQueue.TryEnqueue(() => CatalogSearchBox.Focus(FocusState.Programmatic));
+    }
+
+    private void CloseCatalog_Click(object sender, RoutedEventArgs e) => CatalogSplitView.IsPaneOpen = false;
+
+    private void CatalogSearchBox_TextChanged(object sender, TextChangedEventArgs e) => RefreshCatalogList();
+
+    private async void RefreshCatalog_Click(object sender, RoutedEventArgs e) => await RefreshCatalogAsync();
+
+    private async Task RefreshCatalogAsync()
+    {
+        CatalogProgress.IsActive = true;
+        CatalogCancelButton.Visibility = Visibility.Visible;
+        CatalogStatusText.Text = "正在刷新完整目录…";
+        try
+        {
+            if (await Store.RefreshSelectedCatalogAsync())
+            {
+                RefreshCatalogList();
+                CatalogStatusText.Text = $"已更新，共 {Store.SelectedBook?.Chapters.Count ?? 0} 章";
+            }
+            else
+            {
+                CatalogStatusText.Text = Store.ErrorMessage ?? "目录刷新已取消";
+            }
+        }
+        finally
+        {
+            CatalogProgress.IsActive = false;
+            CatalogCancelButton.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void CancelCatalogRefresh_Click(object sender, RoutedEventArgs e) => Store.CancelCatalogRefresh();
 
     private async void Appearance_Click(object sender, RoutedEventArgs e)
     {
@@ -535,9 +611,7 @@ public sealed partial class ReaderPage : Page
 
     private void SetNavigationEnabled(bool isEnabled)
     {
-        PreviousChapterButton.IsEnabled = isEnabled;
-        NextChapterButton.IsEnabled = isEnabled;
-        ChapterPicker.IsEnabled = isEnabled;
+        CatalogList.IsEnabled = isEnabled;
     }
 
     private void Back_Click(object sender, RoutedEventArgs e)
@@ -562,6 +636,8 @@ public sealed partial class ReaderPage : Page
         ContinuationBoundary.BorderBrush = _palette.Separator;
         ContinuationBoundary.BorderThickness = new Thickness(1);
         ContinuationMessage.Foreground = _palette.SecondaryForeground;
+        CatalogPane.Background = _palette.Background;
+        CatalogPane.BorderBrush = _palette.Separator;
     }
 
     private void ReaderPage_ActualThemeChanged(FrameworkElement sender, object args)

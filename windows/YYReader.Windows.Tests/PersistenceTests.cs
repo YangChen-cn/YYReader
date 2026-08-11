@@ -115,4 +115,40 @@ public sealed class PersistenceTests
             if (File.Exists($"{path}-shm")) File.Delete($"{path}-shm");
         }
     }
+
+    [TestMethod]
+    public async Task CatalogRefreshPreservesBodyProgressAndCurrentChapterWhileAddingNewChapters()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"yyreader-catalog-test-{Guid.NewGuid():N}.db");
+        try
+        {
+            var repository = new SqliteLibraryRepository(path);
+            await repository.InitializeAsync();
+            var firstUrl = new Uri("https://example.com/book/1.html");
+            var secondUrl = new Uri("https://example.com/book/2.html");
+            var book = await repository.UpsertImportAsync(new NovelImportResult(
+                "旧书名", "旧作者", new Uri("https://example.com/book/"), new Uri("https://example.com/book/"), true,
+                [new ChapterSeed("旧标题", firstUrl, 1)], true, "旧标题", firstUrl, "离线正文", null, secondUrl));
+            await repository.SaveProgressAsync(book.Id, firstUrl.AbsoluteUri, 3, 0.6, DateTimeOffset.UtcNow);
+
+            var refreshed = await repository.UpsertCatalogAsync(book.Id, new ParsedBookCatalog(
+                "新书名", "新作者",
+                [new ChapterSeed("更新标题", firstUrl, 1), new ChapterSeed("新增章节", secondUrl, 2)], null));
+
+            Assert.AreEqual("新书名", refreshed.Title);
+            Assert.AreEqual(firstUrl.AbsoluteUri, refreshed.CurrentChapterUrl);
+            Assert.AreEqual(2, refreshed.Chapters.Count);
+            Assert.AreEqual("更新标题", refreshed.Chapters[0].Title);
+            Assert.AreEqual(3, refreshed.Chapters[0].ParagraphIndex);
+            Assert.AreEqual(0.6, refreshed.Chapters[0].Progress, 0.0001);
+            Assert.IsTrue(refreshed.Chapters[0].IsAvailableOffline);
+            Assert.AreEqual("离线正文", await repository.LoadChapterBodyAsync(book.Id, firstUrl.AbsoluteUri));
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists($"{path}-wal")) File.Delete($"{path}-wal");
+            if (File.Exists($"{path}-shm")) File.Delete($"{path}-shm");
+        }
+    }
 }
