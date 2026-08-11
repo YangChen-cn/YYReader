@@ -83,7 +83,7 @@ struct AboutSettingsView: View {
             Text("最新改进")
                 .font(.headline)
 
-            GroupBox("版本 1.1.2") {
+            GroupBox("版本 1.2.0") {
                 VStack(alignment: .leading, spacing: 10) {
                     Label("本地进度只发布 Mac 快照，不读取 Windows 文件，不干扰当前阅读。", systemImage: "arrow.up.doc")
                     Label("对端文件仅在成功读取并合并后确认，失败时保留重试机会。", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")

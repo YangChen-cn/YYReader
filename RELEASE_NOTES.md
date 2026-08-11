@@ -1,4 +1,37 @@
-# YYReader Windows 1.2.0
+# YYReader 1.2.0
+
+YYReader 1.2.0 同时提供原生 macOS 与 Windows 客户端，并加入可选的跨平台书架与阅读位置交换。两个客户端都保持原生正文渲染，不同步正文缓存、Cookie 或网页验证状态。
+
+## macOS 1.2.0
+
+### 文件夹同步与手动传输
+
+- 新增文件夹自动同步。用户可选择 iCloud Drive、Dropbox、OneDrive、Syncthing 或其他任意共享目录，不绑定具体云盘。
+- 使用 SyncSnapshot v2 与 Windows 交换书籍元数据、章节序号和阅读位置；Mac 只写 `mac.json`、读取 `windows.json`。
+- 新增 `.yyreader`/JSON 文件及剪贴板的书架导入、导出，导入前会预览新增、已有、无效和重复条目。
+- 书籍按 canonical source URL 合并；阅读位置只允许由目录中更后的章节或同章更后的段落覆盖。
+
+### 同步稳定性
+
+- 本地书架与阅读进度变化走独立发布路径，只构建 Mac 快照并更新 `mac.json`，不会读取或解析 `windows.json`。
+- 仅在启动、回到前台、手动同步或检测到 Windows 文件确实变化时执行完整合并。
+- Windows 文件 signature 只在读取、合并和落库全部成功后确认；读取失败后 watcher 与低频轮询仍可重试。
+- 远端 tombstone 不会立即破坏当前 Reader session；正在阅读的书会在退出阅读后再安全刷新。
+- 修复同步触发跳章、旧章节覆盖新章节、后台重复同步及目录暂不可访问时错误清空本地状态的问题。
+
+### macOS 安装
+
+- 支持 Apple 芯片 Mac，要求 macOS 15 或更高版本。
+- 下载 `YYReader-1.2.0-arm64.dmg`，打开后将 YYReader 拖入 Applications。
+- 使用 ad-hoc 签名且未经过 Apple 公证；首次启动时可能需要在 Finder 中右键应用并选择“打开”。
+
+### macOS 验证
+
+- 全量单元与回归测试：88 项全部通过。
+- Release 为纯 arm64、版本 1.2.0（build 5），App Sandbox 保留用户选择文件夹读写和出站网络权限。
+- ad-hoc 签名、DMG 校验和、挂载后签名、应用图标、资源及便携性检查全部通过。
+
+## Windows 1.2.0
 
 YYReader 1.2.0 是首个可正式分享的原生 Windows 版本。它使用 C#、.NET 8、WinUI 3、Windows App SDK 和 SQLite，延续 macOS 版“原生、简洁、流畅、适合长期阅读”的核心方向。
 

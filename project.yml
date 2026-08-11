@@ -39,8 +39,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
-        MARKETING_VERSION: 1.1.2
-        CURRENT_PROJECT_VERSION: 4
+        MARKETING_VERSION: 1.2.0
+        CURRENT_PROJECT_VERSION: 5
     info:
       path: YYReader/Info.plist
       properties:
