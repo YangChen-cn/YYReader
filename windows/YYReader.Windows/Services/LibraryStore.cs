@@ -15,6 +15,9 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
     private readonly SqliteLibraryRepository _repository;
     private readonly NovelImportCoordinator _coordinator;
     private CancellationTokenSource? _progressSaveCancellation;
+    private CancellationTokenSource? _prefetchCancellation;
+    private Task? _prefetchTask;
+    private string? _prefetchTargetUrl;
     private PendingProgress? _pendingProgress;
     private bool _disposed;
     private Book? _selectedBook;
@@ -22,6 +25,7 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
     private bool _isBusy;
     private string _statusMessage = "";
     private string? _errorMessage;
+    private bool _prefetchNextChapter = true;
 
     public LibraryStore(SqliteLibraryRepository repository, NovelImportCoordinator coordinator)
     {
@@ -100,6 +104,7 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         }
 
         _ = FlushPendingProgressAsync();
+        CancelPrefetch();
         SelectedBook = book;
         SelectedChapter = book?.CurrentChapter;
         ReaderSession.Reset(SelectedChapter);
@@ -123,6 +128,7 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         {
             await LoadChapterIntoMemoryAsync(chapter, cancellationToken).ConfigureAwait(true);
         }
+        ScheduleNextChapterPrefetch();
     }
 
     public async Task AddUrlAsync(string input, CancellationToken cancellationToken = default)
@@ -144,6 +150,7 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
             ReaderSession.Reset(SelectedChapter);
             OnPropertyChanged(nameof(SelectedBook));
             OnPropertyChanged(nameof(SelectedChapter));
+            ScheduleNextChapterPrefetch();
         }, cancellationToken).ConfigureAwait(true);
     }
 
@@ -154,6 +161,20 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
             await LoadChapterIntoMemoryAsync(SelectedChapter, cancellationToken).ConfigureAwait(true);
         }
         ReaderSession.Reset(SelectedChapter);
+        ScheduleNextChapterPrefetch();
+    }
+
+    public void ConfigureNextChapterPrefetch(bool isEnabled)
+    {
+        _prefetchNextChapter = isEnabled;
+        if (isEnabled)
+        {
+            ScheduleNextChapterPrefetch();
+        }
+        else
+        {
+            CancelPrefetch();
+        }
     }
 
     public async Task<Chapter?> PrepareNextChapterAsync(CancellationToken cancellationToken = default)
@@ -163,26 +184,7 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
             return null;
         }
 
-        var ordered = SelectedBook.Chapters.OrderBy(chapter => chapter.SortIndex).ToArray();
-        var index = Array.FindIndex(ordered, chapter => chapter.SourceUrl == SelectedChapter.SourceUrl);
-        var next = index >= 0 && index + 1 < ordered.Length
-            ? ordered[index + 1]
-            : null;
-        if (next is null)
-        {
-            var linkedNextUrl = SelectedChapter.NextUrl;
-            if (!string.IsNullOrWhiteSpace(linkedNextUrl))
-            {
-                next = SelectedBook.Chapters.FirstOrDefault(chapter =>
-                UrlCanonicalizer.CanonicalizeChapter(chapter.SourceUrl).AbsoluteUri
-                == UrlCanonicalizer.CanonicalizeChapter(linkedNextUrl).AbsoluteUri);
-            if (next is null)
-            {
-                next = new Chapter(linkedNextUrl, "下一章", SelectedChapter.SortIndex + 1);
-                SelectedBook.Chapters.Add(next);
-            }
-            }
-        }
+        var next = Neighbor(SelectedBook, SelectedChapter, 1);
 
         if (next is null)
         {
@@ -194,6 +196,23 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         }
         ReaderSession.AttachNext(next);
         return next;
+    }
+
+    public async Task<Chapter?> NavigateChapterAsync(int offset, CancellationToken cancellationToken = default)
+    {
+        if (offset is not (-1 or 1) || SelectedBook is null || SelectedChapter is null)
+        {
+            return null;
+        }
+
+        var target = Neighbor(SelectedBook, SelectedChapter, offset);
+        if (target is null)
+        {
+            return null;
+        }
+
+        await SelectChapterAsync(target, cancellationToken).ConfigureAwait(true);
+        return target;
     }
 
     public void UpdateVisibleReaderPosition(string chapterUrl, int paragraphIndex, int paragraphCount)
@@ -265,19 +284,118 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
 
     private async Task LoadChapterIntoMemoryAsync(Chapter chapter, CancellationToken cancellationToken)
     {
+        if (_prefetchTargetUrl == chapter.SourceUrl && _prefetchTask is not null)
+        {
+            await _prefetchTask.WaitAsync(cancellationToken).ConfigureAwait(true);
+            if (chapter.IsCached)
+            {
+                return;
+            }
+        }
+
+        var book = SelectedBook;
+        if (book is null)
+        {
+            return;
+        }
+
         await RunBusyAsync("正在加载章节…", async () =>
         {
-            var result = await _coordinator.LoadChapterContentAsync(new Uri(chapter.SourceUrl), cancellationToken).ConfigureAwait(true);
-            chapter.Title = result.Title;
-            chapter.ReplaceBodyText(result.BodyText);
-            chapter.PreviousUrl = result.PreviousChapterUrl?.AbsoluteUri;
-            chapter.NextUrl = result.NextChapterUrl?.AbsoluteUri;
-            await _repository.SaveChapterAsync(SelectedBook!.Id, result, cancellationToken).ConfigureAwait(true);
-            if (SelectedChapter?.SourceUrl == chapter.SourceUrl)
-            {
-                ReaderSession.Reset(SelectedChapter);
-            }
+            await LoadChapterCoreAsync(book, chapter, cancellationToken).ConfigureAwait(true);
         }, cancellationToken).ConfigureAwait(true);
+    }
+
+    private async Task LoadChapterCoreAsync(Book book, Chapter chapter, CancellationToken cancellationToken)
+    {
+        if (chapter.IsCached)
+        {
+            return;
+        }
+
+        var result = await _coordinator.LoadChapterContentAsync(new Uri(chapter.SourceUrl), cancellationToken).ConfigureAwait(true);
+        chapter.Title = result.Title;
+        chapter.ReplaceBodyText(result.BodyText);
+        chapter.PreviousUrl = result.PreviousChapterUrl?.AbsoluteUri;
+        chapter.NextUrl = result.NextChapterUrl?.AbsoluteUri;
+        await _repository.SaveChapterAsync(book.Id, result, cancellationToken).ConfigureAwait(true);
+        if (SelectedChapter?.SourceUrl == chapter.SourceUrl)
+        {
+            ReaderSession.Reset(SelectedChapter);
+        }
+    }
+
+    private void ScheduleNextChapterPrefetch()
+    {
+        CancelPrefetch();
+        if (!_prefetchNextChapter || SelectedBook is not { } book || SelectedChapter is not { } chapter)
+        {
+            return;
+        }
+
+        var next = Neighbor(book, chapter, 1);
+        if (next is null || next.IsCached)
+        {
+            return;
+        }
+
+        var cancellation = new CancellationTokenSource();
+        _prefetchCancellation = cancellation;
+        _prefetchTargetUrl = next.SourceUrl;
+        _prefetchTask = PrefetchAfterIdleAsync(book, next, cancellation.Token);
+    }
+
+    private async Task PrefetchAfterIdleAsync(Book book, Chapter chapter, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(true);
+            await LoadChapterCoreAsync(book, chapter, cancellationToken).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // Selection or preference changes supersede opportunistic prefetch.
+        }
+        catch
+        {
+            // Prefetch is opportunistic and must not interrupt reading.
+        }
+    }
+
+    private Chapter? Neighbor(Book book, Chapter chapter, int offset)
+    {
+        var linkedUrl = offset > 0 ? chapter.NextUrl : chapter.PreviousUrl;
+        if (!string.IsNullOrWhiteSpace(linkedUrl))
+        {
+            var canonical = UrlCanonicalizer.CanonicalizeChapter(linkedUrl).AbsoluteUri;
+            var linked = book.Chapters.FirstOrDefault(candidate => candidate.SourceUrl == canonical);
+            if (linked is not null)
+            {
+                return linked;
+            }
+
+            linked = new Chapter(
+                canonical,
+                offset > 0 ? "下一章" : "上一章",
+                chapter.SortIndex + offset);
+            book.Chapters.Add(linked);
+            return linked;
+        }
+
+        var ordered = book.Chapters.OrderBy(candidate => candidate.SortIndex).ToArray();
+        var index = Array.FindIndex(ordered, candidate => candidate.SourceUrl == chapter.SourceUrl);
+        var targetIndex = index + offset;
+        return index >= 0 && targetIndex >= 0 && targetIndex < ordered.Length
+            ? ordered[targetIndex]
+            : null;
+    }
+
+    private void CancelPrefetch()
+    {
+        _prefetchCancellation?.Cancel();
+        _prefetchCancellation?.Dispose();
+        _prefetchCancellation = null;
+        _prefetchTask = null;
+        _prefetchTargetUrl = null;
     }
 
     private void ScheduleProgressSave()
@@ -337,6 +455,7 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        CancelPrefetch();
         await FlushPendingProgressAsync().ConfigureAwait(true);
         _progressSaveCancellation?.Dispose();
     }

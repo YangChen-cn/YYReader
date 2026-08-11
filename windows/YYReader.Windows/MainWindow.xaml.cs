@@ -18,6 +18,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
 
         var databaseDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -34,7 +35,6 @@ public sealed partial class MainWindow : Window
         _libraryPage = new LibraryPage(_store, this);
         _libraryPage.OpenBookRequested += OpenBookRequested;
         ContentFrame.Content = _libraryPage;
-        RootNavigation.SelectionChanged += RootNavigation_SelectionChanged;
         Closed += MainWindow_Closed;
         _ = InitializeStoreAsync();
     }
@@ -45,14 +45,6 @@ public sealed partial class MainWindow : Window
         _libraryPage.RefreshView();
     }
 
-    private void RootNavigation_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
-    {
-        if (args.SelectedItem is NavigationViewItem { Tag: "library" })
-        {
-            ContentFrame.Content = _libraryPage;
-        }
-    }
-
     private void OpenBookRequested(object? sender, BookRequestedEventArgs args)
     {
         ContentFrame.Content = new ReaderPage(_store, args.Book, this);
@@ -61,7 +53,6 @@ public sealed partial class MainWindow : Window
     public void ShowLibrary()
     {
         ContentFrame.Content = _libraryPage;
-        RootNavigation.SelectedItem = RootNavigation.MenuItems[0];
     }
 
     private async Task<bool> ShowVerificationAsync(Uri url)

@@ -7,7 +7,8 @@ public sealed record ReaderPreferences(
     double ParagraphSpacing = 0.60,
     double ContentWidthEm = 48,
     bool ParagraphIndent = true,
-    bool ContinuousReading = true,
+    bool ContinuousReading = false,
+    bool PrefetchNextChapter = true,
     string Theme = "system")
 {
     public static ReaderPreferences Defaults { get; } = new();

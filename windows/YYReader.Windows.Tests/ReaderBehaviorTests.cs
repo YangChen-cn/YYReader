@@ -57,6 +57,15 @@ public sealed class ReaderBehaviorTests
         CollectionAssert.AreEqual(new[] { "第一段", "第二段" }, chapter.Paragraphs.ToArray());
     }
 
+    [TestMethod]
+    public void ReaderDefaultsMatchTheQuietMacReadingFlow()
+    {
+        Assert.IsFalse(ReaderPreferences.Defaults.ContinuousReading);
+        Assert.IsTrue(ReaderPreferences.Defaults.PrefetchNextChapter);
+        Assert.AreEqual(48, ReaderPreferences.Defaults.ContentWidthEm);
+        Assert.IsTrue(ReaderPreferences.Defaults.ParagraphIndent);
+    }
+
     private static Chapter NewChapter(string url, string body) =>
         new(url, "测试章节", 1, body, cachedAt: DateTimeOffset.UtcNow);
 }

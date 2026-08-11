@@ -5,16 +5,7 @@
     xmlns:controls="using:Microsoft.UI.Xaml.Controls"
     Title="YYReader">
     <Grid x:Name="RootGrid">
-        <NavigationView x:Name="RootNavigation" IsBackEnabled="False" IsSettingsVisible="False" PaneDisplayMode="LeftCompact">
-            <NavigationView.MenuItems>
-                <NavigationViewItem Content="书架" Tag="library">
-                    <NavigationViewItem.Icon>
-                        <SymbolIcon Symbol="Library" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-            </NavigationView.MenuItems>
-            <Frame x:Name="ContentFrame" />
-        </NavigationView>
+        <Frame x:Name="ContentFrame" />
 
         <Grid x:Name="VerificationOverlay"
               Visibility="Collapsed"

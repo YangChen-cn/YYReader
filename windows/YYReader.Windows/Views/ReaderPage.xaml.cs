@@ -50,11 +50,11 @@ public sealed partial class ReaderPage : Page
     {
         _preferences = await _preferencesStore.LoadAsync();
         ApplyPreferences();
+        Store.ConfigureNextChapterPrefetch(_preferences.PrefetchNextChapter);
         Store.SelectBook(Book);
         await Store.EnsureSelectedChapterLoadedAsync();
         RefreshChapterPicker();
-        RebuildItems();
-        RestorePosition();
+        RebuildItems(ReaderRebuildPosition.RestoreProgress);
         _initialized = true;
         ReaderScrollViewer.Focus(FocusState.Programmatic);
     }
@@ -65,7 +65,7 @@ public sealed partial class ReaderPage : Page
         await Store.FlushPendingProgressAsync();
     }
 
-    private void RebuildItems()
+    private void RebuildItems(ReaderRebuildPosition position = ReaderRebuildPosition.PreserveOffset)
     {
         var savedOffset = ReaderScrollViewer.VerticalOffset;
         Items.Clear();
@@ -75,10 +75,23 @@ public sealed partial class ReaderPage : Page
             AddEntryItems(entries[entryIndex], entryIndex == 0);
         }
         ReaderRepeater.ItemsSource = Items;
-        DispatcherQueue.TryEnqueue(() =>
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
-            var offset = Math.Min(savedOffset, ReaderScrollViewer.ScrollableHeight);
-            ReaderScrollViewer.ChangeView(null, offset, null, true);
+            ReaderRepeater.UpdateLayout();
+            ReaderScrollViewer.UpdateLayout();
+            switch (position)
+            {
+                case ReaderRebuildPosition.ChapterTop:
+                    ReaderScrollViewer.ChangeView(null, 0, null, true);
+                    break;
+                case ReaderRebuildPosition.RestoreProgress:
+                    RestorePosition();
+                    break;
+                default:
+                    var offset = Math.Min(savedOffset, ReaderScrollViewer.ScrollableHeight);
+                    ReaderScrollViewer.ChangeView(null, offset, null, true);
+                    break;
+            }
         });
     }
 
@@ -174,6 +187,7 @@ public sealed partial class ReaderPage : Page
         if (visible is null) return;
         Store.UpdateVisibleReaderPosition(visible.ChapterUrl, visible.ParagraphIndex, visible.ParagraphCount);
         ProgressText.Text = $"{Store.SelectedChapter?.Progress:P0}　{Store.SelectedChapter?.Title}";
+        ToolbarChapterTitle.Text = Store.SelectedChapter?.Title ?? "";
         if (ChapterPicker.SelectedItem != Store.SelectedChapter)
         {
             ChapterPicker.SelectedItem = Store.SelectedChapter;
@@ -234,8 +248,7 @@ public sealed partial class ReaderPage : Page
         try
         {
             await Store.SelectChapterAsync(chapter);
-            RebuildItems();
-            ReaderScrollViewer.ChangeView(null, 0, null, true);
+            RebuildItems(ReaderRebuildPosition.ChapterTop);
         }
         finally
         {
@@ -243,27 +256,15 @@ public sealed partial class ReaderPage : Page
         }
     }
 
-    private Task NavigateChapterAsync(int offset)
-    {
-        var ordered = Store.SelectedBook?.Chapters.OrderBy(chapter => chapter.SortIndex).ToArray() ?? [];
-        var currentIndex = Store.SelectedChapter is null
-            ? -1
-            : Array.FindIndex(ordered, chapter => chapter.SourceUrl == Store.SelectedChapter.SourceUrl);
-        var targetIndex = currentIndex + offset;
-        return targetIndex >= 0 && targetIndex < ordered.Length
-            ? SelectChapterFromCommandAsync(ordered[targetIndex])
-            : Task.CompletedTask;
-    }
-
-    private async Task SelectChapterFromCommandAsync(Chapter chapter)
+    private async Task NavigateChapterAsync(int offset)
     {
         _changingChapter = true;
         try
         {
-            await Store.SelectChapterAsync(chapter);
+            var chapter = await Store.NavigateChapterAsync(offset);
+            if (chapter is null) return;
             RefreshChapterPicker();
-            RebuildItems();
-            ReaderScrollViewer.ChangeView(null, 0, null, true);
+            RebuildItems(ReaderRebuildPosition.ChapterTop);
         }
         finally
         {
@@ -279,6 +280,7 @@ public sealed partial class ReaderPage : Page
     {
         ChapterPicker.ItemsSource = Store.SelectedBook?.Chapters.OrderBy(chapter => chapter.SortIndex).ToArray();
         ChapterPicker.SelectedItem = Store.SelectedChapter;
+        ToolbarChapterTitle.Text = Store.SelectedChapter?.Title ?? "";
     }
 
     private void ReaderScrollViewer_KeyDown(object sender, KeyRoutedEventArgs e)
@@ -324,14 +326,16 @@ public sealed partial class ReaderPage : Page
         var content = new StackPanel { Spacing = 12, Width = 360 };
         var fontSlider = new Slider { Minimum = 14, Maximum = 36, StepFrequency = 1, Value = _preferences.FontSize, Header = "字号" };
         var widthBox = new ComboBox { Header = "正文宽度", ItemsSource = new[] { "narrow", "comfortable", "wide" }, SelectedItem = WidthName(_preferences.ContentWidthEm) };
-        var themeBox = new ComboBox { Header = "主题", ItemsSource = new[] { "system", "light", "rose", "sepia", "dark", "midnight" }, SelectedItem = _preferences.Theme };
+        var themeBox = new ComboBox { Header = "主题", ItemsSource = new[] { "system", "light", "rose", "sepia", "mist", "sage", "dark", "midnight" }, SelectedItem = _preferences.Theme };
         var indent = new ToggleSwitch { Header = "段首缩进", IsOn = _preferences.ParagraphIndent };
         var continuous = new ToggleSwitch { Header = "连续阅读", IsOn = _preferences.ContinuousReading };
+        var prefetch = new ToggleSwitch { Header = "空闲时预取下一章", IsOn = _preferences.PrefetchNextChapter };
         content.Children.Add(fontSlider);
         content.Children.Add(widthBox);
         content.Children.Add(themeBox);
         content.Children.Add(indent);
         content.Children.Add(continuous);
+        content.Children.Add(prefetch);
         var dialog = new ContentDialog
         {
             Title = "阅读设置",
@@ -347,9 +351,11 @@ public sealed partial class ReaderPage : Page
             ContentWidthEm = WidthValue(widthBox.SelectedItem as string),
             Theme = themeBox.SelectedItem as string ?? "system",
             ParagraphIndent = indent.IsOn,
-            ContinuousReading = continuous.IsOn
+            ContinuousReading = continuous.IsOn,
+            PrefetchNextChapter = prefetch.IsOn
         };
         await _preferencesStore.SaveAsync(_preferences);
+        Store.ConfigureNextChapterPrefetch(_preferences.PrefetchNextChapter);
         ApplyPreferences();
         RebuildItems();
     }
@@ -400,4 +406,11 @@ public sealed partial class ReaderPage : Page
         "wide" => 58,
         _ => 48
     };
+
+    private enum ReaderRebuildPosition
+    {
+        PreserveOffset,
+        ChapterTop,
+        RestoreProgress
+    }
 }
