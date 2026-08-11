@@ -130,6 +130,21 @@ public sealed class ReaderBehaviorTests
         Assert.AreEqual(1, notifications);
     }
 
+    [TestMethod]
+    public void LibraryBookProgressDisplayReflectsUpdatedCurrentChapterWhenRebound()
+    {
+        var chapter = NewChapter("https://example.com/1.html", "第一段\n\n第二段\n\n第三段\n\n第四段");
+        var book = new Book(
+            "book", "https://example.com/book/", "https://example.com/book/", "测试", "作者", "example.com",
+            true, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, currentChapterUrl: chapter.SourceUrl);
+        book.Chapters.Add(chapter);
+
+        chapter.ApplyProgress(2, 4, DateTimeOffset.UtcNow);
+
+        Assert.AreEqual("67%", book.ProgressDisplay);
+        Assert.AreEqual("测试章节", book.CurrentChapterTitle);
+    }
+
     private static Chapter NewChapter(string url, string body) =>
         new(url, "测试章节", 1, body, cachedAt: DateTimeOffset.UtcNow);
 }

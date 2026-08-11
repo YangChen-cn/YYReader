@@ -15,6 +15,8 @@ public sealed partial class LibraryPage : Page
 {
     private readonly Window _window;
     private readonly OfflineDownloadManager _offlineDownloadManager;
+    private CancellationTokenSource? _downloadNoticeCancellation;
+    private bool _isSubscribed;
 
     public LibraryPage(LibraryStore store, OfflineDownloadManager offlineDownloadManager, Window window)
     {
@@ -22,10 +24,8 @@ public sealed partial class LibraryPage : Page
         _offlineDownloadManager = offlineDownloadManager;
         _window = window;
         InitializeComponent();
-        Store.PropertyChanged += Store_PropertyChanged;
-        Store.Books.CollectionChanged += (_, _) => RefreshView();
-        _offlineDownloadManager.StateChanged += OfflineDownloadManager_StateChanged;
-        RefreshView();
+        Loaded += LibraryPage_Loaded;
+        Unloaded += LibraryPage_Unloaded;
     }
 
     public LibraryStore Store { get; }
@@ -45,6 +45,44 @@ public sealed partial class LibraryPage : Page
         StatusInfoBar.IsOpen = Store.IsBusy || !string.IsNullOrWhiteSpace(Store.ErrorMessage) || !string.IsNullOrWhiteSpace(Store.StatusMessage);
         StatusInfoBar.Message = Store.ErrorMessage ?? Store.StatusMessage ?? "";
         StatusInfoBar.Severity = Store.ErrorMessage is null ? InfoBarSeverity.Informational : InfoBarSeverity.Error;
+    }
+
+    private void LibraryPage_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (!_isSubscribed)
+        {
+            Store.PropertyChanged += Store_PropertyChanged;
+            Store.Books.CollectionChanged += Books_CollectionChanged;
+            _offlineDownloadManager.StateChanged += OfflineDownloadManager_StateChanged;
+            _isSubscribed = true;
+        }
+        RefreshBookRows();
+        RefreshView();
+        ApplyOfflineDownloadState(_offlineDownloadManager.State);
+    }
+
+    private void LibraryPage_Unloaded(object sender, RoutedEventArgs e)
+    {
+        if (!_isSubscribed) return;
+        Store.PropertyChanged -= Store_PropertyChanged;
+        Store.Books.CollectionChanged -= Books_CollectionChanged;
+        _offlineDownloadManager.StateChanged -= OfflineDownloadManager_StateChanged;
+        _isSubscribed = false;
+        _downloadNoticeCancellation?.Cancel();
+        _downloadNoticeCancellation?.Dispose();
+        _downloadNoticeCancellation = null;
+    }
+
+    private void Books_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        RefreshBookRows();
+        RefreshView();
+    }
+
+    private void RefreshBookRows()
+    {
+        BookListView.ItemsSource = null;
+        BookListView.ItemsSource = Store.Books;
     }
 
     private async void AddUrl_Click(object sender, RoutedEventArgs e)
@@ -223,12 +261,14 @@ public sealed partial class LibraryPage : Page
     {
         if ((sender as MenuFlyoutItem)?.Tag is not Book book || book.CurrentChapter is not { } chapter) return;
         await _offlineDownloadManager.DownloadAsync(book, chapter, OfflineDownloadScope.AllChapters);
+        await Store.RefreshOfflineMetadataAsync(book.Id);
     }
 
     private async void ClearBookCache_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as MenuFlyoutItem)?.Tag is not Book book) return;
         await _offlineDownloadManager.ClearOfflineCacheAsync(book);
+        await Store.RefreshOfflineMetadataAsync(book.Id);
         StatusInfoBar.Message = "离线正文已删除，书籍和阅读进度已保留。";
         StatusInfoBar.Severity = InfoBarSeverity.Success;
         StatusInfoBar.IsOpen = true;
@@ -236,23 +276,54 @@ public sealed partial class LibraryPage : Page
 
     private void OfflineDownloadManager_StateChanged(object? sender, OfflineDownloadState state)
     {
-        DispatcherQueue.TryEnqueue(() =>
+        DispatcherQueue.TryEnqueue(() => ApplyOfflineDownloadState(state));
+    }
+
+    private void ApplyOfflineDownloadState(OfflineDownloadState state)
+    {
+        _downloadNoticeCancellation?.Cancel();
+        _downloadNoticeCancellation?.Dispose();
+        _downloadNoticeCancellation = null;
+        if (state.IsActive)
         {
-            if (state.IsActive)
+            StatusInfoBar.Message = $"正在下载 {state.CurrentChapter} · {state.Completed}/{state.Total}";
+            StatusInfoBar.Severity = InfoBarSeverity.Informational;
+            StatusInfoBar.IsOpen = true;
+            return;
+        }
+        if (state.Total <= 0) return;
+
+        StatusInfoBar.Message = state.WasCancelled
+            ? $"下载已取消，已保留 {state.Completed} 章。"
+            : $"离线下载完成：{state.Completed} 章" + (state.Failed > 0 ? $"，失败 {state.Failed} 章" : "");
+        StatusInfoBar.Severity = state.Failed > 0 ? InfoBarSeverity.Warning : InfoBarSeverity.Success;
+        StatusInfoBar.IsOpen = true;
+        if (state.Failed == 0)
+        {
+            _downloadNoticeCancellation = new CancellationTokenSource();
+            _ = HideSuccessfulDownloadNoticeAsync(_downloadNoticeCancellation);
+        }
+    }
+
+    private async Task HideSuccessfulDownloadNoticeAsync(CancellationTokenSource cancellation)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5), cancellation.Token);
+            if (ReferenceEquals(_downloadNoticeCancellation, cancellation)
+                && string.IsNullOrWhiteSpace(Store.ErrorMessage))
             {
-                StatusInfoBar.Message = $"正在下载 {state.CurrentChapter} · {state.Completed}/{state.Total}";
-                StatusInfoBar.Severity = InfoBarSeverity.Informational;
-                StatusInfoBar.IsOpen = true;
+                _downloadNoticeCancellation = null;
+                StatusInfoBar.IsOpen = false;
             }
-            else if (state.Total > 0)
-            {
-                StatusInfoBar.Message = state.WasCancelled
-                    ? $"下载已取消，已保留 {state.Completed} 章。"
-                    : $"离线下载完成：{state.Completed} 章" + (state.Failed > 0 ? $"，失败 {state.Failed} 章" : "");
-                StatusInfoBar.Severity = state.Failed > 0 ? InfoBarSeverity.Warning : InfoBarSeverity.Success;
-                StatusInfoBar.IsOpen = true;
-            }
-        });
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            cancellation.Dispose();
+        }
     }
 
     private void LibraryPage_KeyDown(object sender, KeyRoutedEventArgs e)
