@@ -58,8 +58,8 @@
                       PlaceholderText="目录"
                       DisplayMemberPath="Title"
                       SelectionChanged="ChapterPicker_SelectionChanged" />
-            <Button Grid.Column="3" Content="上一章" Click="PreviousChapter_Click" Height="36" />
-            <Button Grid.Column="4" Content="下一章" Click="NextChapter_Click" Height="36" />
+            <Button x:Name="PreviousChapterButton" Grid.Column="3" Content="上一章" Click="PreviousChapter_Click" Height="36" />
+            <Button x:Name="NextChapterButton" Grid.Column="4" Content="下一章" Click="NextChapter_Click" Height="36" />
             <Button Grid.Column="5" Content="Aa" Click="Appearance_Click" Height="36" ToolTipService.ToolTip="阅读设置" />
             <Button Grid.Column="6" Width="40" Height="36" ToolTipService.ToolTip="更多">
                 <FontIcon Glyph="&#xE712;" FontSize="16" />
@@ -75,6 +75,7 @@
                       Grid.Row="1"
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto"
+                      VerticalAnchorRatio="0"
                       ViewChanged="ReaderScrollViewer_ViewChanged"
                       KeyDown="ReaderScrollViewer_KeyDown"
                       IsTabStop="True">

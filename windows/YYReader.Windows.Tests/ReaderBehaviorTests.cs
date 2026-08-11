@@ -50,6 +50,14 @@ public sealed class ReaderBehaviorTests
     }
 
     [TestMethod]
+    public void ContinuousReadingLoadsBeforeTheScrollableEndRegardlessOfParagraphLength()
+    {
+        Assert.IsFalse(ReaderPageScroll.ShouldLoadNext(6_000, 8_000, 800));
+        Assert.IsTrue(ReaderPageScroll.ShouldLoadNext(7_100, 8_000, 800));
+        Assert.IsTrue(ReaderPageScroll.ShouldLoadNext(8_000, 8_000, 800));
+    }
+
+    [TestMethod]
     public void BodyTextNormalizationProducesParagraphsWithoutEmptyRows()
     {
         var chapter = NewChapter("https://example.com/1.html", " 第一段 \r\n\r\n 第二段 ");

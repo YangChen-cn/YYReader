@@ -112,23 +112,29 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(SelectedChapter));
     }
 
-    public async Task SelectChapterAsync(Chapter chapter, CancellationToken cancellationToken = default)
+    public async Task<bool> SelectChapterAsync(Chapter chapter, CancellationToken cancellationToken = default)
     {
         if (SelectedBook is null)
         {
-            return;
+            return false;
         }
 
         await FlushPendingProgressAsync(cancellationToken).ConfigureAwait(true);
-        SelectedChapter = chapter;
-        SelectedBook.CurrentChapterUrl = chapter.SourceUrl;
-        ReaderSession.Reset(chapter);
-        OnPropertyChanged(nameof(SelectedChapter));
         if (!chapter.IsCached)
         {
             await LoadChapterIntoMemoryAsync(chapter, cancellationToken).ConfigureAwait(true);
         }
+        if (!chapter.IsCached)
+        {
+            return false;
+        }
+
+        SelectedChapter = chapter;
+        SelectedBook.CurrentChapterUrl = chapter.SourceUrl;
+        ReaderSession.Reset(chapter);
+        OnPropertyChanged(nameof(SelectedChapter));
         ScheduleNextChapterPrefetch();
+        return true;
     }
 
     public async Task AddUrlAsync(string input, CancellationToken cancellationToken = default)
@@ -215,8 +221,9 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
             return null;
         }
 
-        await SelectChapterAsync(target, cancellationToken).ConfigureAwait(true);
-        return target;
+        return await SelectChapterAsync(target, cancellationToken).ConfigureAwait(true)
+            ? target
+            : null;
     }
 
     public void UpdateVisibleReaderPosition(string chapterUrl, int paragraphIndex, int paragraphCount)

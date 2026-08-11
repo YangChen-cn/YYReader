@@ -174,19 +174,27 @@ public sealed partial class ReaderPage : Page
 
             _continuousLoadAttemptedAfterChapterUrl = lastLoadedUrl;
             _loadingNext = true;
+            SetNavigationEnabled(false);
             try
             {
                 var before = Store.ReaderSession.Entries.Count;
                 await Store.PrepareNextChapterAsync();
                 if (Store.ReaderSession.Entries.Count > before)
                 {
+                    var stableOffset = ReaderScrollViewer.VerticalOffset;
                     AddEntryItems(Store.ReaderSession.Entries[^1], false);
                     RefreshChapterPicker();
+                    DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+                    {
+                        ReaderRepeater.UpdateLayout();
+                        ReaderScrollViewer.ChangeView(null, stableOffset, null, true);
+                    });
                 }
             }
             finally
             {
                 _loadingNext = false;
+                SetNavigationEnabled(true);
             }
         }
     }
@@ -198,18 +206,6 @@ public sealed partial class ReaderPage : Page
         Store.UpdateVisibleReaderPosition(visible.ChapterUrl, visible.ParagraphIndex, visible.ParagraphCount);
         ProgressText.Text = $"{Store.SelectedChapter?.Progress:P0}　{Store.SelectedChapter?.Title}";
         ToolbarChapterTitle.Text = Store.SelectedChapter?.Title ?? "";
-        if (ChapterPicker.SelectedItem != Store.SelectedChapter)
-        {
-            _synchronizingChapterPicker = true;
-            try
-            {
-                ChapterPicker.SelectedItem = Store.SelectedChapter;
-            }
-            finally
-            {
-                _synchronizingChapterPicker = false;
-            }
-        }
     }
 
     private ReaderItem? FindVisibleParagraph()
@@ -238,12 +234,15 @@ public sealed partial class ReaderPage : Page
 
     private bool IsNearEndOfLoadedEntries()
     {
-        var visible = FindVisibleParagraph();
-        var lastEntry = Store.ReaderSession.Entries.LastOrDefault();
-        return visible is not null
-            && lastEntry is not null
-            && visible.ChapterUrl == lastEntry.Chapter.SourceUrl
-            && visible.ParagraphIndex >= Math.Max(visible.ParagraphCount - 3, 0);
+        if (Store.ReaderSession.Entries.Count == 0)
+        {
+            return false;
+        }
+
+        return ReaderPageScroll.ShouldLoadNext(
+            ReaderScrollViewer.VerticalOffset,
+            ReaderScrollViewer.ScrollableHeight,
+            ReaderScrollViewer.ActualHeight);
     }
 
     private void RestorePosition()
@@ -285,32 +284,52 @@ public sealed partial class ReaderPage : Page
     {
         if (!_initialized || _changingChapter || _synchronizingChapterPicker || ChapterPicker.SelectedItem is not Chapter chapter) return;
         _changingChapter = true;
+        SetNavigationEnabled(false);
         try
         {
             _continuousLoadAttemptedAfterChapterUrl = null;
-            await Store.SelectChapterAsync(chapter);
+            var selected = await Store.SelectChapterAsync(chapter);
+            if (!selected)
+            {
+                RefreshChapterPicker();
+                await ShowChapterLoadFailureAsync();
+                return;
+            }
             RebuildItems(ReaderRebuildPosition.ChapterTop);
         }
         finally
         {
             _changingChapter = false;
+            SetNavigationEnabled(true);
         }
     }
 
     private async Task NavigateChapterAsync(int offset)
     {
+        if (_changingChapter || _loadingNext)
+        {
+            return;
+        }
+
         _changingChapter = true;
+        SetNavigationEnabled(false);
         try
         {
             _continuousLoadAttemptedAfterChapterUrl = null;
             var chapter = await Store.NavigateChapterAsync(offset);
-            if (chapter is null) return;
+            if (chapter is null)
+            {
+                RefreshChapterPicker();
+                await ShowChapterLoadFailureAsync();
+                return;
+            }
             RefreshChapterPicker();
             RebuildItems(ReaderRebuildPosition.ChapterTop);
         }
         finally
         {
             _changingChapter = false;
+            SetNavigationEnabled(true);
         }
     }
 
@@ -321,6 +340,7 @@ public sealed partial class ReaderPage : Page
     private void RefreshChapterPicker()
     {
         _synchronizingChapterPicker = true;
+        ChapterPicker.SelectionChanged -= ChapterPicker_SelectionChanged;
         try
         {
             ChapterPicker.ItemsSource = Store.SelectedBook?.Chapters.OrderBy(chapter => chapter.SortIndex).ToArray();
@@ -328,6 +348,7 @@ public sealed partial class ReaderPage : Page
         }
         finally
         {
+            ChapterPicker.SelectionChanged += ChapterPicker_SelectionChanged;
             _synchronizingChapterPicker = false;
         }
         ToolbarChapterTitle.Text = Store.SelectedChapter?.Title ?? "";
@@ -421,6 +442,30 @@ public sealed partial class ReaderPage : Page
             XamlRoot = XamlRoot
         };
         await dialog.ShowAsync();
+    }
+
+    private async Task ShowChapterLoadFailureAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Store.ErrorMessage))
+        {
+            return;
+        }
+
+        var dialog = new ContentDialog
+        {
+            Title = "章节加载失败",
+            Content = new TextBlock { Text = Store.ErrorMessage, TextWrapping = TextWrapping.Wrap },
+            CloseButtonText = "知道了",
+            XamlRoot = XamlRoot
+        };
+        await dialog.ShowAsync();
+    }
+
+    private void SetNavigationEnabled(bool isEnabled)
+    {
+        PreviousChapterButton.IsEnabled = isEnabled;
+        NextChapterButton.IsEnabled = isEnabled;
+        ChapterPicker.IsEnabled = isEnabled;
     }
 
     private void Back_Click(object sender, RoutedEventArgs e)
