@@ -162,6 +162,15 @@ public sealed partial class ReaderPage : Page
             && footer.Children.OfType<Border>().FirstOrDefault() is { } separator)
         {
             separator.Background = _palette.Separator;
+            separator.Width = _preferences.ContinuousReading ? 72 : double.NaN;
+            separator.HorizontalAlignment = _preferences.ContinuousReading ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
+            footer.Margin = _preferences.ContinuousReading
+                ? new Thickness(0, 24, 0, 12)
+                : new Thickness(0, 24, 0, 34);
+            if (footer.Children.OfType<Grid>().FirstOrDefault() is { } navigation)
+            {
+                navigation.Visibility = _preferences.ContinuousReading ? Visibility.Collapsed : Visibility.Visible;
+            }
         }
     }
 
@@ -497,7 +506,19 @@ public sealed partial class ReaderPage : Page
         ToolbarChapterTitle.Text = Store.SelectedChapter?.Title ?? "";
         if (CatalogSplitView.IsPaneOpen && CatalogList.SelectedItem is not null)
         {
-            DispatcherQueue.TryEnqueue(() => CatalogList.ScrollIntoView(CatalogList.SelectedItem, ScrollIntoViewAlignment.Leading));
+            var selected = CatalogList.SelectedItem;
+            CatalogList.ScrollIntoView(selected, ScrollIntoViewAlignment.Default);
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                if (CatalogList.ContainerFromItem(selected) is ListViewItem container)
+                {
+                    container.StartBringIntoView(new BringIntoViewOptions
+                    {
+                        AnimationDesired = false,
+                        VerticalAlignmentRatio = 0.5
+                    });
+                }
+            });
         }
     }
 
@@ -648,10 +669,16 @@ public sealed partial class ReaderPage : Page
     {
         DispatcherQueue.TryEnqueue(() =>
         {
-            DownloadStatusButton.Visibility = state.IsActive ? Visibility.Visible : Visibility.Collapsed;
+            var shouldRemainVisible = state.IsActive || state.Failed > 0 || state.WasCancelled;
+            DownloadStatusButton.Visibility = shouldRemainVisible ? Visibility.Visible : Visibility.Collapsed;
+            DownloadStatusIcon.Glyph = state.Failed > 0 ? "\uE7BA" : state.WasCancelled ? "\uE711" : "\uE896";
             DownloadStatusText.Text = state.IsActive
                 ? $"{state.CurrentChapter}\n已完成 {state.Completed} / {state.Total}" + (state.Failed > 0 ? $"，失败 {state.Failed}" : "")
-                : "";
+                : state.WasCancelled
+                    ? $"下载已取消；已完成并保留 {state.Completed} 章。"
+                    : state.Failed > 0
+                        ? $"下载完成 {state.Completed} 章，失败 {state.Failed} 章。"
+                        : "";
             DownloadProgressBar.Value = state.Total <= 0 ? 0 : (double)(state.Completed + state.Failed) / state.Total;
         });
     }
@@ -661,15 +688,15 @@ public sealed partial class ReaderPage : Page
         _synchronizingAppearance = true;
         try
         {
-            SelectComboTag(AppearanceThemeBox, _preferences.Theme);
-            SelectComboTag(AppearanceFontBox, _preferences.FontFamily);
-            SelectComboTag(AppearanceLineBox, SpacingName(_preferences.LineSpacing, 0.34, 0.49));
-            SelectComboTag(AppearanceParagraphBox, SpacingName(_preferences.ParagraphSpacing, 0.50, 0.70));
-            SelectComboTag(AppearanceWidthBox, WidthName(_preferences.ContentWidthEm));
+            AppearanceFontOptions.SelectedIndex = _preferences.FontFamily switch { "system" => 1, "kaiti" => 2, _ => 0 };
+            AppearanceLineOptions.SelectedIndex = OptionIndex(SpacingName(_preferences.LineSpacing, 0.34, 0.49));
+            AppearanceParagraphOptions.SelectedIndex = OptionIndex(SpacingName(_preferences.ParagraphSpacing, 0.50, 0.70));
+            AppearanceWidthOptions.SelectedIndex = OptionIndex(WidthName(_preferences.ContentWidthEm));
             AppearanceIndentToggle.IsOn = _preferences.ParagraphIndent;
             AppearanceContinuousToggle.IsOn = _preferences.ContinuousReading;
             AppearancePrefetchToggle.IsOn = _preferences.PrefetchNextChapter;
             AppearanceFontSizeText.Text = $"{_preferences.FontSize:0} pt";
+            UpdateThemeSelection();
         }
         finally
         {
@@ -693,16 +720,34 @@ public sealed partial class ReaderPage : Page
         if (_synchronizingAppearance) return;
         _preferences = (_preferences with
         {
-            Theme = SelectedTag(AppearanceThemeBox, "system"),
-            FontFamily = SelectedTag(AppearanceFontBox, "serif"),
-            LineSpacing = SpacingValue(SelectedTag(AppearanceLineBox, "comfortable"), 0.28, 0.40, 0.58),
-            ParagraphSpacing = SpacingValue(SelectedTag(AppearanceParagraphBox, "comfortable"), 0.40, 0.60, 0.82),
-            ContentWidthEm = WidthValue(SelectedTag(AppearanceWidthBox, "comfortable")),
+            FontFamily = AppearanceFontOptions.SelectedIndex switch { 1 => "system", 2 => "kaiti", _ => "serif" },
+            LineSpacing = SpacingValue(OptionName(AppearanceLineOptions.SelectedIndex), 0.28, 0.40, 0.58),
+            ParagraphSpacing = SpacingValue(OptionName(AppearanceParagraphOptions.SelectedIndex), 0.40, 0.60, 0.82),
+            ContentWidthEm = WidthValue(WidthOptionName(AppearanceWidthOptions.SelectedIndex)),
             ParagraphIndent = AppearanceIndentToggle.IsOn,
             ContinuousReading = AppearanceContinuousToggle.IsOn,
             PrefetchNextChapter = AppearancePrefetchToggle.IsOn
         }).Normalized();
         ApplyAppearanceChange();
+    }
+
+    private void AppearanceTheme_Click(object sender, RoutedEventArgs e)
+    {
+        if (_synchronizingAppearance || sender is not Button { Tag: string theme }) return;
+        _preferences = (_preferences with { Theme = theme }).Normalized();
+        ApplyAppearanceChange();
+        UpdateThemeSelection();
+    }
+
+    private void UpdateThemeSelection()
+    {
+        foreach (var button in AppearanceThemePanel.Children.OfType<Button>())
+        {
+            var selected = string.Equals(button.Tag as string, _preferences.Theme, StringComparison.Ordinal);
+            button.BorderThickness = new Thickness(selected ? 2 : 1);
+            button.BorderBrush = selected ? _palette.Accent : _palette.Separator;
+            button.Opacity = selected ? 1 : 0.78;
+        }
     }
 
     private void ApplyAppearanceChange()
@@ -774,21 +819,17 @@ public sealed partial class ReaderPage : Page
         await dialog.ShowAsync();
     }
 
-    private async Task ShowChapterLoadFailureAsync()
+    private Task ShowChapterLoadFailureAsync()
     {
         if (string.IsNullOrWhiteSpace(Store.ErrorMessage))
         {
-            return;
+            return Task.CompletedTask;
         }
-
-        var dialog = new ContentDialog
-        {
-            Title = "章节加载失败",
-            Content = new TextBlock { Text = Store.ErrorMessage, TextWrapping = TextWrapping.Wrap },
-            CloseButtonText = "知道了",
-            XamlRoot = XamlRoot
-        };
-        await dialog.ShowAsync();
+        ReaderInfoBar.Title = "章节加载失败";
+        ReaderInfoBar.Message = Store.ErrorMessage;
+        ReaderInfoBar.Severity = InfoBarSeverity.Error;
+        ReaderInfoBar.IsOpen = true;
+        return Task.CompletedTask;
     }
 
     private void SetNavigationEnabled(bool isEnabled)
@@ -810,6 +851,7 @@ public sealed partial class ReaderPage : Page
         var systemTheme = ActualTheme == ElementTheme.Dark ? ElementTheme.Dark : ElementTheme.Light;
         _palette = ReaderThemePalette.FromName(_preferences.Theme, systemTheme);
         ReaderRoot.RequestedTheme = _palette.ElementTheme;
+        ReaderToolbar.RequestedTheme = _palette.ElementTheme;
         ReaderRoot.Background = _palette.Background;
         ReaderScrollViewer.Background = _palette.Background;
         ReaderContent.Width = ReaderLayout.EffectiveContentWidth(_preferences.ContentWidthEm, _preferences.FontSize, ActualWidth);
@@ -831,10 +873,10 @@ public sealed partial class ReaderPage : Page
 
     private FontFamily ReaderFontFamily() => _preferences.FontFamily switch
     {
-        "system" => new FontFamily("Microsoft YaHei UI, Segoe UI"),
-        "rounded" => new FontFamily("Microsoft YaHei UI, Segoe UI"),
-        "kaiti" => new FontFamily("KaiTi, STKaiti, Microsoft YaHei UI"),
-        _ => new FontFamily("Noto Serif CJK SC, SimSun, Microsoft YaHei UI")
+        "system" => new FontFamily("Microsoft YaHei UI, Noto Sans SC, Segoe UI Variable Text"),
+        "rounded" => new FontFamily("Microsoft YaHei UI, Noto Sans SC, Segoe UI Variable Text"),
+        "kaiti" => new FontFamily("KaiTi, Microsoft YaHei UI, Noto Sans SC"),
+        _ => new FontFamily("Noto Serif SC, Microsoft YaHei UI, DengXian")
     };
 
     private static string WidthName(double value) => value < 43 ? "narrow" : value > 53 ? "wide" : "comfortable";
@@ -855,15 +897,26 @@ public sealed partial class ReaderPage : Page
         _ => comfortable
     };
 
-    private static string SelectedTag(ComboBox comboBox, string fallback) =>
-        (comboBox.SelectedItem as ComboBoxItem)?.Tag as string ?? fallback;
-
-    private static void SelectComboTag(ComboBox comboBox, string tag)
+    private static int OptionIndex(string name) => name switch
     {
-        comboBox.SelectedItem = comboBox.Items.OfType<ComboBoxItem>()
-            .FirstOrDefault(item => string.Equals(item.Tag as string, tag, StringComparison.Ordinal))
-            ?? comboBox.Items.OfType<ComboBoxItem>().FirstOrDefault();
-    }
+        "compact" or "narrow" => 0,
+        "loose" or "wide" => 2,
+        _ => 1
+    };
+
+    private static string OptionName(int index) => index switch
+    {
+        0 => "compact",
+        2 => "loose",
+        _ => "comfortable"
+    };
+
+    private static string WidthOptionName(int index) => index switch
+    {
+        0 => "narrow",
+        2 => "wide",
+        _ => "comfortable"
+    };
 
     private enum ReaderRebuildPosition
     {
