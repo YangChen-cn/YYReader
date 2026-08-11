@@ -410,14 +410,30 @@ public sealed class SqliteLibraryRepository
             INSERT INTO ReaderProgress (BookId, ChapterUrl, ParagraphIndex, Progress, LastReadAt)
             VALUES ($book, $chapter, $index, $progress, $lastRead)
             ON CONFLICT(BookId, ChapterUrl) DO UPDATE SET
-                ParagraphIndex = excluded.ParagraphIndex,
-                Progress = excluded.Progress,
-                LastReadAt = excluded.LastReadAt;
+                ParagraphIndex = CASE
+                    WHEN excluded.ParagraphIndex > ReaderProgress.ParagraphIndex
+                        OR (excluded.ParagraphIndex = ReaderProgress.ParagraphIndex AND excluded.Progress >= ReaderProgress.Progress)
+                    THEN excluded.ParagraphIndex ELSE ReaderProgress.ParagraphIndex END,
+                Progress = CASE
+                    WHEN excluded.ParagraphIndex > ReaderProgress.ParagraphIndex
+                        OR (excluded.ParagraphIndex = ReaderProgress.ParagraphIndex AND excluded.Progress >= ReaderProgress.Progress)
+                    THEN excluded.Progress ELSE ReaderProgress.Progress END,
+                LastReadAt = CASE
+                    WHEN ReaderProgress.LastReadAt IS NULL OR excluded.LastReadAt > ReaderProgress.LastReadAt
+                    THEN excluded.LastReadAt ELSE ReaderProgress.LastReadAt END;
             """, cancellationToken,
             ("$book", bookId), ("$chapter", canonicalChapterUrl), ("$index", Math.Max(paragraphIndex, 0)),
             ("$progress", Math.Clamp(progress, 0, 1)), ("$lastRead", lastReadAt.ToString("O", CultureInfo.InvariantCulture))).ConfigureAwait(false);
-        await ExecuteAsync(connection, transaction,
-            "UPDATE Books SET CurrentChapterUrl = $chapter, UpdatedAt = $updated WHERE Id = $book;",
+        await ExecuteAsync(connection, transaction, """
+            UPDATE Books
+            SET CurrentChapterUrl = $chapter, UpdatedAt = $updated
+            WHERE Id = $book AND (
+                CurrentChapterUrl IS NULL
+                OR CurrentChapterUrl = $chapter
+                OR COALESCE((SELECT SortIndex FROM Chapters WHERE BookId = $book AND SourceUrl = $chapter), -1)
+                    > COALESCE((SELECT SortIndex FROM Chapters WHERE BookId = $book AND SourceUrl = Books.CurrentChapterUrl), -1)
+            );
+            """,
             cancellationToken,
             ("$chapter", canonicalChapterUrl), ("$updated", lastReadAt.ToString("O", CultureInfo.InvariantCulture)), ("$book", bookId)).ConfigureAwait(false);
         transaction.Commit();
@@ -446,6 +462,7 @@ public sealed class SqliteLibraryRepository
             Title = book.Title,
             Author = book.Author,
             CurrentChapterUrl = book.CurrentChapterUrl,
+            CurrentChapterIndex = book.CurrentChapter?.SortIndex,
             ParagraphIndex = book.CurrentChapter?.ParagraphIndex ?? 0,
             Progress = book.CurrentProgress,
             LastReadAt = book.LastReadAt,
@@ -475,12 +492,47 @@ public sealed class SqliteLibraryRepository
         };
     }
 
-    public async Task<bool> ApplySyncSnapshotAsync(SyncSnapshot remote, CancellationToken cancellationToken = default)
+    public async Task<SyncApplicationResult> ApplySyncSnapshotAsync(SyncSnapshot remote, CancellationToken cancellationToken = default)
     {
+        var storedBooks = await GetBooksAsync(cancellationToken).ConfigureAwait(false);
         var local = await BuildSyncSnapshotAsync("windows", cancellationToken).ConfigureAwait(false);
-        var merged = SyncMergePlanner.Merge(local.Books, remote.Books);
-        var normalizedLocal = SyncMergePlanner.Merge(local.Books, []);
-        if (normalizedLocal.SequenceEqual(merged)) return false;
+        var chapterRanks = storedBooks.ToDictionary(
+            book => book.SourceBookUrl,
+            book => (IReadOnlyDictionary<string, int>)book.Chapters.ToDictionary(
+                chapter => chapter.SourceUrl,
+                chapter => chapter.SortIndex,
+                StringComparer.Ordinal),
+            StringComparer.Ordinal);
+        var normalizedRemote = SyncMergePlanner.Merge([], remote.Books, chapterRanks);
+        var refreshSources = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var remoteBook in normalizedRemote)
+        {
+            if (remoteBook.DeletedAt is not null
+                || string.IsNullOrWhiteSpace(remoteBook.CurrentChapterUrl)) continue;
+            var localBook = storedBooks.FirstOrDefault(book => book.SourceBookUrl == remoteBook.CanonicalSourceUrl);
+            if (localBook is null || !localBook.HasCatalog) continue;
+            // An initial URL import intentionally stores only the first catalog page. When a
+            // paired device knows this book, complete small catalogs in the background so a
+            // synced position is not stranded behind that first page.
+            if (localBook.Chapters.Count <= 50)
+            {
+                refreshSources.Add(remoteBook.CanonicalSourceUrl);
+            }
+            var remoteChapterUrl = UrlCanonicalizer.CanonicalizeChapter(remoteBook.CurrentChapterUrl).AbsoluteUri;
+            var remoteChapter = localBook.Chapters.FirstOrDefault(chapter => chapter.SourceUrl == remoteChapterUrl);
+            var remoteIsPlaceholder = remoteChapter is not null
+                && remoteChapter.SortIndex == 1
+                && !remoteChapter.IsAvailableOffline
+                && (remoteChapter.Title == localBook.Title || remoteChapter.Title == "当前章节");
+            if (remoteChapter is null || remoteIsPlaceholder)
+            {
+                refreshSources.Add(remoteBook.CanonicalSourceUrl);
+            }
+        }
+
+        var merged = SyncMergePlanner.Merge(local.Books, normalizedRemote, chapterRanks);
+        var normalizedLocal = SyncMergePlanner.Merge(local.Books, [], chapterRanks);
+        if (normalizedLocal.SequenceEqual(merged)) return new SyncApplicationResult(false, refreshSources.ToArray());
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction();
         foreach (var entry in merged)
@@ -526,10 +578,12 @@ public sealed class SqliteLibraryRepository
             if (chapterUrl is null) continue;
             await ExecuteAsync(connection, transaction, """
                 INSERT INTO Chapters (BookId, SourceUrl, Title, SortIndex, BodyText, PreviousUrl, NextUrl, CachedAt)
-                VALUES ($book, $chapter, $title, 1, NULL, NULL, NULL, NULL)
-                ON CONFLICT(BookId, SourceUrl) DO NOTHING;
+                VALUES ($book, $chapter, $title, $sort, NULL, NULL, NULL, NULL)
+                ON CONFLICT(BookId, SourceUrl) DO UPDATE SET
+                    SortIndex = CASE WHEN $hasSort = 1 THEN excluded.SortIndex ELSE Chapters.SortIndex END;
                 """, cancellationToken,
-                ("$book", bookId), ("$chapter", chapterUrl), ("$title", string.IsNullOrWhiteSpace(entry.Title) ? "当前章节" : entry.Title)).ConfigureAwait(false);
+                ("$book", bookId), ("$chapter", chapterUrl), ("$title", "当前章节"),
+                ("$sort", entry.CurrentChapterIndex ?? 1), ("$hasSort", entry.CurrentChapterIndex is null ? 0 : 1)).ConfigureAwait(false);
             if (entry.LastReadAt is { } lastReadAt)
             {
                 await ExecuteAsync(connection, transaction, """
@@ -540,12 +594,12 @@ public sealed class SqliteLibraryRepository
                         Progress = excluded.Progress,
                         LastReadAt = excluded.LastReadAt;
                     """, cancellationToken,
-                    ("$book", bookId), ("$chapter", chapterUrl), ("$index", entry.ParagraphIndex),
-                    ("$progress", entry.Progress), ("$read", lastReadAt.ToString("O", CultureInfo.InvariantCulture))).ConfigureAwait(false);
+                    ("$book", bookId), ("$chapter", chapterUrl), ("$index", Math.Max(entry.ParagraphIndex ?? 0, 0)),
+                    ("$progress", Math.Clamp(entry.Progress ?? 0, 0, 1)), ("$read", lastReadAt.ToString("O", CultureInfo.InvariantCulture))).ConfigureAwait(false);
             }
         }
         transaction.Commit();
-        return true;
+        return new SyncApplicationResult(true, refreshSources.ToArray());
     }
 
     private async Task<SqliteConnection> OpenAsync(CancellationToken cancellationToken)

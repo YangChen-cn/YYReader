@@ -20,6 +20,7 @@ public sealed partial class MainWindow : Window
     private TaskCompletionSource<bool>? _verificationCompletion;
     private bool _closeReady;
     private bool _syncReloadPending;
+    private readonly HashSet<string> _pendingCatalogRefreshSources = new(StringComparer.Ordinal);
 
     public MainWindow()
     {
@@ -79,15 +80,19 @@ public sealed partial class MainWindow : Window
         if (_syncReloadPending) _ = RefreshLibraryAfterSyncAsync();
     }
 
-    private async Task RemoteSyncAppliedAsync()
+    private async Task RemoteSyncAppliedAsync(IReadOnlyList<string> catalogRefreshSources)
     {
+        foreach (var source in catalogRefreshSources) _pendingCatalogRefreshSources.Add(source);
         if (ReferenceEquals(ContentFrame.Content, _libraryPage))
         {
             await _store.ReloadAsync();
+            await RefreshPendingSyncedCatalogsAsync();
             _libraryPage.RefreshView();
         }
         else
         {
+            // Keep the live Reader geometry and visible chapter untouched. The database result
+            // becomes the restoration position only after the user leaves the Reader.
             _syncReloadPending = true;
         }
     }
@@ -97,7 +102,19 @@ public sealed partial class MainWindow : Window
         _syncReloadPending = false;
         await _store.FlushPendingProgressAsync();
         await _store.ReloadAsync();
+        await RefreshPendingSyncedCatalogsAsync();
         _libraryPage.RefreshView();
+    }
+
+    private async Task RefreshPendingSyncedCatalogsAsync()
+    {
+        foreach (var source in _pendingCatalogRefreshSources.ToArray())
+        {
+            if (await _store.RefreshCatalogForSourceAsync(source))
+            {
+                _pendingCatalogRefreshSources.Remove(source);
+            }
+        }
     }
 
     private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)

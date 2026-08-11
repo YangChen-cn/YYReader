@@ -192,7 +192,7 @@ public sealed class PersistenceTests
             var book = await repository.UpsertImportAsync(new NovelImportResult(
                 "旧标题", "作者", new Uri("https://example.com/book/"), new Uri("https://example.com/book/"), true,
                 [new ChapterSeed("第一章", chapterUrl, 1)], true, "第一章", chapterUrl, "离线正文", null, null));
-            await repository.ApplySyncSnapshotAsync(new SyncSnapshot
+            var remote = new SyncSnapshot
             {
                 Device = "mac",
                 UpdatedAt = DateTimeOffset.UtcNow,
@@ -201,12 +201,112 @@ public sealed class PersistenceTests
                     SourceUrl = book.SourceBookUrl, Title = "新标题", Author = "作者", CurrentChapterUrl = chapterUrl.AbsoluteUri,
                     ParagraphIndex = 8, Progress = 0.75, LastReadAt = DateTimeOffset.UtcNow.AddMinutes(1), UpdatedAt = DateTimeOffset.UtcNow
                 }]
-            });
+            };
+            await repository.ApplySyncSnapshotAsync(remote);
 
             var reloaded = (await repository.GetBooksAsync()).Single();
             Assert.AreEqual("新标题", reloaded.Title);
             Assert.AreEqual(8, reloaded.CurrentChapter!.ParagraphIndex);
             Assert.AreEqual("离线正文", await repository.LoadChapterBodyAsync(book.Id, chapterUrl.AbsoluteUri));
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public async Task SyncPrefersLaterCatalogChapterOverNewerEarlyChapterTimestamp()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"yyreader-sync-order-{Guid.NewGuid():N}.db");
+        try
+        {
+            var repository = new SqliteLibraryRepository(path);
+            await repository.InitializeAsync();
+            var chapter20 = new Uri("https://example.com/book/20.html");
+            var chapter400 = new Uri("https://example.com/book/400.html");
+            var book = await repository.UpsertImportAsync(new NovelImportResult(
+                "测试", "作者", new Uri("https://example.com/book/"), new Uri("https://example.com/book/"), true,
+                [new ChapterSeed("第20章", chapter20, 20), new ChapterSeed("第400章", chapter400, 400)],
+                true, "第20章", chapter20, "正文", null, chapter400));
+            await repository.SaveProgressAsync(book.Id, chapter20.AbsoluteUri, 3, 0.5, DateTimeOffset.Parse("2026-01-05Z"));
+
+            var remote = new SyncSnapshot
+            {
+                Device = "mac",
+                UpdatedAt = DateTimeOffset.Parse("2026-01-04Z"),
+                Books = [new SyncSnapshotBook
+                {
+                    SourceUrl = book.SourceBookUrl,
+                    Title = book.Title,
+                    Author = book.Author,
+                    CurrentChapterUrl = chapter400.AbsoluteUri,
+                    CurrentChapterIndex = 400,
+                    ParagraphIndex = 9,
+                    Progress = 0.7,
+                    LastReadAt = DateTimeOffset.Parse("2026-01-04Z"),
+                    UpdatedAt = DateTimeOffset.Parse("2026-01-04Z")
+                }]
+            };
+            await repository.ApplySyncSnapshotAsync(remote);
+
+            var snapshot = await repository.BuildSyncSnapshotAsync("windows");
+            Assert.AreEqual(chapter400.AbsoluteUri, snapshot.Books.Single().CurrentChapterUrl);
+            Assert.AreEqual(9, snapshot.Books.Single().ParagraphIndex);
+            Assert.AreEqual(DateTimeOffset.Parse("2026-01-05Z"), snapshot.Books.Single().LastReadAt);
+            await repository.ApplySyncSnapshotAsync(remote);
+            Assert.AreEqual(snapshot.Books.Single().LastReadAt,
+                (await repository.BuildSyncSnapshotAsync("windows")).Books.Single().LastReadAt);
+
+            // The currently visible Reader can still be showing chapter 20. Its delayed save
+            // must not steal the database position selected for the next app launch.
+            await repository.SaveProgressAsync(book.Id, chapter20.AbsoluteUri, 2, 0.4, DateTimeOffset.Parse("2026-01-06Z"));
+            var afterVisibleReaderSave = await repository.BuildSyncSnapshotAsync("windows");
+            Assert.AreEqual(chapter400.AbsoluteUri, afterVisibleReaderSave.Books.Single().CurrentChapterUrl);
+            Assert.AreEqual(9, afterVisibleReaderSave.Books.Single().ParagraphIndex);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public async Task SyncKeepsUnknownMacChapterAndRequestsCatalogRefresh()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"yyreader-sync-sparse-{Guid.NewGuid():N}.db");
+        try
+        {
+            var repository = new SqliteLibraryRepository(path);
+            await repository.InitializeAsync();
+            var chapter20 = new Uri("https://example.com/book/20.html");
+            var chapter400 = new Uri("https://example.com/book/400.html");
+            var book = await repository.UpsertImportAsync(new NovelImportResult(
+                "测试", "作者", new Uri("https://example.com/book/"), new Uri("https://example.com/book/"), true,
+                [new ChapterSeed("第20章", chapter20, 20)], true, "第20章", chapter20, "正文", null, null));
+            await repository.SaveProgressAsync(book.Id, chapter20.AbsoluteUri, 2, 0.4, DateTimeOffset.Parse("2026-01-05Z"));
+
+            var result = await repository.ApplySyncSnapshotAsync(new SyncSnapshot
+            {
+                Device = "mac",
+                UpdatedAt = DateTimeOffset.Parse("2026-01-04Z"),
+                Books = [new SyncSnapshotBook
+                {
+                    SourceUrl = book.SourceBookUrl,
+                    Title = book.Title,
+                    Author = book.Author,
+                    CurrentChapterUrl = chapter400.AbsoluteUri,
+                    CurrentChapterIndex = 400,
+                    ParagraphIndex = 12,
+                    Progress = 0.8,
+                    LastReadAt = DateTimeOffset.Parse("2026-01-04Z"),
+                    UpdatedAt = DateTimeOffset.Parse("2026-01-04Z")
+                }]
+            });
+
+            var snapshot = await repository.BuildSyncSnapshotAsync("windows");
+            Assert.AreEqual(chapter400.AbsoluteUri, snapshot.Books.Single().CurrentChapterUrl);
+            CollectionAssert.Contains(result.CatalogRefreshSourceUrls.ToList(), book.SourceBookUrl);
         }
         finally
         {

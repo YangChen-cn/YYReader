@@ -2,19 +2,20 @@ namespace YYReader.Windows.Core.Sync;
 
 public sealed class SyncEngine(
     Func<CancellationToken, Task<SyncSnapshot>> buildLocalSnapshot,
-    Func<SyncSnapshot, CancellationToken, Task> mergeRemoteSnapshot)
+    Func<SyncSnapshot, CancellationToken, Task<SyncApplicationResult>> mergeRemoteSnapshot)
 {
     public const string SyncDirectoryName = "YYReaderSync";
     public const string MacFileName = "mac.json";
     public const string WindowsFileName = "windows.json";
 
-    public async Task<SyncSnapshot> SynchronizeAsync(string selectedFolderPath, CancellationToken cancellationToken = default)
+    public async Task<SyncExecutionResult> SynchronizeAsync(string selectedFolderPath, CancellationToken cancellationToken = default)
     {
         var syncDirectory = ResolveSyncDirectory(selectedFolderPath);
         if (!Directory.Exists(selectedFolderPath)) throw new DirectoryNotFoundException("同步文件夹暂时不可用。");
         Directory.CreateDirectory(syncDirectory);
 
         var macPath = Path.Combine(syncDirectory, MacFileName);
+        var application = SyncApplicationResult.None;
         if (File.Exists(macPath))
         {
             var json = await ReadWithRetryAsync(macPath, cancellationToken).ConfigureAwait(false);
@@ -23,13 +24,37 @@ public sealed class SyncEngine(
             {
                 throw new SyncSnapshotException("mac.json 的 device 必须为 mac。");
             }
-            await mergeRemoteSnapshot(remote, cancellationToken).ConfigureAwait(false);
+            application = await mergeRemoteSnapshot(remote, cancellationToken).ConfigureAwait(false);
         }
 
-        var snapshot = await buildLocalSnapshot(cancellationToken).ConfigureAwait(false);
-        await WriteAtomicallyAsync(Path.Combine(syncDirectory, WindowsFileName), SyncSnapshotCodec.Encode(snapshot), cancellationToken)
-            .ConfigureAwait(false);
-        return snapshot;
+        var built = await buildLocalSnapshot(cancellationToken).ConfigureAwait(false);
+        var snapshot = new SyncSnapshot
+        {
+            Device = "windows",
+            UpdatedAt = built.UpdatedAt,
+            Books = SyncMergePlanner.Merge(built.Books, []).ToList()
+        };
+        var windowsPath = Path.Combine(syncDirectory, WindowsFileName);
+        var shouldWrite = true;
+        if (File.Exists(windowsPath))
+        {
+            try
+            {
+                var existing = SyncSnapshotCodec.Decode(await ReadWithRetryAsync(windowsPath, cancellationToken).ConfigureAwait(false));
+                shouldWrite = existing.Version != SyncSnapshotCodec.Version
+                    || !string.Equals(existing.Device, "windows", StringComparison.OrdinalIgnoreCase)
+                    || !BooksAreEquivalent(existing.Books, snapshot.Books);
+            }
+            catch (SyncSnapshotException)
+            {
+                // Repair an invalid file owned by this client with the current local snapshot.
+            }
+        }
+        if (shouldWrite)
+        {
+            await WriteAtomicallyAsync(windowsPath, SyncSnapshotCodec.Encode(snapshot), cancellationToken).ConfigureAwait(false);
+        }
+        return new SyncExecutionResult(snapshot, application, shouldWrite);
     }
 
     public static string ResolveSyncDirectory(string selectedFolderPath) =>
@@ -64,4 +89,42 @@ public sealed class SyncEngine(
             if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
         }
     }
+
+    private static bool BooksAreEquivalent(
+        IReadOnlyCollection<SyncSnapshotBook> first,
+        IReadOnlyCollection<SyncSnapshotBook> second)
+    {
+        var left = SyncMergePlanner.Merge(first, []);
+        var right = SyncMergePlanner.Merge(second, []);
+        if (left.Count != right.Count) return false;
+        for (var index = 0; index < left.Count; index++)
+        {
+            var a = left[index];
+            var b = right[index];
+            if (a.CanonicalSourceUrl != b.CanonicalSourceUrl
+                || a.Title != b.Title
+                || a.Author != b.Author
+                || a.CurrentChapterUrl != b.CurrentChapterUrl
+                || a.CurrentChapterIndex != b.CurrentChapterIndex
+                || a.ParagraphIndex != b.ParagraphIndex
+                || a.Progress != b.Progress
+                || a.LastReadAt != b.LastReadAt
+                || a.UpdatedAt != b.UpdatedAt
+                || a.DeletedAt != b.DeletedAt)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
 }
+
+public sealed record SyncApplicationResult(bool Changed, IReadOnlyList<string> CatalogRefreshSourceUrls)
+{
+    public static SyncApplicationResult None { get; } = new(false, []);
+}
+
+public sealed record SyncExecutionResult(
+    SyncSnapshot Snapshot,
+    SyncApplicationResult Application,
+    bool WindowsFileWritten);

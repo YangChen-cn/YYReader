@@ -7,14 +7,15 @@ namespace YYReader.Windows.Services;
 public sealed record FolderSyncState(
     bool IsSyncing = false,
     DateTimeOffset? LastSyncAt = null,
-    string? ErrorMessage = null);
+    string? ErrorMessage = null,
+    bool ShouldNotify = false);
 
 public sealed class FolderSyncService : IAsyncDisposable
 {
     private readonly SqliteLibraryRepository _repository;
     private readonly LibraryStore _store;
     private readonly DispatcherQueue _dispatcherQueue;
-    private readonly Func<Task> _remoteChangesApplied;
+    private readonly Func<IReadOnlyList<string>, Task> _remoteChangesApplied;
     private readonly FolderSyncPreferencesStore _preferencesStore = new();
     private readonly SemaphoreSlim _syncGate = new(1, 1);
     private readonly CancellationTokenSource _lifetimeCancellation = new();
@@ -22,6 +23,7 @@ public sealed class FolderSyncService : IAsyncDisposable
     private CancellationTokenSource? _debounceCancellation;
     private FileSystemWatcher? _watcher;
     private DateTime _observedMacWriteTimeUtc;
+    private long _observedMacLength = -1;
     private bool _disposed;
     private bool _suppressScheduling;
 
@@ -29,7 +31,7 @@ public sealed class FolderSyncService : IAsyncDisposable
         SqliteLibraryRepository repository,
         LibraryStore store,
         DispatcherQueue dispatcherQueue,
-        Func<Task> remoteChangesApplied)
+        Func<IReadOnlyList<string>, Task> remoteChangesApplied)
     {
         _repository = repository;
         _store = store;
@@ -37,13 +39,12 @@ public sealed class FolderSyncService : IAsyncDisposable
         _remoteChangesApplied = remoteChangesApplied;
         Engine = new SyncEngine(
             token => _repository.BuildSyncSnapshotAsync("windows", token),
-            async (snapshot, token) => _remoteChangedDuringSync = await _repository.ApplySyncSnapshotAsync(snapshot, token));
+            (snapshot, token) => _repository.ApplySyncSnapshotAsync(snapshot, token));
         _pollTimer = new Timer(_ => Poll(), null, Timeout.Infinite, Timeout.Infinite);
-        _store.PropertyChanged += StoreChanged;
         _store.BooksChanged += StoreBooksChanged;
+        _store.ProgressPersisted += StoreProgressPersisted;
     }
 
-    private bool _remoteChangedDuringSync;
     public SyncEngine Engine { get; }
     public FolderSyncPreferences Preferences { get; private set; } = new();
     public FolderSyncState State { get; private set; } = new();
@@ -84,7 +85,10 @@ public sealed class FolderSyncService : IAsyncDisposable
         _ = SynchronizeAfterDelayAsync(delay ?? TimeSpan.FromMilliseconds(1500), cancellation);
     }
 
-    public async Task SynchronizeNowAsync(CancellationToken cancellationToken = default)
+    public Task SynchronizeNowAsync(CancellationToken cancellationToken = default) =>
+        SynchronizeCoreAsync(userInitiated: true, cancellationToken);
+
+    private async Task SynchronizeCoreAsync(bool userInitiated, CancellationToken cancellationToken = default)
     {
         if (!Preferences.IsEnabled || string.IsNullOrWhiteSpace(Preferences.FolderPath)) return;
         using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeCancellation.Token);
@@ -92,29 +96,30 @@ public sealed class FolderSyncService : IAsyncDisposable
         if (!await _syncGate.WaitAsync(0, operationToken)) return;
         try
         {
-            UpdateState(new(true, Preferences.LastSyncAt));
-            await RunOnUiThreadAsync(() => _store.FlushPendingProgressAsync(operationToken));
-            _remoteChangedDuringSync = false;
-            await Engine.SynchronizeAsync(Preferences.FolderPath, operationToken);
+            UpdateState(new(true, Preferences.LastSyncAt, ShouldNotify: userInitiated));
+            _suppressScheduling = true;
+            try { await RunOnUiThreadAsync(() => _store.FlushPendingProgressAsync(operationToken)); }
+            finally { _suppressScheduling = false; }
+            var result = await Engine.SynchronizeAsync(Preferences.FolderPath, operationToken);
             var now = DateTimeOffset.UtcNow;
             Preferences = Preferences with { LastSyncAt = now };
             await _preferencesStore.SaveAsync(Preferences, operationToken);
             UpdateObservedMacWriteTime();
-            if (_remoteChangedDuringSync)
+            if (result.Application.Changed || result.Application.CatalogRefreshSourceUrls.Count > 0)
             {
                 _suppressScheduling = true;
-                try { await RunOnUiThreadAsync(_remoteChangesApplied); }
+                try { await RunOnUiThreadAsync(() => _remoteChangesApplied(result.Application.CatalogRefreshSourceUrls)); }
                 finally { _suppressScheduling = false; }
             }
-            UpdateState(new(false, now));
+            UpdateState(new(false, now, ShouldNotify: userInitiated || result.Application.Changed));
         }
         catch (OperationCanceledException)
         {
-            UpdateState(new(false, Preferences.LastSyncAt));
+            UpdateState(new(false, Preferences.LastSyncAt, ShouldNotify: userInitiated));
         }
         catch (Exception exception)
         {
-            UpdateState(new(false, Preferences.LastSyncAt, exception.Message));
+            UpdateState(new(false, Preferences.LastSyncAt, exception.Message, ShouldNotify: true));
         }
         finally
         {
@@ -130,7 +135,7 @@ public sealed class FolderSyncService : IAsyncDisposable
             if (ReferenceEquals(_debounceCancellation, scheduled))
             {
                 _debounceCancellation = null;
-                await SynchronizeNowAsync(scheduled.Token);
+                await SynchronizeCoreAsync(userInitiated: false, scheduled.Token);
             }
         }
         catch (OperationCanceledException)
@@ -176,8 +181,12 @@ public sealed class FolderSyncService : IAsyncDisposable
         {
             if (_watcher is null) ConfigureWatcher();
             var path = Path.Combine(SyncEngine.ResolveSyncDirectory(Preferences.FolderPath), SyncEngine.MacFileName);
-            var writeTime = File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
-            if (writeTime > _observedMacWriteTimeUtc) ScheduleSync(TimeSpan.Zero);
+            if (!File.Exists(path)) return;
+            var info = new FileInfo(path);
+            if (info.LastWriteTimeUtc != _observedMacWriteTimeUtc || info.Length != _observedMacLength)
+            {
+                ScheduleSync(TimeSpan.Zero);
+            }
         }
         catch
         {
@@ -189,7 +198,15 @@ public sealed class FolderSyncService : IAsyncDisposable
     {
         if (string.IsNullOrWhiteSpace(Preferences.FolderPath)) return;
         var path = Path.Combine(SyncEngine.ResolveSyncDirectory(Preferences.FolderPath), SyncEngine.MacFileName);
-        _observedMacWriteTimeUtc = File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
+        if (!File.Exists(path))
+        {
+            _observedMacWriteTimeUtc = DateTime.MinValue;
+            _observedMacLength = -1;
+            return;
+        }
+        var info = new FileInfo(path);
+        _observedMacWriteTimeUtc = info.LastWriteTimeUtc;
+        _observedMacLength = info.Length;
     }
 
     private Task RunOnUiThreadAsync(Func<Task> operation)
@@ -207,12 +224,12 @@ public sealed class FolderSyncService : IAsyncDisposable
         return completion.Task;
     }
 
-    private void StoreChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private void StoreBooksChanged(object? sender, EventArgs e)
     {
         if (!_suppressScheduling) ScheduleSync();
     }
 
-    private void StoreBooksChanged(object? sender, EventArgs e)
+    private void StoreProgressPersisted(object? sender, EventArgs e)
     {
         if (!_suppressScheduling) ScheduleSync();
     }
@@ -227,8 +244,8 @@ public sealed class FolderSyncService : IAsyncDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _store.PropertyChanged -= StoreChanged;
         _store.BooksChanged -= StoreBooksChanged;
+        _store.ProgressPersisted -= StoreProgressPersisted;
         _debounceCancellation?.Cancel();
         _debounceCancellation?.Dispose();
         _watcher?.Dispose();

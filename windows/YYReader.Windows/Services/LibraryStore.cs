@@ -69,6 +69,7 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public event EventHandler? BooksChanged;
+    public event EventHandler? ProgressPersisted;
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -321,6 +322,7 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
             pending.Progress,
             pending.LastReadAt,
             cancellationToken).ConfigureAwait(true);
+        ProgressPersisted?.Invoke(this, EventArgs.Empty);
     }
 
     public async Task DeleteBookAsync(Book book, CancellationToken cancellationToken = default)
@@ -340,7 +342,25 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
 
     public async Task<bool> RefreshSelectedCatalogAsync(CancellationToken cancellationToken = default)
     {
-        if (SelectedBook is not { HasCatalog: true } book || !Uri.TryCreate(book.CatalogUrl, UriKind.Absolute, out var catalogUrl))
+        if (SelectedBook is not { } book)
+        {
+            ErrorMessage = "这本小说没有可刷新的目录地址。";
+            return false;
+        }
+
+        return await RefreshCatalogAsync(book, cancellationToken).ConfigureAwait(true);
+    }
+
+    public async Task<bool> RefreshCatalogForSourceAsync(string sourceBookUrl, CancellationToken cancellationToken = default)
+    {
+        var canonical = UrlCanonicalizer.Canonicalize(sourceBookUrl).AbsoluteUri;
+        var book = Books.FirstOrDefault(candidate => candidate.SourceBookUrl == canonical);
+        return book is not null && await RefreshCatalogAsync(book, cancellationToken).ConfigureAwait(true);
+    }
+
+    private async Task<bool> RefreshCatalogAsync(Book book, CancellationToken cancellationToken)
+    {
+        if (!book.HasCatalog || !Uri.TryCreate(book.CatalogUrl, UriKind.Absolute, out var catalogUrl))
         {
             ErrorMessage = "这本小说没有可刷新的目录地址。";
             return false;

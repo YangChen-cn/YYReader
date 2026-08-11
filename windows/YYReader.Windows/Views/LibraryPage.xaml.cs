@@ -209,6 +209,7 @@ public sealed partial class LibraryPage : Page
     {
         DispatcherQueue.TryEnqueue(() =>
         {
+            if (!state.ShouldNotify) return;
             if (state.IsSyncing)
             {
                 StatusInfoBar.Message = "正在同步书架与阅读位置…";

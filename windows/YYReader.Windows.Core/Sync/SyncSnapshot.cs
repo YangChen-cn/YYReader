@@ -39,11 +39,15 @@ public sealed record SyncSnapshotBook
     [JsonPropertyName("currentChapterURL")]
     public string? CurrentChapterUrl { get; init; }
 
+    [JsonPropertyName("currentChapterIndex")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? CurrentChapterIndex { get; init; }
+
     [JsonPropertyName("paragraphIndex")]
-    public int ParagraphIndex { get; init; }
+    public int? ParagraphIndex { get; init; }
 
     [JsonPropertyName("progress")]
-    public double Progress { get; init; }
+    public double? Progress { get; init; }
 
     [JsonPropertyName("lastReadAt")]
     public DateTimeOffset? LastReadAt { get; init; }
@@ -59,13 +63,12 @@ public sealed record SyncSnapshotBook
     public Dictionary<string, JsonElement>? ExtraFields { get; init; }
 
     public string CanonicalSourceUrl => UrlCanonicalizer.Canonicalize(SourceUrl).AbsoluteUri;
-    public DateTimeOffset ActiveAt => LastReadAt is { } read && read > UpdatedAt ? read : UpdatedAt;
 }
 
 public static class SyncSnapshotCodec
 {
     public const string Format = "yyreader-sync";
-    public const int Version = 1;
+    public const int Version = 2;
 
     private static readonly JsonSerializerOptions Options = new()
     {
@@ -91,7 +94,7 @@ public static class SyncSnapshotCodec
         }
 
         if (snapshot.Format != Format) throw new SyncSnapshotException("不是 YYReader SyncSnapshot 文件。");
-        if (snapshot.Version != Version) throw new SyncSnapshotException($"暂不支持 SyncSnapshot v{snapshot.Version}。");
+        if (snapshot.Version is < 1 or > Version) throw new SyncSnapshotException($"暂不支持 SyncSnapshot v{snapshot.Version}。");
         foreach (var book in snapshot.Books)
         {
             if (string.IsNullOrWhiteSpace(book.SourceUrl)
@@ -100,9 +103,15 @@ public static class SyncSnapshotCodec
             {
                 throw new SyncSnapshotException("同步书籍包含无效 sourceURL。");
             }
-            if (book.ParagraphIndex < 0 || book.Progress is < 0 or > 1 || double.IsNaN(book.Progress) || double.IsInfinity(book.Progress))
+            if (book.ParagraphIndex is < 0
+                || book.Progress is < 0 or > 1
+                || book.Progress is { } progress && (double.IsNaN(progress) || double.IsInfinity(progress)))
             {
                 throw new SyncSnapshotException("同步书籍包含无效阅读位置。");
+            }
+            if (book.CurrentChapterIndex is < 0)
+            {
+                throw new SyncSnapshotException("同步书籍包含无效 currentChapterIndex。");
             }
             if (book.CurrentChapterUrl is not null
                 && (!Uri.TryCreate(book.CurrentChapterUrl, UriKind.Absolute, out var chapter) || !UrlCanonicalizer.IsHttp(chapter)))
