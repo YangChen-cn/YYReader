@@ -4,6 +4,27 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Microsoft.UI.Xaml.Controls">
     <Application.Resources>
-        <controls:XamlControlsResources />
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <controls:XamlControlsResources />
+            </ResourceDictionary.MergedDictionaries>
+            <x:Double x:Key="YYSpacingSmall">8</x:Double>
+            <x:Double x:Key="YYSpacingMedium">16</x:Double>
+            <x:Double x:Key="YYSpacingLarge">28</x:Double>
+            <CornerRadius x:Key="YYCornerMedium">8</CornerRadius>
+            <Thickness x:Key="YYPagePadding">40,28,40,28</Thickness>
+            <Style x:Key="YYToolbarButtonStyle" TargetType="Button">
+                <Setter Property="MinHeight" Value="36" />
+                <Setter Property="CornerRadius" Value="6" />
+                <Setter Property="Padding" Value="12,6" />
+            </Style>
+            <Style x:Key="YYSectionTitleStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="20" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+            <Style x:Key="YYSecondaryTextStyle" TargetType="TextBlock">
+                <Setter Property="Opacity" Value="0.62" />
+            </Style>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

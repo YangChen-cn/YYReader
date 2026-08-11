@@ -87,4 +87,23 @@ public sealed class TransferTests
         Assert.AreEqual(1, ReaderPosition.RestoreParagraphIndex(null, 1, 2));
         Assert.AreEqual(0.5, ReaderPosition.ProgressForParagraph(1, 3), 0.0001);
     }
+
+    [TestMethod]
+    public void BookshelfExportContainsCrossPlatformReadingIdentityAndPosition()
+    {
+        var book = new Book("id", "https://example.com/book/", "https://example.com/book/", "测试书", "作者",
+            "example.com", true, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow,
+            currentChapterUrl: "https://example.com/book/3.html");
+        book.Chapters.Add(new Chapter("https://example.com/book/3.html", "第3章", 3,
+            paragraphIndex: 42, progress: 0.63));
+
+        var json = BookshelfTransferCodec.Encode(BookshelfTransferExporter.FromBooks([book]),
+            DateTimeOffset.Parse("2026-08-12T00:00:00Z"));
+        var decoded = BookshelfTransferCodec.Decode(json);
+
+        Assert.AreEqual("https://example.com/book/", decoded.Books[0].SourceUrl);
+        Assert.AreEqual("https://example.com/book/3.html", decoded.Books[0].CurrentChapterUrl);
+        Assert.AreEqual(42, decoded.Books[0].ParagraphIndex);
+        Assert.AreEqual(0.63, decoded.Books[0].Progress);
+    }
 }

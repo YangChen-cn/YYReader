@@ -4,11 +4,16 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Microsoft.UI.Xaml.Controls"
     Title="YYReader">
-    <Grid x:Name="RootGrid">
-        <Frame x:Name="ContentFrame" />
+    <Grid x:Name="RootGrid" RowDefinitions="Auto,*">
+        <Grid x:Name="AppTitleBar" Height="36" Padding="12,0" ColumnDefinitions="Auto,Auto,*">
+            <Image Source="/Assets/AppIcon.png" Width="18" Height="18" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="YYReader" Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" />
+        </Grid>
+        <Frame x:Name="ContentFrame" Grid.Row="1" />
 
         <Grid x:Name="VerificationOverlay"
               Visibility="Collapsed"
+              Grid.RowSpan="2"
               Background="#CCF7F7F7"
               HorizontalAlignment="Stretch"
               VerticalAlignment="Stretch">

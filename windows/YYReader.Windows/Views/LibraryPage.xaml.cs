@@ -32,9 +32,15 @@ public sealed partial class LibraryPage : Page
     {
         if (BookListView is null) return;
         EmptyState.Visibility = Store.Books.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        BusyRing.IsActive = Store.IsBusy;
-        StatusText.Text = Store.ErrorMessage ?? Store.StatusMessage ?? "";
-        ClearErrorButton.Visibility = Store.ErrorMessage is null ? Visibility.Collapsed : Visibility.Visible;
+        var featured = Store.Books.OrderByDescending(book => book.LastReadAt ?? book.UpdatedAt).FirstOrDefault();
+        FeaturedBookPanel.Visibility = featured is null ? Visibility.Collapsed : Visibility.Visible;
+        FeaturedTitle.Text = featured?.Title ?? "";
+        FeaturedChapter.Text = featured?.CurrentChapterTitle ?? "";
+        FeaturedProgress.Text = featured is null ? "" : $"{featured.ProgressDisplay} · {featured.LastReadDisplay}";
+        FeaturedOpenButton.Tag = featured;
+        StatusInfoBar.IsOpen = Store.IsBusy || !string.IsNullOrWhiteSpace(Store.ErrorMessage) || !string.IsNullOrWhiteSpace(Store.StatusMessage);
+        StatusInfoBar.Message = Store.ErrorMessage ?? Store.StatusMessage ?? "";
+        StatusInfoBar.Severity = Store.ErrorMessage is null ? InfoBarSeverity.Informational : InfoBarSeverity.Error;
     }
 
     private async void AddUrl_Click(object sender, RoutedEventArgs e)
@@ -42,6 +48,7 @@ public sealed partial class LibraryPage : Page
         if (await Store.AddUrlAsync(UrlTextBox.Text))
         {
             UrlTextBox.Text = "";
+            AddBookFlyout.Hide();
         }
         RefreshView();
     }
@@ -140,6 +147,16 @@ public sealed partial class LibraryPage : Page
     private async void OpenBook_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as Button)?.Tag is not Book book) return;
+        await OpenBookAsync(book);
+    }
+
+    private async void OpenBookMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as MenuFlyoutItem)?.Tag is Book book) await OpenBookAsync(book);
+    }
+
+    private async Task OpenBookAsync(Book book)
+    {
         Store.SelectBook(book);
         if (await Store.EnsureSelectedChapterLoadedAsync())
         {
@@ -148,6 +165,20 @@ public sealed partial class LibraryPage : Page
         else
         {
             RefreshView();
+        }
+    }
+
+    private async void BookListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        if (BookListView.SelectedItem is Book book) await OpenBookAsync(book);
+    }
+
+    private async void BookListView_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key == global::Windows.System.VirtualKey.Enter && BookListView.SelectedItem is Book book)
+        {
+            e.Handled = true;
+            await OpenBookAsync(book);
         }
     }
 
@@ -184,10 +215,67 @@ public sealed partial class LibraryPage : Page
         RefreshView();
     }
 
-    private void ClearError_Click(object sender, RoutedEventArgs e)
+    private void LibraryPage_KeyDown(object sender, KeyRoutedEventArgs e)
     {
-        Store.ClearError();
-        RefreshView();
+        if ((e.Key == global::Windows.System.VirtualKey.O || e.Key == global::Windows.System.VirtualKey.L)
+            && (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(global::Windows.System.VirtualKey.Control)
+                & global::Windows.UI.Core.CoreVirtualKeyStates.Down) != 0)
+        {
+            AddBookFlyout.ShowAt(AddBookButton);
+            DispatcherQueue.TryEnqueue(() => UrlTextBox.Focus(FocusState.Programmatic));
+            e.Handled = true;
+        }
+    }
+
+    private void StatusInfoBar_Closed(InfoBar sender, InfoBarClosedEventArgs args) => Store.ClearError();
+
+    private string CreateBookshelfExport() =>
+        BookshelfTransferCodec.Encode(BookshelfTransferExporter.FromBooks(Store.Books));
+
+    private void CopyBookshelfExport_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var package = new DataPackage();
+            package.SetText(CreateBookshelfExport());
+            Clipboard.SetContent(package);
+            Clipboard.Flush();
+            StatusInfoBar.Message = $"已复制 {Store.Books.Count} 本小说的书架数据。";
+            StatusInfoBar.Severity = InfoBarSeverity.Success;
+            StatusInfoBar.IsOpen = true;
+        }
+        catch (Exception exception)
+        {
+            StatusInfoBar.Message = $"复制书架失败：{exception.Message}";
+            StatusInfoBar.Severity = InfoBarSeverity.Error;
+            StatusInfoBar.IsOpen = true;
+        }
+    }
+
+    private async void SaveBookshelfExport_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var picker = new global::Windows.Storage.Pickers.FileSavePicker
+            {
+                SuggestedStartLocation = global::Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary,
+                SuggestedFileName = $"YYReader-Bookshelf-{DateTime.Now:yyyyMMdd}"
+            };
+            picker.FileTypeChoices.Add("YYReader 书架", [".yyreader"]);
+            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(_window));
+            var file = await picker.PickSaveFileAsync();
+            if (file is null) return;
+            await FileIO.WriteTextAsync(file, CreateBookshelfExport());
+            StatusInfoBar.Message = $"书架已导出到 {file.Name}";
+            StatusInfoBar.Severity = InfoBarSeverity.Success;
+            StatusInfoBar.IsOpen = true;
+        }
+        catch (Exception exception)
+        {
+            StatusInfoBar.Message = $"导出书架失败：{exception.Message}";
+            StatusInfoBar.Severity = InfoBarSeverity.Error;
+            StatusInfoBar.IsOpen = true;
+        }
     }
 
     private async Task ShowMessageAsync(string title, string message)

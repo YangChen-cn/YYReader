@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using YYReader.Windows.Core.Persistence;
 using YYReader.Windows.Core.Services;
 using YYReader.Windows.Services;
@@ -20,6 +21,16 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(AppTitleBar);
+        try
+        {
+            SystemBackdrop = new MicaBackdrop();
+        }
+        catch
+        {
+            // Older supported Windows builds fall back to the opaque WinUI background.
+        }
 
         var databaseDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
