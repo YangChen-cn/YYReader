@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using YYReader.Windows.Core.Persistence;
 using YYReader.Windows.Core.Parsing;
+using YYReader.Windows.Core.Sync;
 
 namespace YYReader.Windows.Tests;
 
@@ -149,6 +150,66 @@ public sealed class PersistenceTests
             if (File.Exists(path)) File.Delete(path);
             if (File.Exists($"{path}-wal")) File.Delete($"{path}-wal");
             if (File.Exists($"{path}-shm")) File.Delete($"{path}-shm");
+        }
+    }
+
+    [TestMethod]
+    public async Task SyncDeletionCreatesTombstoneAndStaleRemoteCannotRestoreBook()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"yyreader-sync-delete-{Guid.NewGuid():N}.db");
+        try
+        {
+            var repository = new SqliteLibraryRepository(path);
+            await repository.InitializeAsync();
+            var chapterUrl = new Uri("https://example.com/book/1.html");
+            var book = await repository.UpsertImportAsync(new NovelImportResult(
+                "测试", "作者", new Uri("https://example.com/book/"), new Uri("https://example.com/book/"), true,
+                [new ChapterSeed("第一章", chapterUrl, 1)], true, "第一章", chapterUrl, "正文", null, null));
+            var stale = await repository.BuildSyncSnapshotAsync("windows");
+
+            await repository.DeleteBookAsync(book.Id);
+            await repository.ApplySyncSnapshotAsync(stale);
+
+            Assert.AreEqual(0, (await repository.GetBooksAsync()).Count);
+            Assert.IsNotNull((await repository.BuildSyncSnapshotAsync("windows")).Books.Single().DeletedAt);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public async Task SyncUpdatesProgressWithoutReplacingCachedBody()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"yyreader-sync-progress-{Guid.NewGuid():N}.db");
+        try
+        {
+            var repository = new SqliteLibraryRepository(path);
+            await repository.InitializeAsync();
+            var chapterUrl = new Uri("https://example.com/book/1.html");
+            var book = await repository.UpsertImportAsync(new NovelImportResult(
+                "旧标题", "作者", new Uri("https://example.com/book/"), new Uri("https://example.com/book/"), true,
+                [new ChapterSeed("第一章", chapterUrl, 1)], true, "第一章", chapterUrl, "离线正文", null, null));
+            await repository.ApplySyncSnapshotAsync(new SyncSnapshot
+            {
+                Device = "mac",
+                UpdatedAt = DateTimeOffset.UtcNow,
+                Books = [new SyncSnapshotBook
+                {
+                    SourceUrl = book.SourceBookUrl, Title = "新标题", Author = "作者", CurrentChapterUrl = chapterUrl.AbsoluteUri,
+                    ParagraphIndex = 8, Progress = 0.75, LastReadAt = DateTimeOffset.UtcNow.AddMinutes(1), UpdatedAt = DateTimeOffset.UtcNow
+                }]
+            });
+
+            var reloaded = (await repository.GetBooksAsync()).Single();
+            Assert.AreEqual("新标题", reloaded.Title);
+            Assert.AreEqual(8, reloaded.CurrentChapter!.ParagraphIndex);
+            Assert.AreEqual("离线正文", await repository.LoadChapterBodyAsync(book.Id, chapterUrl.AbsoluteUri));
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
         }
     }
 }

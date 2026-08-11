@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using YYReader.Windows.Core.Models;
 using YYReader.Windows.Core.Parsing;
 using YYReader.Windows.Core.Transfer;
+using YYReader.Windows.Core.Sync;
 
 namespace YYReader.Windows.Core.Persistence;
 
@@ -77,6 +78,10 @@ public sealed class SqliteLibraryRepository
                 LastReadAt TEXT NULL,
                 PRIMARY KEY (BookId, ChapterUrl),
                 FOREIGN KEY (BookId, ChapterUrl) REFERENCES Chapters(BookId, SourceUrl) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS SyncTombstones (
+                SourceBookUrl TEXT NOT NULL PRIMARY KEY,
+                DeletedAt TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS IX_Books_UpdatedAt ON Books(UpdatedAt DESC);
             CREATE INDEX IF NOT EXISTS IX_Chapters_Book_Sort ON Chapters(BookId, SortIndex);
@@ -247,6 +252,8 @@ public sealed class SqliteLibraryRepository
             ("$next", DbValue(result.NextChapterUrl is null ? null : UrlCanonicalizer.CanonicalizeChapter(result.NextChapterUrl).AbsoluteUri)),
             ("$cached", now.ToString("O", CultureInfo.InvariantCulture))).ConfigureAwait(false);
 
+        await ExecuteAsync(connection, transaction, "DELETE FROM SyncTombstones WHERE SourceBookUrl = $source;",
+            cancellationToken, ("$source", sourceBookUrl)).ConfigureAwait(false);
         transaction.Commit();
         return (await GetBooksAsync(cancellationToken).ConfigureAwait(false)).First(book => book.Id == bookId);
     }
@@ -375,6 +382,8 @@ public sealed class SqliteLibraryRepository
             }
         }
 
+        await ExecuteAsync(connection, transaction, "DELETE FROM SyncTombstones WHERE SourceBookUrl = $source;",
+            cancellationToken, ("$source", sourceBookUrl)).ConfigureAwait(false);
         transaction.Commit();
         return (await GetBooksAsync(cancellationToken).ConfigureAwait(false)).First(book => book.Id == bookId);
     }
@@ -410,10 +419,123 @@ public sealed class SqliteLibraryRepository
     public async Task DeleteBookAsync(string bookId, CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        using var transaction = connection.BeginTransaction();
+        await ExecuteAsync(connection, transaction, """
+            INSERT INTO SyncTombstones (SourceBookUrl, DeletedAt)
+            SELECT SourceBookUrl, $deleted FROM Books WHERE Id = $id
+            ON CONFLICT(SourceBookUrl) DO UPDATE SET DeletedAt = excluded.DeletedAt;
+            """, cancellationToken,
+            ("$deleted", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture)), ("$id", bookId)).ConfigureAwait(false);
+        await ExecuteAsync(connection, transaction, "DELETE FROM Books WHERE Id = $id;", cancellationToken, ("$id", bookId)).ConfigureAwait(false);
+        transaction.Commit();
+    }
+
+    public async Task<SyncSnapshot> BuildSyncSnapshotAsync(string device, CancellationToken cancellationToken = default)
+    {
+        var books = await GetBooksAsync(cancellationToken).ConfigureAwait(false);
+        var entries = books.Select(book => new SyncSnapshotBook
+        {
+            SourceUrl = book.SourceBookUrl,
+            Title = book.Title,
+            Author = book.Author,
+            CurrentChapterUrl = book.CurrentChapterUrl,
+            ParagraphIndex = book.CurrentChapter?.ParagraphIndex ?? 0,
+            Progress = book.CurrentProgress,
+            LastReadAt = book.LastReadAt,
+            UpdatedAt = book.UpdatedAt
+        }).ToList();
+
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM Books WHERE Id = $id;";
-        command.Parameters.AddWithValue("$id", bookId);
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        command.CommandText = "SELECT SourceBookUrl, DeletedAt FROM SyncTombstones;";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var deletedAt = ParseDate(reader.GetString(1));
+            entries.Add(new SyncSnapshotBook
+            {
+                SourceUrl = reader.GetString(0),
+                UpdatedAt = deletedAt,
+                DeletedAt = deletedAt
+            });
+        }
+
+        return new SyncSnapshot
+        {
+            Device = device,
+            UpdatedAt = DateTimeOffset.UtcNow,
+            Books = entries
+        };
+    }
+
+    public async Task ApplySyncSnapshotAsync(SyncSnapshot remote, CancellationToken cancellationToken = default)
+    {
+        var local = await BuildSyncSnapshotAsync("windows", cancellationToken).ConfigureAwait(false);
+        var merged = SyncMergePlanner.Merge(local.Books, remote.Books);
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        using var transaction = connection.BeginTransaction();
+        foreach (var entry in merged)
+        {
+            var sourceUrl = entry.CanonicalSourceUrl;
+            if (entry.DeletedAt is { } deletedAt)
+            {
+                await ExecuteAsync(connection, transaction, "DELETE FROM Books WHERE SourceBookUrl = $source;",
+                    cancellationToken, ("$source", sourceUrl)).ConfigureAwait(false);
+                await ExecuteAsync(connection, transaction, """
+                    INSERT INTO SyncTombstones (SourceBookUrl, DeletedAt) VALUES ($source, $deleted)
+                    ON CONFLICT(SourceBookUrl) DO UPDATE SET DeletedAt = excluded.DeletedAt;
+                    """, cancellationToken,
+                    ("$source", sourceUrl), ("$deleted", deletedAt.ToString("O", CultureInfo.InvariantCulture))).ConfigureAwait(false);
+                continue;
+            }
+
+            var bookId = await FindBookIdAsync(connection, transaction, sourceUrl, cancellationToken).ConfigureAwait(false)
+                ?? Guid.NewGuid().ToString("D");
+            var createdAt = await FindCreatedAtAsync(connection, transaction, bookId, cancellationToken).ConfigureAwait(false)
+                ?? entry.UpdatedAt;
+            var sourceUri = new Uri(sourceUrl);
+            var chapterUrl = string.IsNullOrWhiteSpace(entry.CurrentChapterUrl)
+                ? null
+                : UrlCanonicalizer.CanonicalizeChapter(entry.CurrentChapterUrl).AbsoluteUri;
+            await ExecuteAsync(connection, transaction, """
+                INSERT INTO Books (Id, SourceBookUrl, CatalogUrl, Title, Author, SourceHost, HasCatalog, CreatedAt, UpdatedAt, CatalogFetchedAt, CurrentChapterUrl)
+                VALUES ($id, $source, $source, $title, $author, $host, 0, $created, $updated, NULL, $chapter)
+                ON CONFLICT(SourceBookUrl) DO UPDATE SET
+                    Title = CASE WHEN excluded.Title = '' THEN Books.Title ELSE excluded.Title END,
+                    Author = CASE WHEN excluded.Author = '' THEN Books.Author ELSE excluded.Author END,
+                    UpdatedAt = excluded.UpdatedAt,
+                    CurrentChapterUrl = COALESCE(excluded.CurrentChapterUrl, Books.CurrentChapterUrl);
+                """, cancellationToken,
+                ("$id", bookId), ("$source", sourceUrl), ("$title", entry.Title.Trim()), ("$author", entry.Author.Trim()),
+                ("$host", sourceUri.IsAbsoluteUri ? sourceUri.DnsSafeHost : ""),
+                ("$created", createdAt.ToString("O", CultureInfo.InvariantCulture)),
+                ("$updated", entry.UpdatedAt.ToString("O", CultureInfo.InvariantCulture)),
+                ("$chapter", chapterUrl ?? (object)DBNull.Value)).ConfigureAwait(false);
+            await ExecuteAsync(connection, transaction, "DELETE FROM SyncTombstones WHERE SourceBookUrl = $source;",
+                cancellationToken, ("$source", sourceUrl)).ConfigureAwait(false);
+
+            if (chapterUrl is null) continue;
+            await ExecuteAsync(connection, transaction, """
+                INSERT INTO Chapters (BookId, SourceUrl, Title, SortIndex, BodyText, PreviousUrl, NextUrl, CachedAt)
+                VALUES ($book, $chapter, $title, 1, NULL, NULL, NULL, NULL)
+                ON CONFLICT(BookId, SourceUrl) DO NOTHING;
+                """, cancellationToken,
+                ("$book", bookId), ("$chapter", chapterUrl), ("$title", string.IsNullOrWhiteSpace(entry.Title) ? "当前章节" : entry.Title)).ConfigureAwait(false);
+            if (entry.LastReadAt is { } lastReadAt)
+            {
+                await ExecuteAsync(connection, transaction, """
+                    INSERT INTO ReaderProgress (BookId, ChapterUrl, ParagraphIndex, Progress, LastReadAt)
+                    VALUES ($book, $chapter, $index, $progress, $read)
+                    ON CONFLICT(BookId, ChapterUrl) DO UPDATE SET
+                        ParagraphIndex = excluded.ParagraphIndex,
+                        Progress = excluded.Progress,
+                        LastReadAt = excluded.LastReadAt;
+                    """, cancellationToken,
+                    ("$book", bookId), ("$chapter", chapterUrl), ("$index", entry.ParagraphIndex),
+                    ("$progress", entry.Progress), ("$read", lastReadAt.ToString("O", CultureInfo.InvariantCulture))).ConfigureAwait(false);
+            }
+        }
+        transaction.Commit();
     }
 
     private async Task<SqliteConnection> OpenAsync(CancellationToken cancellationToken)
