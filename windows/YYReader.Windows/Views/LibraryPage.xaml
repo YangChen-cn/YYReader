@@ -5,7 +5,7 @@
     xmlns:models="using:YYReader.Windows.Core.Models">
     <Grid Background="Transparent" KeyDown="LibraryPage_KeyDown" IsTabStop="True">
         <Grid x:Name="LibraryShell" MaxWidth="1080" HorizontalAlignment="Stretch" Padding="{StaticResource YYPagePadding}"
-              RowDefinitions="Auto,Auto,*,Auto" RowSpacing="20">
+              RowDefinitions="Auto,Auto,*,Auto" RowSpacing="{StaticResource YYSectionSpacing}">
             <Grid x:Name="LibraryToolbar" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                 <Button x:Name="AddBookButton" Grid.Column="1" Content="＋ 添加小说"
                         Style="{StaticResource AccentButtonStyle}">
@@ -21,7 +21,7 @@
                         </Flyout>
                     </Button.Flyout>
                 </Button>
-                <Button Grid.Column="2" Width="40" Style="{StaticResource YYToolbarButtonStyle}" ToolTipService.ToolTip="更多">
+                <Button Grid.Column="2" Width="{StaticResource YYTitleBarButtonSize}" Style="{StaticResource YYToolbarButtonStyle}" ToolTipService.ToolTip="更多">
                     <FontIcon Glyph="&#xE712;" FontSize="16" />
                     <Button.Flyout>
                         <MenuFlyout>
@@ -36,11 +36,15 @@
 
             <StackPanel Grid.Row="0" Spacing="10">
                 <TextBlock Text="继续阅读" Style="{StaticResource YYSectionTitleStyle}" />
-                <Border x:Name="FeaturedBookPanel" Padding="20" CornerRadius="{StaticResource YYCornerMedium}"
+                <Border x:Name="FeaturedBookPanel" Padding="{StaticResource YYCardPadding}" CornerRadius="{StaticResource YYCornerMedium}"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
-                        <Image Source="/Assets/AppIcon.png" Width="58" Height="58" />
+                        <Border Width="54" Height="68" CornerRadius="{StaticResource YYCornerSmall}"
+                                Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                            <TextBlock x:Name="FeaturedMonogram" FontSize="25" FontWeight="SemiBold"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.72" />
+                        </Border>
                         <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
                             <TextBlock x:Name="FeaturedTitle" FontSize="19" FontWeight="SemiBold" />
                             <TextBlock x:Name="FeaturedChapter" Style="{StaticResource YYSecondaryTextStyle}" />
@@ -72,17 +76,17 @@
                                         <MenuFlyoutItem Text="删除小说" Tag="{x:Bind}" Click="DeleteBook_Click" />
                                     </MenuFlyout>
                                 </Grid.ContextFlyout>
-                                <Border Width="40" Height="40" CornerRadius="7" Background="#172D78D4">
-                                    <FontIcon Glyph="&#xE82D;" FontSize="19" Foreground="#2D78D4" />
+                                <Border Width="40" Height="46" CornerRadius="{StaticResource YYCornerSmall}"
+                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                                    <TextBlock Text="{x:Bind Monogram}" FontSize="17" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.7" />
                                 </Border>
                                 <StackPanel Grid.Column="1" Spacing="3">
                                     <TextBlock Text="{x:Bind Title}" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{x:Bind CurrentChapterTitle}" Opacity="0.66" TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
-                                <StackPanel Grid.Column="2" Width="150" Spacing="5" VerticalAlignment="Center">
-                                    <TextBlock Text="{x:Bind ProgressDisplay}" HorizontalAlignment="Right" Opacity="0.58" />
-                                    <ProgressBar Value="{x:Bind CurrentProgress}" Maximum="1" Height="3" Opacity="0.55" />
-                                </StackPanel>
+                                <TextBlock Grid.Column="2" Text="{x:Bind ProgressDisplay}" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Style="{StaticResource YYSecondaryTextStyle}" />
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>

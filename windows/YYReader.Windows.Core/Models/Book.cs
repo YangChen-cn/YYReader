@@ -55,6 +55,10 @@ public sealed class Book
 
     public string ProgressDisplay => $"{CurrentProgress:P0}";
 
+    public string Monogram => string.IsNullOrWhiteSpace(Title)
+        ? "阅"
+        : Title.Trim()[..1];
+
     public string LastReadDisplay => LastReadAt is { } value
         ? value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
         : "尚未阅读";

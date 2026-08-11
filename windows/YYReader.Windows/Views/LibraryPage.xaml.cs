@@ -39,6 +39,7 @@ public sealed partial class LibraryPage : Page
         var featured = Store.Books.OrderByDescending(book => book.LastReadAt ?? book.UpdatedAt).FirstOrDefault();
         FeaturedBookPanel.Visibility = featured is null ? Visibility.Collapsed : Visibility.Visible;
         FeaturedTitle.Text = featured?.Title ?? "";
+        FeaturedMonogram.Text = featured?.Monogram ?? "阅";
         FeaturedChapter.Text = featured?.CurrentChapterTitle ?? "";
         FeaturedProgress.Text = featured is null ? "" : $"{featured.ProgressDisplay} · {featured.LastReadDisplay}";
         FeaturedOpenButton.Tag = featured;
