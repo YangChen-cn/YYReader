@@ -107,6 +107,8 @@ struct AboutSettingsView: View {
             GroupBox("阅读体验") {
                 VStack(alignment: .leading, spacing: 10) {
                     Label("新增连续阅读、离线缓存和下一章机会性预取。", systemImage: "arrow.down.to.line.compact")
+                    Label("新增可选文件夹同步，可通过任意共享目录与 Windows 交换书架和阅读位置。", systemImage: "folder.badge.gearshape")
+                    Label("书架支持手动导入、导出跨平台 `.yyreader` 数据，并在导入前预览变更。", systemImage: "square.and.arrow.up.on.square")
                     Label("新增 ←/→ 整页滚动与 ↑/↓ 小幅滚动，翻页保留重叠便于衔接。", systemImage: "arrow.left.and.right")
                     Label("正文宽度、行距与段距改为随字号缩放，并支持更宽范围的自定义滑块。", systemImage: "textformat.size")
                     Label("扩充阅读主题，并为连续章节提供更紧凑、与主题一致的视觉边界。", systemImage: "paintpalette")

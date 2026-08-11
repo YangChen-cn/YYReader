@@ -36,6 +36,7 @@ struct YYReaderApp: App {
 
         Settings {
             SettingsView()
+                .environment(services)
         }
     }
 }

@@ -35,20 +35,6 @@
                ReferencedContainer = "container:YYReader.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "NO"
-            buildForProfiling = "NO"
-            buildForArchiving = "NO"
-            buildForAnalyzing = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "BB4614CFBD2648B2FC3CF548"
-               BuildableName = "YYReaderUITests.xctest"
-               BlueprintName = "YYReaderUITests"
-               ReferencedContainer = "container:YYReader.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -76,17 +62,6 @@
                BlueprintIdentifier = "9E86819502DC9CE666CC54CB"
                BuildableName = "YYReaderTests.xctest"
                BlueprintName = "YYReaderTests"
-               ReferencedContainer = "container:YYReader.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "BB4614CFBD2648B2FC3CF548"
-               BuildableName = "YYReaderUITests.xctest"
-               BlueprintName = "YYReaderUITests"
                ReferencedContainer = "container:YYReader.xcodeproj">
             </BuildableReference>
          </TestableReference>

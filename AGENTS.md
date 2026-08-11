@@ -76,7 +76,6 @@ xcodebuild test \
 - `YYReader/Support`：依赖装配、偏好键和跨模块辅助类型。
 - `YYReader/Resources`：Asset Catalog、字符串目录和其他应用资源。
 - `YYReaderTests`：解析、服务、SwiftData 和回归测试。
-- `YYReaderUITests`：关键原生 UI 流程测试。
 - `script`：可重复执行的构建、运行和打包脚本。
 
 主要类型原则上每个文件一个，避免把网络、解析、持久化和视图状态混在同一类型中。
@@ -126,6 +125,19 @@ xcodebuild test \
 - 切换书架书籍只读取本地缓存目录，不得因为缓存过期而自动刷新全目录。目录更新只能由导入流程或用户明确执行“刷新目录”触发；多页目录必须可取消。
 - 不在首版实现整本正文批量下载。
 
+## 文件夹同步规则
+
+- 文件夹同步不得绑定或硬编码 iCloud、Dropbox、OneDrive、Syncthing 等路径；用户必须通过 `NSOpenPanel` 选择任意共享文件夹。
+- App Sandbox 下保存并恢复 security-scoped bookmark，访问期间配对调用 `startAccessingSecurityScopedResource()` 与 `stopAccessingSecurityScopedResource()`。
+- 同步目录固定为 `YYReaderSync/`。Mac 只写 `mac.json`、读取 `windows.json`；Windows 端反向操作。
+- 两端遵循 `shared/sync/sync-snapshot-v1.schema.json`。书籍按 canonical `sourceURL` 合并，阅读位置以 `lastReadAt` 为准，元数据以 `updatedAt` 为准，删除以 `deletedAt` tombstone 为准。
+- 同步文件不得包含正文缓存、Cookie、WebKit 状态、验证令牌或其他隐私数据。
+- 写入必须使用同目录临时文件和原子替换；文件夹暂不可访问、文件无效或版本不支持时不得删除、覆盖或清空本地书架。
+- 同步 I/O、JSON 编解码与合并必须在独立 actor 中运行，不得进入 Reader 滚动热路径。阅读进度先完成本地 debounce 保存，再延迟 1～2 秒触发同步。
+- 监听对端文件变化，并以低频轮询兜底；重复同步必须幂等。
+- 手动书架传输遵循 `shared/bookshelf-transfer/bookshelf-transfer-v1.schema.json`，兼容 Windows 的 `.yyreader`、普通 JSON 和剪贴板文本；导入前预览新书、已存在、无效与重复条目。
+- 手动导入按 canonical `sourceURL` 更新或新建书籍，保留本地正文缓存；导出仅包含书籍身份、元数据和阅读位置。
+
 ## SwiftUI 与可访问性规则
 
 - 主窗口保持三栏 `NavigationSplitView`：书架、目录、阅读区。
@@ -162,7 +174,7 @@ xcodebuild test \
 - 通用解析的 JSON-LD、语义正文、非标准容器和导航文本。
 - 相对 URL、重复分页、循环分页、正文缺失、乱码、403 challenge、429 与取消。
 - SwiftData 去重、目录更新、缓存、进度恢复和删除级联。
-- 添加 URL、错误重试、目录搜索、章节切换、主题和离线恢复等 UI 流程。
+- 添加 URL、错误重试、目录搜索、章节切换、主题和离线恢复等核心状态流程；界面交互由用户手动验收。
 
 Fixture 必须精简且使用自造段落，不提交完整版权章节内容。测试不得依赖实时第三方网站，因为 Cloudflare、限流和站点结构会变化。
 

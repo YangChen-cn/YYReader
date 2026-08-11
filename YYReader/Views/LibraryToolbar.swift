@@ -6,6 +6,10 @@ struct LibraryToolbar: ToolbarContent {
     let toggleBookSidebar: () -> Void
     let addURL: () -> Void
     let continueReading: () -> Void
+    let importBookshelf: () -> Void
+    let importBookshelfFromClipboard: () -> Void
+    let copyBookshelfExport: () -> Void
+    let exportBookshelf: () -> Void
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
@@ -21,6 +25,22 @@ struct LibraryToolbar: ToolbarContent {
             Button("添加网页", systemImage: "plus", action: addURL)
                 .disabled(isLoading)
                 .help("添加小说网页")
+
+            Menu("更多", systemImage: "ellipsis") {
+                Button("导入书架…", systemImage: "square.and.arrow.down", action: importBookshelf)
+                Button(
+                    "从剪贴板导入",
+                    systemImage: "clipboard",
+                    action: importBookshelfFromClipboard
+                )
+
+                Divider()
+
+                Button("复制书架导出 JSON", systemImage: "doc.on.doc", action: copyBookshelfExport)
+                Button("导出为 .yyreader 文件…", systemImage: "square.and.arrow.up", action: exportBookshelf)
+            }
+            .disabled(isLoading)
+            .help("导入或导出书架")
         }
     }
 }

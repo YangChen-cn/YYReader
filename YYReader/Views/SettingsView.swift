@@ -26,6 +26,10 @@ struct SettingsView: View {
                 .padding()
             }
 
+            Tab("同步", systemImage: "arrow.trianglehead.2.clockwise") {
+                FolderSyncSettingsView()
+            }
+
             Tab("关于", systemImage: "info.circle") {
                 AboutSettingsView()
             }

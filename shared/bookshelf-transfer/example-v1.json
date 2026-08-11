@@ -1,0 +1,15 @@
+{
+  "format": "yyreader-bookshelf",
+  "version": 1,
+  "exportedAt": "2026-08-12T12:00:00.000Z",
+  "books": [
+    {
+      "sourceURL": "https://example.com/serial/quiet-river/",
+      "title": "示例小说",
+      "author": "示例作者",
+      "currentChapterURL": "https://example.com/serial/quiet-river/12.html",
+      "paragraphIndex": 42,
+      "progress": 0.63
+    }
+  ]
+}

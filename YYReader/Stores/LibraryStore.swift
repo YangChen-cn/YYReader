@@ -7,6 +7,7 @@ import SwiftData
 final class LibraryStore {
     private let modelContext: ModelContext
     private let coordinator: NovelImportCoordinator
+    private let folderSync: FolderSyncController?
     private let progressSaveDelay: Duration
     private var prefetchTask: Task<Void, Never>?
     private var importTask: Task<Void, Never>?
@@ -39,10 +40,12 @@ final class LibraryStore {
     init(
         modelContext: ModelContext,
         coordinator: NovelImportCoordinator,
+        folderSync: FolderSyncController? = nil,
         progressSaveDelay: Duration = .milliseconds(600)
     ) {
         self.modelContext = modelContext
         self.coordinator = coordinator
+        self.folderSync = folderSync
         self.progressSaveDelay = progressSaveDelay
         self.offlineDownloads = OfflineDownloadManager(modelContext: modelContext, coordinator: coordinator)
         refreshBooks()
@@ -328,6 +331,7 @@ final class LibraryStore {
             selectedChapterID = chapter.id
             updateChapterNavigationSnapshot()
             requestReaderScroll(.chapterTop)
+            folderSync?.scheduleLocalChange()
         }
     }
 
@@ -350,6 +354,7 @@ final class LibraryStore {
             refreshBooks()
             rebuildSelectedBookChapters()
             updateChapterNavigationSnapshot()
+            folderSync?.scheduleLocalChange()
         }
     }
 
@@ -414,6 +419,7 @@ final class LibraryStore {
     func deleteSelectedBook() -> Bool {
         guard let book = selectedBook else { return false }
         guard flushPendingProgress() else { return false }
+        let deletionRecord = syncRecord(for: book, deletedAt: .now)
         readerScrollRequest = nil
         modelContext.delete(book)
         do {
@@ -427,7 +433,141 @@ final class LibraryStore {
         selectedBookID = books.first?.id
         rebuildSelectedBookChapters()
         selectInitialChapter(preferredID: nil)
+        folderSync?.recordDeletion(deletionRecord)
+        folderSync?.scheduleLocalChange()
         return true
+    }
+
+    func syncRecords() -> [SyncBookRecord] {
+        books
+            .map { syncRecord(for: $0) }
+            .sorted { $0.canonicalSourceURL < $1.canonicalSourceURL }
+    }
+
+    func bookshelfTransferDocument(exportedAt: Date = .now) -> BookshelfTransferDocument {
+        BookshelfTransferDocument(
+            exportedAt: exportedAt,
+            books: books
+                .map(BookshelfTransferBook.init(book:))
+                .sorted {
+                    URLCanonicalizer.canonicalString($0.sourceURL)
+                        < URLCanonicalizer.canonicalString($1.sourceURL)
+                }
+        )
+    }
+
+    func previewBookshelfTransfer(_ document: BookshelfTransferDocument) -> BookshelfTransferPreview {
+        BookshelfTransferPlanner.preview(
+            document: document,
+            existingSourceURLs: Set(books.map(\.sourceBookURL))
+        )
+    }
+
+    func importBookshelfTransfer(
+        _ document: BookshelfTransferDocument,
+        preview: BookshelfTransferPreview? = nil,
+        importedAt: Date = .now
+    ) throws -> BookshelfTransferImportSummary {
+        guard flushPendingProgress() else {
+            throw BookshelfTransferError.invalidDocument("保存当前阅读位置失败，书架尚未导入。")
+        }
+        let preview = preview ?? previewBookshelfTransfer(document)
+        var bookByCanonicalURL: [String: Book] = [:]
+        for book in books {
+            bookByCanonicalURL[URLCanonicalizer.canonicalString(book.sourceBookURL)] = book
+        }
+
+        var succeeded = 0
+        var skipped = 0
+        var failures: [String] = []
+        for entry in preview.entries {
+            switch entry.status {
+            case .duplicateInFile:
+                skipped += 1
+            case .invalid:
+                let source = entry.book.sourceURL.isEmpty ? "缺少 sourceURL" : entry.book.sourceURL
+                failures.append("\(source)：\(entry.error ?? "数据无效。")")
+            case .new, .existing:
+                applyBookshelfTransferBook(
+                    entry.book,
+                    to: &bookByCanonicalURL,
+                    importedAt: importedAt
+                )
+                succeeded += 1
+            }
+        }
+
+        do {
+            if modelContext.hasChanges {
+                try modelContext.save()
+            }
+        } catch {
+            modelContext.rollback()
+            throw error
+        }
+        refreshBooks()
+        rebuildSelectedBookChapters()
+        selectInitialChapter(preferredID: selectedChapterID)
+        refreshReaderSession()
+        folderSync?.scheduleLocalChange()
+
+        return BookshelfTransferImportSummary(
+            succeeded: succeeded,
+            skipped: skipped,
+            failed: failures.count,
+            failures: failures
+        )
+    }
+
+    func applySyncRecords(_ records: [SyncBookRecord]) throws {
+        let previousBookID = selectedBookID
+        var bookByCanonicalURL: [String: Book] = [:]
+        for book in books {
+            bookByCanonicalURL[URLCanonicalizer.canonicalString(book.sourceBookURL)] = book
+        }
+
+        for record in SyncMerger.merge(records) {
+            let key = record.canonicalSourceURL
+            if record.isDeleted {
+                if let book = bookByCanonicalURL.removeValue(forKey: key) {
+                    modelContext.delete(book)
+                }
+                continue
+            }
+
+            let book: Book
+            if let existing = bookByCanonicalURL[key] {
+                book = existing
+            } else {
+                let sourceURL = URL(string: key)
+                book = Book(
+                    title: record.title,
+                    author: record.author,
+                    sourceHost: sourceURL?.host ?? "",
+                    catalogURL: key,
+                    createdAt: record.updatedAt,
+                    updatedAt: record.updatedAt,
+                    hasCatalog: false
+                )
+                modelContext.insert(book)
+                bookByCanonicalURL[key] = book
+            }
+
+            if record.updatedAt >= book.updatedAt {
+                book.title = record.title
+                book.author = record.author
+                book.updatedAt = record.updatedAt
+            }
+            applySyncedReadingPosition(record, to: book)
+        }
+
+        guard modelContext.hasChanges else { return }
+        try modelContext.save()
+        refreshBooks()
+        selectedBookID = books.contains { $0.id == previousBookID } ? previousBookID : books.first?.id
+        rebuildSelectedBookChapters()
+        selectInitialChapter(preferredID: nil)
+        refreshReaderSession()
     }
 
     func dismissError() {
@@ -763,6 +903,7 @@ final class LibraryStore {
         do {
             try modelContext.save()
             hasPendingProgressChanges = false
+            folderSync?.progressDidPersist()
             return true
         } catch {
             presentedError = PresentedError(message: "保存阅读进度失败：\(error.localizedDescription)")
@@ -773,6 +914,7 @@ final class LibraryStore {
     private func saveChanges(failureMessage: String) {
         do {
             try modelContext.save()
+            folderSync?.scheduleLocalChange()
         } catch {
             presentedError = PresentedError(message: "\(failureMessage)：\(error.localizedDescription)")
         }
@@ -789,16 +931,102 @@ final class LibraryStore {
     }
 
     private func canonicalURLString(_ value: String) -> String {
-        guard let url = URL(string: value) else { return value }
-        let path = HTMLParsingSupport.replacingRegex(
-            "/(\\d+)/(\\d+)/(\\d+)\\.html$",
-            in: url.path,
-            with: "/$1/$2.html"
+        URLCanonicalizer.canonicalChapterString(value)
+    }
+
+    private func syncRecord(for book: Book, deletedAt: Date? = nil) -> SyncBookRecord {
+        let transfer = BookshelfTransferBook(book: book)
+        let chapter = book.currentChapterID.flatMap { chapterID in
+            book.chapters.first { $0.id == chapterID }
+        }
+        return SyncBookRecord(
+            transfer: transfer,
+            lastReadAt: chapter?.lastReadAt,
+            updatedAt: book.updatedAt,
+            deletedAt: deletedAt
         )
-        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return value }
-        components.path = path
-        components.fragment = nil
-        return components.url?.absoluteString ?? value
+    }
+
+    private func applyBookshelfTransferBook(
+        _ transfer: BookshelfTransferBook,
+        to bookByCanonicalURL: inout [String: Book],
+        importedAt: Date
+    ) {
+        let key = URLCanonicalizer.canonicalString(transfer.sourceURL)
+        let book: Book
+        if let existing = bookByCanonicalURL[key] {
+            book = existing
+        } else {
+            let url = URL(string: key)
+            book = Book(
+                title: transfer.title.trimmingCharacters(in: .whitespacesAndNewlines),
+                author: transfer.author.trimmingCharacters(in: .whitespacesAndNewlines),
+                sourceHost: url?.host ?? "",
+                catalogURL: key,
+                createdAt: importedAt,
+                updatedAt: importedAt,
+                hasCatalog: false
+            )
+            modelContext.insert(book)
+            bookByCanonicalURL[key] = book
+        }
+
+        let title = transfer.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let author = transfer.author.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !title.isEmpty { book.title = title }
+        if !author.isEmpty { book.author = author }
+        book.updatedAt = importedAt
+
+        guard let currentChapterURL = transfer.currentChapterURL else { return }
+        let canonicalChapterURL = URLCanonicalizer.canonicalChapterString(currentChapterURL)
+        let chapter = book.chapters.first {
+            URLCanonicalizer.canonicalChapterString($0.sourceURL) == canonicalChapterURL
+        } ?? {
+            let chapter = Chapter(
+                sourceURL: canonicalChapterURL,
+                title: "当前章节",
+                sortIndex: (book.chapters.map(\.sortIndex).max() ?? 0) + 1,
+                book: nil
+            )
+            modelContext.insert(chapter)
+            book.chapters.append(chapter)
+            chapter.book = book
+            return chapter
+        }()
+
+        book.currentChapterID = chapter.id
+        if transfer.paragraphIndex != nil || transfer.progress != nil {
+            chapter.topParagraphIndex = max(transfer.paragraphIndex ?? 0, 0)
+            chapter.readingProgress = min(max(transfer.progress ?? 0, 0), 1)
+            chapter.lastReadAt = importedAt
+        }
+    }
+
+    private func applySyncedReadingPosition(_ record: SyncBookRecord, to book: Book) {
+        guard let chapterURL = record.currentChapterURL else { return }
+        let canonicalChapterURL = URLCanonicalizer.canonicalChapterString(chapterURL)
+        let chapter = book.chapters.first {
+            URLCanonicalizer.canonicalChapterString($0.sourceURL) == canonicalChapterURL
+        } ?? {
+            let chapter = Chapter(
+                sourceURL: canonicalChapterURL,
+                title: "当前章节",
+                sortIndex: (book.chapters.map(\.sortIndex).max() ?? 0) + 1,
+                book: nil
+            )
+            modelContext.insert(chapter)
+            book.chapters.append(chapter)
+            chapter.book = book
+            return chapter
+        }()
+
+        let currentLastReadAt = chapter.lastReadAt ?? .distantPast
+        let incomingLastReadAt = record.lastReadAt ?? .distantPast
+        guard incomingLastReadAt >= currentLastReadAt else { return }
+        chapter.topParagraphIndex = max(record.paragraphIndex ?? 0, 0)
+        chapter.readingProgress = min(max(record.progress ?? 0, 0), 1)
+        chapter.lastReadAt = record.lastReadAt
+        book.currentChapterID = chapter.id
     }
 
     private func performLoading(_ message: String, operation: () async throws -> Void) async {

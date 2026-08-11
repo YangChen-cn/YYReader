@@ -5,6 +5,7 @@ import Observation
 final class AppServices {
     let verificationStore: WebVerificationStore
     let importCoordinator: NovelImportCoordinator
+    let folderSync: FolderSyncController
 
     init() {
         let verificationStore = WebVerificationStore()
@@ -24,5 +25,6 @@ final class AppServices {
         )
         self.verificationStore = verificationStore
         self.importCoordinator = NovelImportCoordinator(loader: hybridLoader)
+        self.folderSync = FolderSyncController()
     }
 }

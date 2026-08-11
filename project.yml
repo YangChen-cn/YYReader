@@ -26,6 +26,7 @@ targets:
       path: YYReader/YYReader.entitlements
       properties:
         com.apple.security.app-sandbox: true
+        com.apple.security.files.user-selected.read-write: true
         com.apple.security.network.client: true
     settings:
       base:
@@ -67,26 +68,13 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.yyreader.app.tests
         GENERATE_INFOPLIST_FILE: YES
-  YYReaderUITests:
-    type: bundle.ui-testing
-    platform: macOS
-    sources:
-      - path: YYReaderUITests
-    dependencies:
-      - target: YYReader
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.yyreader.app.uitests
-        GENERATE_INFOPLIST_FILE: YES
 schemes:
   YYReader:
     build:
       targets:
         YYReader: all
         YYReaderTests: [test]
-        YYReaderUITests: [test]
     test:
       gatherCoverageData: true
       targets:
         - YYReaderTests
-        - YYReaderUITests

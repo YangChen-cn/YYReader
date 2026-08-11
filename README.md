@@ -8,6 +8,7 @@ YYReader 是一款以正文为中心的原生 macOS 小说阅读器。粘贴小�
 - 书架、可搜索目录与沉浸式阅读模式。
 - 自动合并章节分页，支持上一章、下一章和可选的连续章节阅读。
 - 阅读进度、章节缓存、主动下载与离线重开。
+- 可选择任意共享文件夹自动同步，或通过 `.yyreader`/JSON 文件在 macOS 与 Windows 间手动导入、导出书架和阅读位置。
 - 字体、字号、行距、正文宽度、段首缩进和明暗主题设置。
 - 为 `qidiy.com` 提供专用解析；其他小说网站使用通用解析器。
 - 遇到 Cloudflare 或 JavaScript 验证时，复用每个网站的持久 WebKit 会话。
@@ -32,6 +33,15 @@ YYReader 1.1.2 支持 Apple 芯片 Mac，要求 macOS 15 或更高版本。
 - 阅读模式返回箭头：退出沉浸阅读并回到书架。
 - `⌘L`：添加网页。
 - `⌘[` / `⌘]`：上一章 / 下一章。
+
+在“设置 → 同步”中启用“文件夹同步”并选择任意共享目录。YYReader 会在其中创建
+`YYReaderSync/mac.json`，同时读取 Windows 客户端维护的 `windows.json`。该功能不绑定
+iCloud，也可配合 Dropbox、OneDrive、Syncthing 或普通局域网共享目录使用；正文缓存、
+Cookie 和网页验证状态不会进入同步文件。
+
+书架模式工具栏的“更多”菜单还可以导入 `.yyreader` 或 `.json` 文件、从剪贴板导入、
+复制书架 JSON，或导出 `.yyreader` 文件。导入前会显示新书、已存在、无效和重复条目数量；
+手动传输同样不包含正文缓存、Cookie 或网页验证状态。
 
 ## 1.1.2 更新日志
 
@@ -79,11 +89,6 @@ xcodebuild test \
   -destination 'platform=macOS,arch=arm64' \
   -derivedDataPath DerivedData
 ```
-
-> 提示：UI 测试会合成键盘事件。若系统装有第三方输入法（如豆包输入法）且其为
-> 激活输入源，macOS 会弹出「允许 testmanagerd 启用 …」授权框；由于 Debug 构建每次
-> ad-hoc 重新签名，该授权无法被记住，每次运行都会弹出。跑测试前将输入源切换到
-> ABC/英文即可避免。
 
 生成 ad-hoc 签名的 arm64 Release DMG：
 

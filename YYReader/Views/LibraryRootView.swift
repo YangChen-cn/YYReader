@@ -11,6 +11,7 @@ struct LibraryRootView: View {
     @State private var showingAppearanceInspector = false
     @State private var showingDownloadProgress = false
     @State private var confirmingDelete = false
+    @State private var bookshelfTransfer = BookshelfTransferController()
 
     var body: some View {
         Group {
@@ -47,10 +48,14 @@ struct LibraryRootView: View {
             } else {
                 LibraryToolbar(
                     canContinueReading: store.selectedChapter != nil,
-                    isLoading: store.isLoading,
+                    isLoading: store.isLoading || bookshelfTransfer.isWorking,
                     toggleBookSidebar: toggleBookSidebar,
                     addURL: showAddURL,
-                    continueReading: continueReading
+                    continueReading: continueReading,
+                    importBookshelf: importBookshelf,
+                    importBookshelfFromClipboard: importBookshelfFromClipboard,
+                    copyBookshelfExport: copyBookshelfExport,
+                    exportBookshelf: exportBookshelf
                 )
             }
         }
@@ -68,8 +73,21 @@ struct LibraryRootView: View {
         .sheet(isPresented: $showingAddURL) {
             AddURLSheet(onSubmit: store.startImportURL)
         }
+        .sheet(item: $bookshelfTransfer.pendingImport) { pendingImport in
+            BookshelfTransferPreviewSheet(
+                pendingImport: pendingImport,
+                confirmImport: confirmBookshelfImport
+            )
+        }
         .alert(item: $store.presentedError) { error in
             Alert(title: Text("操作失败"), message: Text(error.message), dismissButton: .default(Text("好")))
+        }
+        .alert(item: $bookshelfTransfer.notice) { notice in
+            Alert(
+                title: Text(notice.title),
+                message: Text(notice.message),
+                dismissButton: .default(Text("好"))
+            )
         }
         .onChange(of: store.offlineDownloads.isDownloading) { _, isDownloading in
             if !isDownloading {
@@ -101,6 +119,11 @@ struct LibraryRootView: View {
 
     private func showAddURL() { showingAddURL = true }
     private func confirmDelete() { confirmingDelete = true }
+    private func importBookshelf() { bookshelfTransfer.chooseImportFile(for: store) }
+    private func importBookshelfFromClipboard() { bookshelfTransfer.importFromClipboard(for: store) }
+    private func confirmBookshelfImport() { bookshelfTransfer.confirmPendingImport(for: store) }
+    private func copyBookshelfExport() { bookshelfTransfer.copyExportJSON(from: store) }
+    private func exportBookshelf() { bookshelfTransfer.exportToFile(from: store) }
     private var readerTheme: ReaderTheme { ReaderTheme(rawValue: themeName) ?? .system }
 
     private func continueReading() {

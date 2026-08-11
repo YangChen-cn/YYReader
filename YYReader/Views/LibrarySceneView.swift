@@ -29,7 +29,9 @@ struct LibrarySceneView: View {
         }
         .task(initializeStore)
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase != .active {
+            if newPhase == .active {
+                services.folderSync.appBecameActive()
+            } else {
                 store?.flushPendingProgress()
             }
         }
@@ -50,8 +52,10 @@ struct LibrarySceneView: View {
         guard store == nil else { return }
         let newStore = LibraryStore(
             modelContext: modelContext,
-            coordinator: services.importCoordinator
+            coordinator: services.importCoordinator,
+            folderSync: services.folderSync
         )
+        services.folderSync.attach(to: newStore)
         let selection = ReaderSelectionRestoration.selection(
             persistedBookID: persistedBookID,
             persistedChapterID: persistedChapterID,
