@@ -17,6 +17,7 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
     private CancellationTokenSource? _progressSaveCancellation;
     private CancellationTokenSource? _prefetchCancellation;
     private CancellationTokenSource? _catalogRefreshCancellation;
+    private readonly SemaphoreSlim _catalogRefreshGate = new(1, 1);
     private Task? _prefetchTask;
     private string? _prefetchTargetUrl;
     private PendingProgress? _pendingProgress;
@@ -346,24 +347,36 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         }
 
         _catalogRefreshCancellation?.Cancel();
-        _catalogRefreshCancellation?.Dispose();
         var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _catalogRefreshCancellation = linkedCancellation;
         var succeeded = false;
         var uiContext = SynchronizationContext.Current;
+        var gateEntered = false;
         try
         {
-            await RunBusyAsync("正在刷新完整目录…", async () =>
-            {
-                var catalog = await _coordinator.RefreshCatalogAsync(
-                    catalogUrl,
-                    page => uiContext?.Post(_ => StatusMessage = $"正在刷新目录，第 {page} 页…", null),
-                    linkedCancellation.Token).ConfigureAwait(true);
-                var refreshed = await _repository.UpsertCatalogAsync(book.Id, catalog, linkedCancellation.Token).ConfigureAwait(true);
-                MergeCatalog(book, refreshed);
-                BooksChanged?.Invoke(this, EventArgs.Empty);
-                succeeded = true;
-            }, linkedCancellation.Token).ConfigureAwait(true);
+            await _catalogRefreshGate.WaitAsync(linkedCancellation.Token).ConfigureAwait(true);
+            gateEntered = true;
+            ErrorMessage = null;
+            StatusMessage = "正在刷新完整目录…";
+            var catalog = await _coordinator.RefreshCatalogAsync(
+                catalogUrl,
+                page => uiContext?.Post(_ => StatusMessage = $"正在刷新目录，第 {page} 页…", null),
+                linkedCancellation.Token).ConfigureAwait(true);
+            var refreshed = await _repository.UpsertCatalogAsync(book.Id, catalog, linkedCancellation.Token).ConfigureAwait(true);
+            MergeCatalog(book, refreshed);
+            BooksChanged?.Invoke(this, EventArgs.Empty);
+            succeeded = true;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (HtmlLoadException ex) when (ex.Kind == HtmlLoadErrorKind.VerificationRequired)
+        {
+            ErrorMessage = "网站要求完成浏览器验证，请在验证面板中完成后重试。";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
         }
         finally
         {
@@ -371,6 +384,8 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
             {
                 _catalogRefreshCancellation = null;
             }
+            StatusMessage = "";
+            if (gateEntered) _catalogRefreshGate.Release();
             linkedCancellation.Dispose();
         }
         return succeeded;

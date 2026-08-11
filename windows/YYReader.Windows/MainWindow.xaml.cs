@@ -24,6 +24,8 @@ public sealed partial class MainWindow : Window
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
+        AppWindow.Changed += AppWindow_Changed;
+        UpdateTitleBarInsets();
         try
         {
             SystemBackdrop = new MicaBackdrop();
@@ -81,6 +83,18 @@ public sealed partial class MainWindow : Window
         if (!ReferenceEquals(PageTitleBarContent.Content, content)) return;
         PageTitleBarContent.Content = null;
         TitleBarBrand.Visibility = Visibility.Visible;
+    }
+
+    private void AppWindow_Changed(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowChangedEventArgs args) =>
+        UpdateTitleBarInsets();
+
+    private void UpdateTitleBarInsets()
+    {
+        AppTitleBar.Padding = new Thickness(
+            12 + AppWindow.TitleBar.LeftInset,
+            0,
+            8 + AppWindow.TitleBar.RightInset,
+            0);
     }
 
     private async Task<bool> ShowVerificationAsync(Uri url)
