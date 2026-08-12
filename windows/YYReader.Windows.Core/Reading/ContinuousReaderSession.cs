@@ -13,6 +13,7 @@ public sealed class ContinuousReaderSession
     }
 
     public IReadOnlyList<Entry> Entries => _entries;
+    public Chapter? LastChapter => _entries.LastOrDefault()?.Chapter;
     public string? VisibleChapterUrl { get; private set; }
     public int CachedParagraphChapterCount => _paragraphCache.Count;
 

@@ -31,6 +31,7 @@ public sealed partial class ReaderPage : Page
     private bool _changingChapter;
     private bool _synchronizingCatalog;
     private bool _loadingNext;
+    private bool _continuationHasStatus;
     private bool _synchronizingAppearance;
 
     public ReaderPage(LibraryStore store, OfflineDownloadManager offlineDownloadManager, Book book, Window window)
@@ -189,16 +190,41 @@ public sealed partial class ReaderPage : Page
     {
         _progressTimer.Stop();
         _progressTimer.Start();
+        ScheduleContinuousLoadFromViewport();
     }
 
-    private async void ProgressTimer_Tick(DispatcherQueueTimer sender, object args)
+    private void ProgressTimer_Tick(DispatcherQueueTimer sender, object args)
     {
         CommitVisiblePosition();
-        if (_preferences.ContinuousReading
-            && !_loadingNext
-            && IsNearEndOfLoadedEntries())
+    }
+
+    private void ScheduleContinuousLoadFromViewport()
+    {
+        var lastLoadedUrl = Store.ReaderSession.Entries.LastOrDefault()?.Chapter.SourceUrl;
+        if (!_preferences.ContinuousReading || string.IsNullOrWhiteSpace(lastLoadedUrl))
         {
-            await LoadNextContinuousChapterAsync(false);
+            _continuousLoadState.ObserveNearEnd(lastLoadedUrl, isNearEnd: false);
+            return;
+        }
+
+        if (_loadingNext)
+        {
+            return;
+        }
+
+        if (IsNearEndOfLoadedEntries())
+        {
+            _continuousLoadState.ObserveNearEnd(lastLoadedUrl, isNearEnd: true);
+            _ = LoadNextContinuousChapterAsync(false);
+            return;
+        }
+
+        if (ReaderPageScroll.ShouldRearmNextLoad(
+                ReaderScrollViewer.VerticalOffset,
+                ReaderScrollViewer.ScrollableHeight,
+                ReaderScrollViewer.ActualHeight))
+        {
+            _continuousLoadState.ObserveNearEnd(lastLoadedUrl, isNearEnd: false);
         }
     }
 
@@ -330,8 +356,9 @@ public sealed partial class ReaderPage : Page
         try
         {
             var before = Store.ReaderSession.Entries.Count;
-            var next = await Store.PrepareNextChapterAsync();
-            if (next is not null && Store.ReaderSession.Entries.Count > before)
+            var preparation = await Store.PrepareNextChapterAsync();
+            if (preparation.Status == NextChapterPreparationStatus.Attached
+                && Store.ReaderSession.Entries.Count > before)
             {
                 var stableOffset = ReaderScrollViewer.VerticalOffset;
                 Items.AddRange(ReaderItemBuilder.BuildEntry(Store.ReaderSession.Entries[^1]));
@@ -345,7 +372,7 @@ public sealed partial class ReaderPage : Page
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(Store.ErrorMessage))
+            if (preparation.Status == NextChapterPreparationStatus.EndOfCatalog)
             {
                 ShowContinuationMessage("已到最新章节", false);
                 return;
@@ -368,7 +395,10 @@ public sealed partial class ReaderPage : Page
 
     private void ShowContinuationLoading()
     {
+        _continuationHasStatus = true;
         ContinuationBoundary.Visibility = Visibility.Visible;
+        ContinuationBoundary.Opacity = 1;
+        ContinuationBoundary.IsHitTestVisible = true;
         ContinuationProgress.IsActive = true;
         ContinuationProgress.Visibility = Visibility.Visible;
         ContinuationMessage.Text = "正在准备下一章…";
@@ -377,7 +407,10 @@ public sealed partial class ReaderPage : Page
 
     private void ShowContinuationMessage(string message, bool canRetry)
     {
+        _continuationHasStatus = true;
         ContinuationBoundary.Visibility = Visibility.Visible;
+        ContinuationBoundary.Opacity = 1;
+        ContinuationBoundary.IsHitTestVisible = true;
         ContinuationProgress.IsActive = false;
         ContinuationProgress.Visibility = Visibility.Collapsed;
         ContinuationMessage.Text = message;
@@ -386,8 +419,13 @@ public sealed partial class ReaderPage : Page
 
     private void HideContinuationBoundary()
     {
+        _continuationHasStatus = false;
         ContinuationProgress.IsActive = false;
-        ContinuationBoundary.Visibility = Visibility.Collapsed;
+        ContinuationBoundary.Opacity = 0;
+        ContinuationBoundary.IsHitTestVisible = false;
+        ContinuationBoundary.Visibility = _preferences.ContinuousReading
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private async void CatalogList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -854,6 +892,10 @@ public sealed partial class ReaderPage : Page
         ContinuationBoundary.BorderBrush = _palette.Separator;
         ContinuationBoundary.BorderThickness = new Thickness(1);
         ContinuationMessage.Foreground = _palette.SecondaryForeground;
+        if (!_continuationHasStatus)
+        {
+            HideContinuationBoundary();
+        }
         CatalogPane.Background = _palette.Background;
         CatalogPane.BorderBrush = _palette.Separator;
     }

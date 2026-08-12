@@ -180,7 +180,8 @@
                                 <ItemsRepeater.Layout><StackLayout Spacing="0" /></ItemsRepeater.Layout>
                             </ItemsRepeater>
                             <Border x:Name="ContinuationBoundary" Grid.Row="1" Visibility="Collapsed"
-                                    Margin="0,18,0,28" Padding="12" CornerRadius="6" HorizontalAlignment="Center">
+                                    Margin="0,18,0,28" Padding="12" MinHeight="54"
+                                    CornerRadius="6" HorizontalAlignment="Center">
                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                     <ProgressRing x:Name="ContinuationProgress" Width="16" Height="16" IsActive="False" />
                                     <TextBlock x:Name="ContinuationMessage" VerticalAlignment="Center" />

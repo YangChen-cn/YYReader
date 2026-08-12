@@ -17,7 +17,10 @@ public sealed class FolderSyncService : IAsyncDisposable
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly Func<IReadOnlyList<string>, Task> _remoteChangesApplied;
     private readonly FolderSyncPreferencesStore _preferencesStore = new();
-    private readonly SemaphoreSlim _syncGate = new(1, 1);
+    private static readonly TimeSpan SyncWatchdogTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan ProbeBackoff = TimeSpan.FromMinutes(3);
+    private readonly RecoverableSyncWatchdog _syncWatchdog = new();
+    private readonly SingleFlightProbeGuard _probeGuard = new();
     private readonly CancellationTokenSource _lifetimeCancellation = new();
     private readonly Timer _pollTimer;
     private CancellationTokenSource? _localDebounceCancellation;
@@ -28,6 +31,7 @@ public sealed class FolderSyncService : IAsyncDisposable
     private long _observedMacLength = -1;
     private bool _disposed;
     private bool _suppressScheduling;
+    private int _forceRemoteRetry;
 
     public FolderSyncService(
         SqliteLibraryRepository repository,
@@ -55,7 +59,7 @@ public sealed class FolderSyncService : IAsyncDisposable
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         Preferences = await _preferencesStore.LoadAsync(cancellationToken);
-        await ConfigureWatcherAsync(cancellationToken).ConfigureAwait(false);
+        await ConfigureWatcherAsync(bypassBackoff: false, cancellationToken).ConfigureAwait(false);
         _pollTimer.Change(TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
         if (Preferences.IsEnabled) ScheduleRemoteSync(TimeSpan.Zero, onlyIfMacChanged: false);
     }
@@ -68,15 +72,17 @@ public sealed class FolderSyncService : IAsyncDisposable
             FolderPath = string.IsNullOrWhiteSpace(folderPath) ? null : Path.GetFullPath(folderPath)
         };
         await _preferencesStore.SaveAsync(Preferences, cancellationToken);
-        await ConfigureWatcherAsync(cancellationToken).ConfigureAwait(false);
+        await ConfigureWatcherAsync(bypassBackoff: true, cancellationToken).ConfigureAwait(false);
         if (enabled) ScheduleRemoteSync(TimeSpan.Zero, onlyIfMacChanged: false);
     }
 
     public void OnAppActivated()
     {
         if (!Preferences.IsEnabled) return;
-        ScheduleLocalPublish(TimeSpan.Zero);
         ScheduleRemoteSync(TimeSpan.Zero, onlyIfMacChanged: true);
+        // A full remote synchronization also publishes the local snapshot. Keep the separate
+        // local publish debounce as a fallback without racing it for the recoverable gate.
+        ScheduleLocalPublish();
     }
 
     private void ScheduleLocalPublish(TimeSpan? delay = null)
@@ -112,16 +118,29 @@ public sealed class FolderSyncService : IAsyncDisposable
         if (!Preferences.IsEnabled || string.IsNullOrWhiteSpace(Preferences.FolderPath)) return;
         using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeCancellation.Token);
         var operationToken = linkedCancellation.Token;
-        await _syncGate.WaitAsync(operationToken).ConfigureAwait(false);
         try
         {
             UpdateState(new(true, Preferences.LastSyncAt, ShouldNotify: userInitiated));
             _suppressScheduling = true;
             try { await RunOnUiThreadAsync(() => _store.FlushPendingProgressAsync(operationToken)); }
             finally { _suppressScheduling = false; }
-            var result = await Task.Run(
-                () => Engine.SynchronizeAsync(Preferences.FolderPath, operationToken),
+            var watched = await _syncWatchdog.RunAsync(
+                token => Task.Run(() => Engine.SynchronizeAsync(Preferences.FolderPath, token), token),
+                SyncWatchdogTimeout,
                 operationToken).ConfigureAwait(false);
+            if (watched.Status == WatchdogStatus.Busy)
+            {
+                UpdateState(new(false, Preferences.LastSyncAt, ShouldNotify: userInitiated));
+                return;
+            }
+            if (watched.Status == WatchdogStatus.TimedOut)
+            {
+                MarkFolderTemporarilyUnavailable();
+                return;
+            }
+
+            var result = watched.Value!;
+            Interlocked.Exchange(ref _forceRemoteRetry, 0);
             var now = DateTimeOffset.UtcNow;
             Preferences = Preferences with { LastSyncAt = now };
             await _preferencesStore.SaveAsync(Preferences, operationToken);
@@ -142,25 +161,22 @@ public sealed class FolderSyncService : IAsyncDisposable
         {
             UpdateState(new(false, Preferences.LastSyncAt, exception.Message, ShouldNotify: true));
         }
-        finally
-        {
-            _syncGate.Release();
-        }
     }
 
     private async Task PublishLocalCoreAsync(CancellationToken cancellationToken)
     {
         if (!Preferences.IsEnabled || string.IsNullOrWhiteSpace(Preferences.FolderPath)) return;
         using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeCancellation.Token);
-        await _syncGate.WaitAsync(linkedCancellation.Token).ConfigureAwait(false);
         try
         {
             _suppressScheduling = true;
             try { await RunOnUiThreadAsync(() => _store.FlushPendingProgressAsync(linkedCancellation.Token)); }
             finally { _suppressScheduling = false; }
-            await Task.Run(
-                () => Engine.PublishLocalAsync(Preferences.FolderPath, linkedCancellation.Token),
+            var watched = await _syncWatchdog.RunAsync(
+                token => Task.Run(() => Engine.PublishLocalAsync(Preferences.FolderPath, token), token),
+                SyncWatchdogTimeout,
                 linkedCancellation.Token).ConfigureAwait(false);
+            if (watched.Status == WatchdogStatus.TimedOut) MarkFolderTemporarilyUnavailable();
         }
         catch (OperationCanceledException)
         {
@@ -168,10 +184,6 @@ public sealed class FolderSyncService : IAsyncDisposable
         catch (Exception exception)
         {
             UpdateState(new(false, Preferences.LastSyncAt, exception.Message, ShouldNotify: true));
-        }
-        finally
-        {
-            _syncGate.Release();
         }
     }
 
@@ -205,8 +217,14 @@ public sealed class FolderSyncService : IAsyncDisposable
             await Task.Delay(delay, scheduled.Token).ConfigureAwait(false);
             if (!ReferenceEquals(_remoteDebounceCancellation, scheduled)) return;
             _remoteDebounceCancellation = null;
-            if (onlyIfMacChanged
-                && !await MacSnapshotSignatureChangedAsync(scheduled.Token).ConfigureAwait(false)) return;
+            if (onlyIfMacChanged && Volatile.Read(ref _forceRemoteRetry) == 0)
+            {
+                var probe = await RunProbeAsync(
+                    MacSnapshotSignatureChangedCore,
+                    bypassBackoff: false,
+                    scheduled.Token).ConfigureAwait(false);
+                if (!probe.Completed || !probe.Value) return;
+            }
             await SynchronizeRemoteCoreAsync(userInitiated: false, scheduled.Token);
         }
         catch (OperationCanceledException)
@@ -218,8 +236,15 @@ public sealed class FolderSyncService : IAsyncDisposable
         }
     }
 
-    private Task ConfigureWatcherAsync(CancellationToken cancellationToken = default) =>
-        Task.Run(ConfigureWatcherCore, cancellationToken);
+    private async Task ConfigureWatcherAsync(bool bypassBackoff, CancellationToken cancellationToken = default) =>
+        _ = await RunProbeAsync(
+            () =>
+            {
+                ConfigureWatcherCore();
+                return true;
+            },
+            bypassBackoff,
+            cancellationToken).ConfigureAwait(false);
 
     private void ConfigureWatcherCore()
     {
@@ -252,7 +277,14 @@ public sealed class FolderSyncService : IAsyncDisposable
     private void QueuePoll()
     {
         if (_disposed) return;
-        _ = Task.Run(PollFolderIo, _lifetimeCancellation.Token);
+        _ = RunProbeAsync(
+            () =>
+            {
+                PollFolderIo();
+                return true;
+            },
+            bypassBackoff: false,
+            _lifetimeCancellation.Token);
     }
 
     private void PollFolderIo()
@@ -277,8 +309,15 @@ public sealed class FolderSyncService : IAsyncDisposable
         }
     }
 
-    private Task UpdateObservedMacWriteTimeAsync(CancellationToken cancellationToken = default) =>
-        Task.Run(UpdateObservedMacWriteTimeCore, cancellationToken);
+    private async Task UpdateObservedMacWriteTimeAsync(CancellationToken cancellationToken = default) =>
+        _ = await RunProbeAsync(
+            () =>
+            {
+                UpdateObservedMacWriteTimeCore();
+                return true;
+            },
+            bypassBackoff: true,
+            cancellationToken).ConfigureAwait(false);
 
     private void UpdateObservedMacWriteTimeCore()
     {
@@ -290,9 +329,6 @@ public sealed class FolderSyncService : IAsyncDisposable
             _observedMacLength = signature.Length;
         }
     }
-
-    private Task<bool> MacSnapshotSignatureChangedAsync(CancellationToken cancellationToken = default) =>
-        Task.Run(MacSnapshotSignatureChangedCore, cancellationToken);
 
     private bool MacSnapshotSignatureChangedCore()
     {
@@ -318,6 +354,54 @@ public sealed class FolderSyncService : IAsyncDisposable
     {
         public static MacSnapshotSignature Missing { get; } = new(false, DateTime.MinValue, -1);
     }
+
+    private async Task<ProbeResult<T>> RunProbeAsync<T>(
+        Func<T> probe,
+        bool bypassBackoff,
+        CancellationToken cancellationToken)
+    {
+        if (!_probeGuard.TryBegin(DateTimeOffset.UtcNow, bypassBackoff)) return new(false, default);
+        var probeTask = Task.Run(probe);
+        var releaseHere = true;
+        try
+        {
+            var completed = await Task.WhenAny(
+                probeTask,
+                Task.Delay(SyncWatchdogTimeout, cancellationToken)).ConfigureAwait(false);
+            if (completed == probeTask) return new(true, await probeTask.ConfigureAwait(false));
+
+            releaseHere = false;
+            ObserveProbeCompletion(probeTask);
+            cancellationToken.ThrowIfCancellationRequested();
+            _probeGuard.DelayAutomaticProbesUntil(DateTimeOffset.UtcNow.Add(ProbeBackoff));
+            Interlocked.Exchange(ref _forceRemoteRetry, 1);
+            MarkFolderTemporarilyUnavailable();
+            return new(false, default);
+        }
+        finally
+        {
+            if (releaseHere) _probeGuard.Complete();
+        }
+    }
+
+    private void ObserveProbeCompletion(Task probeTask) =>
+        _ = probeTask.ContinueWith(
+            completedProbe =>
+            {
+                _ = completedProbe.Exception;
+                _probeGuard.Complete();
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+    private void MarkFolderTemporarilyUnavailable()
+    {
+        Interlocked.Exchange(ref _forceRemoteRetry, 1);
+        UpdateState(new(false, Preferences.LastSyncAt, "同步文件夹暂不可用", ShouldNotify: true));
+    }
+
+    private readonly record struct ProbeResult<T>(bool Completed, T? Value);
 
     private Task RunOnUiThreadAsync(Func<Task> operation)
     {
@@ -364,14 +448,7 @@ public sealed class FolderSyncService : IAsyncDisposable
         if (watcher is not null) _ = Task.Run(watcher.Dispose);
         _pollTimer.Dispose();
         _lifetimeCancellation.Cancel();
-        // A disconnected cloud provider can leave a Windows file-system call blocked in
-        // native code, where CancellationToken cannot interrupt it. Never hold app shutdown
-        // hostage to that operation. The process will reclaim the gate if it is still busy.
-        if (await _syncGate.WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false))
-        {
-            _syncGate.Release();
-            _syncGate.Dispose();
-        }
+        await Task.CompletedTask;
         _lifetimeCancellation.Dispose();
     }
 }

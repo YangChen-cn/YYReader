@@ -221,18 +221,27 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         BooksChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public async Task<Chapter?> PrepareNextChapterAsync(CancellationToken cancellationToken = default)
+    public async Task<NextChapterPreparationResult> PrepareNextChapterAsync(CancellationToken cancellationToken = default)
     {
-        if (SelectedBook is null || SelectedChapter is null)
+        if (SelectedBook is not { } book)
         {
-            return null;
+            return new NextChapterPreparationResult(NextChapterPreparationStatus.Failed);
         }
 
-        var next = Neighbor(SelectedBook, SelectedChapter, 1);
+        // Continuous reading may already have attached chapters below the currently visible
+        // chapter. Progress sampling is debounced, so SelectedChapter can legitimately lag
+        // behind the session tail while the user scrolls quickly.
+        var lastLoadedChapter = ReaderSession.LastChapter ?? SelectedChapter;
+        if (lastLoadedChapter is null)
+        {
+            return new NextChapterPreparationResult(NextChapterPreparationStatus.Failed);
+        }
+
+        var next = Neighbor(book, lastLoadedChapter, 1);
 
         if (next is null)
         {
-            return null;
+            return new NextChapterPreparationResult(NextChapterPreparationStatus.EndOfCatalog);
         }
         if (!next.IsCached)
         {
@@ -240,10 +249,11 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         }
         if (!next.IsCached)
         {
-            return null;
+            return new NextChapterPreparationResult(NextChapterPreparationStatus.Failed);
         }
-        ReaderSession.AttachNext(next);
-        return next;
+        return ReaderSession.AttachNext(next)
+            ? new NextChapterPreparationResult(NextChapterPreparationStatus.Attached, next)
+            : new NextChapterPreparationResult(NextChapterPreparationStatus.Failed, next);
     }
 
     public async Task<Chapter?> NavigateChapterAsync(int offset, CancellationToken cancellationToken = default)
