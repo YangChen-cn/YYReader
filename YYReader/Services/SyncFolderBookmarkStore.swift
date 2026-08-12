@@ -1,24 +1,27 @@
 import Foundation
 
-@MainActor
-struct SyncFolderBookmarkStore {
-    private let defaults: UserDefaults
+struct SyncFolderAccess: Sendable {
+    let url: URL
+    let refreshedBookmarkData: Data?
+}
 
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
+protocol SyncFolderBookmarkAccessing: Actor {
+    func saveAndStartAccess(to url: URL) async throws -> Data
+    func resolveAndStartAccess(from data: Data) async throws -> SyncFolderAccess
+    func stopAccessing() async
+}
+
+actor SyncFolderBookmarkStore: SyncFolderBookmarkAccessing {
+    private var accessedURL: URL?
+    private var isAccessing = false
+
+    func saveAndStartAccess(to url: URL) async throws -> Data {
+        let data = try makeBookmark(for: url)
+        replaceAccess(with: url)
+        return data
     }
 
-    func save(_ url: URL) throws {
-        let data = try url.bookmarkData(
-            options: .withSecurityScope,
-            includingResourceValuesForKeys: nil,
-            relativeTo: nil
-        )
-        defaults.set(data, forKey: SyncPreferenceKeys.bookmark)
-    }
-
-    func resolve() throws -> URL? {
-        guard let data = defaults.data(forKey: SyncPreferenceKeys.bookmark) else { return nil }
+    func resolveAndStartAccess(from data: Data) async throws -> SyncFolderAccess {
         var isStale = false
         let url = try URL(
             resolvingBookmarkData: data,
@@ -26,9 +29,32 @@ struct SyncFolderBookmarkStore {
             relativeTo: nil,
             bookmarkDataIsStale: &isStale
         )
-        if isStale {
-            try save(url)
+        let refreshedBookmarkData = isStale ? try makeBookmark(for: url) : nil
+        replaceAccess(with: url)
+        return SyncFolderAccess(url: url, refreshedBookmarkData: refreshedBookmarkData)
+    }
+
+    func stopAccessing() async {
+        if isAccessing {
+            accessedURL?.stopAccessingSecurityScopedResource()
         }
-        return url
+        accessedURL = nil
+        isAccessing = false
+    }
+
+    private func makeBookmark(for url: URL) throws -> Data {
+        try url.bookmarkData(
+            options: .withSecurityScope,
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+    }
+
+    private func replaceAccess(with url: URL) {
+        if isAccessing {
+            accessedURL?.stopAccessingSecurityScopedResource()
+        }
+        accessedURL = url
+        isAccessing = url.startAccessingSecurityScopedResource()
     }
 }

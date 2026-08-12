@@ -55,7 +55,6 @@ struct LibrarySceneView: View {
             coordinator: services.importCoordinator,
             folderSync: services.folderSync
         )
-        services.folderSync.attach(to: newStore)
         let selection = ReaderSelectionRestoration.selection(
             persistedBookID: persistedBookID,
             persistedChapterID: persistedChapterID,
@@ -68,5 +67,6 @@ struct LibrarySceneView: View {
         persistedBookID = storedBookID
         persistedChapterID = storedChapterID
         store = newStore
+        services.folderSync.attach(to: newStore)
     }
 }

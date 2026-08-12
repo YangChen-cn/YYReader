@@ -2,22 +2,22 @@ import Darwin
 import Dispatch
 import Foundation
 
-@MainActor
-final class SyncFolderMonitor {
+actor SyncFolderMonitor {
+    private let eventQueue = DispatchQueue(label: "com.yyreader.folder-sync-monitor")
     private var source: DispatchSourceFileSystemObject?
 
     func start(directory: URL, onChange: @escaping @Sendable () -> Void) {
         stop()
+
+        // Opening a File Provider or network directory can block. This actor is
+        // intentionally independent from MainActor so startup and Reader UI stay usable.
         let descriptor = open(directory.path, O_EVTONLY)
         guard descriptor >= 0 else { return }
 
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: descriptor,
             eventMask: [.write, .extend, .attrib, .rename, .delete],
-            // This type is MainActor-isolated. Dispatch invokes both the event and
-            // cancellation handlers on the source queue, so they must use the same
-            // executor instead of a global queue that trips Swift 6 isolation checks.
-            queue: .main
+            queue: eventQueue
         )
         source.setEventHandler(handler: onChange)
         source.setCancelHandler {

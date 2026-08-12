@@ -3,21 +3,57 @@ import SwiftData
 import Testing
 @testable import YYReader
 
+private actor TrackingBookmarkStore: SyncFolderBookmarkAccessing {
+    private(set) var resolveCount = 0
+
+    func saveAndStartAccess(to url: URL) async throws -> Data {
+        Data()
+    }
+
+    func resolveAndStartAccess(from data: Data) async throws -> SyncFolderAccess {
+        resolveCount += 1
+        throw SyncError.folderUnavailable
+    }
+
+    func stopAccessing() async {}
+}
+
 struct SyncEngineTests {
-    @Test @MainActor
-    func folderMonitorCancellationStaysOnMainExecutor() async throws {
+    @Test
+    func folderMonitorRunsOutsideMainExecutorAndCancelsSafely() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("YYReaderMonitorTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let monitor = SyncFolderMonitor()
 
-        monitor.start(directory: directory) {}
-        monitor.stop()
+        await monitor.start(directory: directory) {}
+        await monitor.stop()
 
         // DispatchSource cancellation is asynchronous. Yield long enough for its
-        // handler to run so executor violations fail this regression test.
+        // background cancellation handler to close the descriptor.
         try await Task.sleep(for: .milliseconds(50))
+    }
+
+    @Test @MainActor
+    func folderSyncInitializationOnlyReadsLightweightDefaults() async {
+        let suiteName = "YYReaderFolderSyncInitTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: SyncPreferenceKeys.enabled)
+        defaults.set(Data("bookmark".utf8), forKey: SyncPreferenceKeys.bookmark)
+        defaults.set("/Cloud/Unavailable", forKey: SyncPreferenceKeys.folderDisplayPath)
+        let bookmarkStore = TrackingBookmarkStore()
+
+        let controller = FolderSyncController(
+            defaults: defaults,
+            bookmarkStore: bookmarkStore
+        )
+
+        #expect(controller.isEnabled)
+        #expect(controller.hasSelectedFolder)
+        #expect(controller.folderDisplayPath == "/Cloud/Unavailable")
+        #expect(await bookmarkStore.resolveCount == 0)
     }
 
     @Test
