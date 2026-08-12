@@ -12,11 +12,11 @@ YYReader 是一款以正文为中心的原生小说阅读器，现提供 macOS �
 - 为 `qidiy.com` 提供专用解析；其他小说网站使用通用解析器。
 - 遇到 Cloudflare 或 JavaScript 验证时，macOS 使用 WebKit、Windows 使用 WebView2 获取 rendered DOM，正文仍回到原生阅读器。
 
-## 安装 Windows v1.2.0
+## 安装 Windows v1.2.1
 
 Windows 版本支持 x64 Windows 10 1809 或更高版本，推荐 Windows 11。
 
-1. 从 [YYReader Windows 1.2.0 Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.0) 下载 `YYReader-Setup-x64-1.2.0.exe`。
+1. 从 [YYReader Windows 1.2.1 Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.1) 下载 `YYReader-Setup-x64-1.2.1.exe`。
 2. 运行中文安装向导；默认创建开始菜单入口，可选择创建桌面快捷方式。
 3. 安装包已包含 .NET 8 与 Windows App Runtime，无需另外安装运行库。
 
@@ -44,6 +44,14 @@ YYReader 1.1.2 支持 Apple 芯片 Mac，要求 macOS 15 或更高版本。
 - `⌘[` / `⌘]`：上一章 / 下一章。
 
 Windows 客户端支持目录搜索、连续阅读、离线下载、书架导入导出，以及与 macOS 共用文件夹的 SyncSnapshot v2 同步。详细构建和使用说明见 [Windows README](windows/README.md)。
+
+## 1.2.1 Windows 更新日志
+
+- 文件夹同步改为完全非阻塞启动，并加入后台 I/O、恢复保护和看门狗；同步只合并元数据与阅读位置，不再自动刷新整本目录或打断当前阅读。
+- 连续阅读在本地目录末尾通过当前尾章的下一章链接增量检查新章节，修复误报“已到最新章节”、检查失败后循环探测及通用站点无法继续的问题。
+- 修复章末状态切换造成的滚动抖动；下一章可在滚动中完成网络加载，但只在滚动停止后 attach，并支持有上限的短章节连续补载。
+- 修复释放聚合正文后阅读位置错误恢复到第 0 段；保持段落缓存和 `ItemsRepeater` 虚拟化，降低连续阅读的内存占用与布局开销。
+- 目录关闭时不再因 append 章节重建完整列表；目录增加已缓存/已下载章节小点，HTTP 403 可进入 WebView2 验证 fallback。
 
 ## 1.2.0 Windows 更新日志
 
@@ -125,7 +133,7 @@ dotnet test .\windows\YYReader.Windows.Tests\YYReader.Windows.Tests.csproj
 .\windows\scripts\package-release.ps1
 ```
 
-Windows 1.2.0 安装包位于 `dist/windows/YYReader-Setup-x64-1.2.0.exe`。
+Windows 1.2.1 安装包位于 `dist/windows/YYReader-Setup-x64-1.2.1.exe`。
 
 ## 技术结构
 

@@ -45,7 +45,7 @@
             </Border>
 
             <StackPanel Spacing="12">
-                <TextBlock Text="版本 1.2 重点功能" FontSize="17" FontWeight="SemiBold" />
+                <TextBlock Text="版本 1.2.1 更新" FontSize="17" FontWeight="SemiBold" />
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1" CornerRadius="{StaticResource YYCornerMedium}"
@@ -54,32 +54,32 @@
                         <Grid ColumnDefinitions="24,*" ColumnSpacing="10">
                             <FontIcon Glyph="&#xE8D2;" FontSize="17" Opacity="0.68" />
                             <StackPanel Grid.Column="1" Spacing="2">
-                                <TextBlock Text="原生舒适阅读" FontWeight="SemiBold" />
-                                <TextBlock Text="WinUI 原生段落渲染、稳定连续阅读、阅读位置恢复与多套阅读主题。章末通过下一章链接增量检查，不再扫描完整目录。"
+                                <TextBlock Text="连续阅读更稳定" FontWeight="SemiBold" />
+                                <TextBlock Text="章末通过下一章链接增量检查，只有远端确认后才显示最新章节；状态切换和追加正文不再扰动滚动位置。"
                                            TextWrapping="Wrap" Style="{StaticResource YYSecondaryTextStyle}" />
                             </StackPanel>
                         </Grid>
                         <Grid ColumnDefinitions="24,*" ColumnSpacing="10">
                             <FontIcon Glyph="&#xE8A5;" FontSize="17" Opacity="0.68" />
                             <StackPanel Grid.Column="1" Spacing="2">
-                                <TextBlock Text="目录与离线阅读" FontWeight="SemiBold" />
-                                <TextBlock Text="完整目录刷新、章节搜索、下一章预取，以及当前、后 20 章和整书下载；目录中的小点表示正文已缓存，可离线打开。"
+                                <TextBlock Text="Reader 性能与内存" FontWeight="SemiBold" />
+                                <TextBlock Text="下一章在滚动停止后接入，短章节可连续补载；释放重复正文副本后仍准确恢复阅读段落，目录关闭时避免完整重建。"
                                            TextWrapping="Wrap" Style="{StaticResource YYSecondaryTextStyle}" />
                             </StackPanel>
                         </Grid>
                         <Grid ColumnDefinitions="24,*" ColumnSpacing="10">
                             <FontIcon Glyph="&#xE895;" FontSize="17" Opacity="0.68" />
                             <StackPanel Grid.Column="1" Spacing="2">
-                                <TextBlock Text="Mac 与 Windows 交换" FontWeight="SemiBold" />
-                                <TextBlock Text="支持书架导入导出和文件夹同步，按更新时间合并目录与阅读位置。"
+                                <TextBlock Text="文件夹同步" FontWeight="SemiBold" />
+                                <TextBlock Text="同步探测和文件 I/O 全部在后台执行，加入恢复保护与看门狗；同步不会联网刷新整本目录或打断当前阅读。"
                                            TextWrapping="Wrap" Style="{StaticResource YYSecondaryTextStyle}" />
                             </StackPanel>
                         </Grid>
                         <Grid ColumnDefinitions="24,*" ColumnSpacing="10">
                             <FontIcon Glyph="&#xE945;" FontSize="17" Opacity="0.68" />
                             <StackPanel Grid.Column="1" Spacing="2">
-                                <TextBlock Text="稳定的后台任务" FontWeight="SemiBold" />
-                                <TextBlock Text="修复章末误报最新、连续阅读抖动与重复探测；目录刷新、同步和离线下载不会重建正在阅读的正文或抢走当前章节。"
+                                <TextBlock Text="缓存与网站验证" FontWeight="SemiBold" />
+                                <TextBlock Text="目录小点标记已缓存或已下载章节；静态请求遇到 HTTP 403 时可进入 WebView2 验证流程。"
                                            TextWrapping="Wrap" Style="{StaticResource YYSecondaryTextStyle}" />
                             </StackPanel>
                         </Grid>
