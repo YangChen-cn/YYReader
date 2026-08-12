@@ -45,6 +45,9 @@ public sealed class ContinuousReaderSession
 
     public IReadOnlyList<string> GetParagraphs(Chapter chapter) => _paragraphCache.Get(chapter);
 
+    public int ParagraphCount(string chapterUrl) =>
+        _entries.FirstOrDefault(entry => entry.Chapter.SourceUrl == chapterUrl)?.Paragraphs.Count ?? 0;
+
     public sealed class Entry
     {
         internal Entry(Chapter chapter, ChapterParagraphCache paragraphCache)

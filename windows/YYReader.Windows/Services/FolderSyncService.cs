@@ -15,7 +15,7 @@ public sealed class FolderSyncService : IAsyncDisposable
     private readonly SqliteLibraryRepository _repository;
     private readonly LibraryStore _store;
     private readonly DispatcherQueue _dispatcherQueue;
-    private readonly Func<IReadOnlyList<string>, Task> _remoteChangesApplied;
+    private readonly Func<Task> _remoteChangesApplied;
     private readonly FolderSyncPreferencesStore _preferencesStore = new();
     private static readonly TimeSpan SyncWatchdogTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan ProbeBackoff = TimeSpan.FromMinutes(3);
@@ -37,7 +37,7 @@ public sealed class FolderSyncService : IAsyncDisposable
         SqliteLibraryRepository repository,
         LibraryStore store,
         DispatcherQueue dispatcherQueue,
-        Func<IReadOnlyList<string>, Task> remoteChangesApplied)
+        Func<Task> remoteChangesApplied)
     {
         _repository = repository;
         _store = store;
@@ -145,10 +145,10 @@ public sealed class FolderSyncService : IAsyncDisposable
             Preferences = Preferences with { LastSyncAt = now };
             await _preferencesStore.SaveAsync(Preferences, operationToken);
             await UpdateObservedMacWriteTimeAsync(operationToken).ConfigureAwait(false);
-            if (result.Application.Changed || result.Application.CatalogRefreshSourceUrls.Count > 0)
+            if (result.Application.Changed)
             {
                 _suppressScheduling = true;
-                try { await RunOnUiThreadAsync(() => _remoteChangesApplied(result.Application.CatalogRefreshSourceUrls)); }
+                try { await RunOnUiThreadAsync(_remoteChangesApplied); }
                 finally { _suppressScheduling = false; }
             }
             UpdateState(new(false, now, ShouldNotify: userInitiated || result.Application.Changed));

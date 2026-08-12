@@ -12,7 +12,7 @@ namespace YYReader.Windows.Tests;
 public sealed class ContinuousReadingTests
 {
     [TestMethod]
-    public async Task GenericTailProbeAttachesNextChapterWithoutRefreshingCatalog()
+    public async Task GenericTailProbePreparesNextChapterWithoutRefreshingCatalog()
     {
         var catalogUrl = new Uri("https://example.com/book/");
         var chapter100Url = new Uri("https://example.com/book/100.html");
@@ -27,9 +27,12 @@ public sealed class ContinuousReadingTests
                 explicitRetry: false,
                 status => statuses.Add(status));
 
-            Assert.AreEqual(NextChapterPreparationStatus.Attached, result.Status);
+            Assert.AreEqual(NextChapterPreparationStatus.Ready, result.Status);
             Assert.AreEqual(chapter101Url.AbsoluteUri, result.Chapter!.SourceUrl);
-            Assert.IsTrue(store.ReaderSession.Entries.Any(entry => entry.Chapter.SourceUrl == chapter101Url.AbsoluteUri));
+            Assert.IsFalse(store.ReaderSession.Entries.Any(entry => entry.Chapter.SourceUrl == chapter101Url.AbsoluteUri));
+            Assert.IsTrue(store.AttachPreparedNextChapter(chapter100Url.AbsoluteUri, result.Chapter));
+            Assert.IsFalse(store.AttachPreparedNextChapter(chapter100Url.AbsoluteUri, result.Chapter),
+                "ready 章节只能 attach 一次");
             CollectionAssert.Contains(statuses, NextChapterPreparationStatus.CheckingLatest);
             Assert.AreNotEqual(NextChapterPreparationStatus.ConfirmedLatest, result.Status);
             Assert.AreEqual(0, loader.CatalogRequests);
@@ -44,7 +47,7 @@ public sealed class ContinuousReadingTests
     }
 
     [TestMethod]
-    public async Task QidiyTailProbeAttachesNextChapterWithoutRefreshingCatalog()
+    public async Task QidiyTailProbePreparesNextChapterWithoutRefreshingCatalog()
     {
         var catalogUrl = new Uri("https://www.qidiy.com/book/42/");
         var chapter100Url = new Uri("https://www.qidiy.com/book/42/100.html");
@@ -56,7 +59,7 @@ public sealed class ContinuousReadingTests
         {
             var result = await store.PrepareNextChapterAsync();
 
-            Assert.AreEqual(NextChapterPreparationStatus.Attached, result.Status);
+            Assert.AreEqual(NextChapterPreparationStatus.Ready, result.Status);
             Assert.AreEqual(chapter101Url.AbsoluteUri, result.Chapter!.SourceUrl);
             Assert.AreEqual(0, loader.CatalogRequests);
             Assert.AreEqual(1, loader.TailRequests);
@@ -166,25 +169,73 @@ public sealed class ContinuousReadingTests
     }
 
     [TestMethod]
-    public void AppendedTailDoesNotStartAnotherProbeFromLayoutViewChanged()
+    public void ShortChapterTailRearmsOncePerTailWithBoundedAutomaticChain()
     {
         var state = new ReaderContinuousLoadState();
         var now = DateTimeOffset.Parse("2026-08-12T00:00:00Z");
         const string chapter100 = "https://example.com/book/100.html";
         const string chapter101 = "https://example.com/book/101.html";
+        const string chapter102 = "https://example.com/book/102.html";
+        const string chapter103 = "https://example.com/book/103.html";
 
         state.ObserveNearEnd(chapter100, isNearEnd: true);
         Assert.IsTrue(state.TryBegin(chapter100, now));
         state.MarkAttached();
 
         state.ObserveNearEnd(chapter101, isNearEnd: true);
-        Assert.AreEqual(ReaderContinuousLoadPhase.Attached, state.Phase);
-        Assert.IsFalse(state.TryBegin(chapter101, now.AddSeconds(1)),
-            "append 引发的布局 ViewChanged 不能在同一次 near-end visit 启动下一轮");
-
-        state.ObserveNearEnd(chapter101, isNearEnd: false);
-        state.ObserveNearEnd(chapter101, isNearEnd: true);
         Assert.IsTrue(state.TryBegin(chapter101, now.AddSeconds(1)));
+        Assert.IsFalse(state.TryBegin(chapter101, now.AddSeconds(1)), "同一个 tail 不能重复请求");
+        state.MarkAttached();
+
+        state.ObserveNearEnd(chapter102, isNearEnd: true);
+        Assert.IsTrue(state.TryBegin(chapter102, now.AddSeconds(2)), "短 B 后应能继续准备 C");
+        state.MarkAttached();
+
+        state.ObserveNearEnd(chapter103, isNearEnd: true);
+        Assert.IsFalse(state.TryBegin(chapter103, now.AddSeconds(3)), "一次 near-end visit 最多自动补三章");
+
+        state.ObserveNearEnd(chapter103, isNearEnd: false);
+        state.ObserveNearEnd(chapter103, isNearEnd: true);
+        Assert.IsTrue(state.TryBegin(chapter103, now.AddSeconds(4)));
+    }
+
+    [TestMethod]
+    public void ReadyAttachmentWaitsForIdleAndCannotApplyTwiceOrAfterReset()
+    {
+        var state = new ReaderContinuousAttachmentState();
+        var chapter = new Chapter(
+            "https://example.com/101.html", "第101章", 101, "正文", cachedAt: DateTimeOffset.UtcNow);
+
+        state.SetScrolling(true);
+        Assert.IsTrue(state.Queue(chapter, "https://example.com/100.html", state.Generation));
+        Assert.IsFalse(state.Queue(chapter, "https://example.com/100.html", state.Generation));
+        Assert.IsFalse(state.TryTake(out _, out _), "滚动期间不能 attach");
+
+        state.SetScrolling(false);
+        Assert.IsTrue(state.TryTake(out var ready, out var tail));
+        Assert.AreSame(chapter, ready);
+        Assert.AreEqual("https://example.com/100.html", tail);
+        Assert.IsFalse(state.TryTake(out _, out _), "idle 事件不能重复 attach");
+
+        var oldGeneration = state.Generation;
+        Assert.IsTrue(state.Queue(chapter, tail!, oldGeneration));
+        state.Reset();
+        Assert.IsFalse(state.TryTake(out _, out _), "navigation 后旧 pending 必须失效");
+        Assert.IsFalse(state.Queue(chapter, tail!, oldGeneration));
+    }
+
+    [TestMethod]
+    public void HiddenCatalogIsMarkedDirtyInsteadOfReboundAfterAppend()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", "..", "windows", "YYReader.Windows", "Views", "ReaderPage.xaml.cs"));
+        var attachStart = source.IndexOf("private void TryAttachPendingContinuousChapter", StringComparison.Ordinal);
+        var attachEnd = source.IndexOf("private async void ContinuationRetry_Click", attachStart, StringComparison.Ordinal);
+        var attachMethod = source[attachStart..attachEnd];
+
+        StringAssert.Contains(attachMethod, "RefreshCatalogListIfVisible()");
+        Assert.IsFalse(attachMethod.Contains("RefreshCatalogList();", StringComparison.Ordinal));
     }
 
     [TestMethod]

@@ -47,6 +47,27 @@ public sealed class ReaderBehaviorTests
     }
 
     [TestMethod]
+    public void RestorePositionUsesSessionParagraphCountAfterBodyTextIsReleased()
+    {
+        var chapter = NewChapter(
+            "https://example.com/1.html",
+            string.Join("\n\n", Enumerable.Range(0, 12).Select(index => $"第{index}段")));
+        chapter.ApplyProgress(7, 12, DateTimeOffset.UtcNow);
+        var session = new ContinuousReaderSession();
+
+        session.Reset(chapter);
+
+        Assert.IsFalse(chapter.IsCached, "session 创建后应继续释放 BodyText");
+        Assert.AreEqual(0, chapter.Paragraphs.Count);
+        var paragraphCount = session.ParagraphCount(chapter.SourceUrl);
+        Assert.AreEqual(12, paragraphCount);
+        Assert.AreEqual(7, ReaderPosition.RestoreParagraphIndex(
+            chapter.ParagraphIndex,
+            chapter.Progress,
+            paragraphCount));
+    }
+
+    [TestMethod]
     public void RelativeContentWidthAndKeyboardPageDistanceRemainStable()
     {
         Assert.AreEqual(960, ReaderLayout.EffectiveContentWidth(48, 20, 1_200));

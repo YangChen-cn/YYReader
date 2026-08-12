@@ -24,6 +24,7 @@ public sealed partial class ReaderPage : Page
     private readonly DispatcherQueueTimer _progressTimer;
     private readonly Dictionary<int, UIElement> _realizedElements = new();
     private readonly ReaderContinuousLoadState _continuousLoadState = new();
+    private readonly ReaderContinuousAttachmentState _continuousAttachmentState = new();
     private CancellationTokenSource? _preferenceSaveCancellation;
     private CancellationTokenSource? _continuousLoadCancellation;
     private ReaderPreferences _preferences = ReaderPreferences.Defaults;
@@ -34,6 +35,7 @@ public sealed partial class ReaderPage : Page
     private bool _loadingNext;
     private bool _continuationHasStatus;
     private bool _synchronizingAppearance;
+    private bool _catalogDirty;
 
     public ReaderPage(LibraryStore store, OfflineDownloadManager offlineDownloadManager, Book book, Window window)
     {
@@ -80,7 +82,7 @@ public sealed partial class ReaderPage : Page
 
     private async void ReaderPage_Unloaded(object sender, RoutedEventArgs e)
     {
-        CancelContinuousLoad();
+        ResetContinuousReadingState();
         Store.CancelCatalogRefresh();
         if (_window is MainWindow mainWindow) mainWindow.ClearPageTitleBar(ReaderToolbar);
         _progressTimer.Stop();
@@ -195,6 +197,11 @@ public sealed partial class ReaderPage : Page
     {
         _progressTimer.Stop();
         _progressTimer.Start();
+        _continuousAttachmentState.SetScrolling(e.IsIntermediate);
+        if (!e.IsIntermediate)
+        {
+            TryAttachPendingContinuousChapter();
+        }
         ScheduleContinuousLoadFromViewport();
     }
 
@@ -287,10 +294,11 @@ public sealed partial class ReaderPage : Page
     {
         var chapter = Store.SelectedChapter;
         if (chapter is null) return;
+        var paragraphCount = Store.ReaderSession.ParagraphCount(chapter.SourceUrl);
         var restoredIndex = ReaderPosition.RestoreParagraphIndex(
             chapter.ParagraphIndex,
             chapter.Progress,
-            chapter.Paragraphs.Count);
+            paragraphCount);
         var itemIndex = -1;
         for (var index = 0; index < Items.Count; index++)
         {
@@ -314,7 +322,7 @@ public sealed partial class ReaderPage : Page
             return;
         }
 
-        var progress = ReaderPosition.ProgressForParagraph(restoredIndex, chapter.Paragraphs.Count);
+        var progress = ReaderPosition.ProgressForParagraph(restoredIndex, paragraphCount);
         ReaderScrollViewer.ChangeView(null, ReaderScrollViewer.ScrollableHeight * progress, null, true);
     }
 
@@ -359,6 +367,7 @@ public sealed partial class ReaderPage : Page
     {
         var lastLoadedUrl = Store.ReaderSession.Entries.LastOrDefault()?.Chapter.SourceUrl;
         if (!_continuousLoadState.TryBegin(lastLoadedUrl, DateTimeOffset.UtcNow, explicitRetry)) return;
+        var generation = _continuousAttachmentState.Generation;
         var cancellation = new CancellationTokenSource();
         _continuousLoadCancellation = cancellation;
         _loadingNext = true;
@@ -366,23 +375,21 @@ public sealed partial class ReaderPage : Page
         ShowContinuationLoading();
         try
         {
-            var before = Store.ReaderSession.Entries.Count;
             var preparation = await Store.PrepareNextChapterAsync(
                 explicitRetry,
                 ApplyNextChapterPreparationStatus,
                 cancellation.Token);
-            if (preparation.Status == NextChapterPreparationStatus.Attached
-                && Store.ReaderSession.Entries.Count > before)
+            if (generation != _continuousAttachmentState.Generation)
             {
-                Items.AddRange(ReaderItemBuilder.BuildEntry(Store.ReaderSession.Entries[^1]));
-                RefreshCatalogList();
-                _continuousLoadState.MarkAttached();
-                HideContinuationBoundary();
-                DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-                {
-                    ReaderRepeater.UpdateLayout();
-                    ReaderScrollViewer.UpdateLayout();
-                });
+                return;
+            }
+            if (preparation is { Status: NextChapterPreparationStatus.Ready, Chapter: { } readyChapter }
+                && lastLoadedUrl is not null
+                && _continuousAttachmentState.Queue(readyChapter, lastLoadedUrl, generation))
+            {
+                _continuousLoadState.MarkReady();
+                ShowContinuationMessage("下一章已准备，等待滚动停止…", false);
+                TryAttachPendingContinuousChapter();
                 return;
             }
 
@@ -397,7 +404,7 @@ public sealed partial class ReaderPage : Page
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
-            _continuousLoadState.Reset();
+            ResetContinuousReadingState();
             HideContinuationBoundary();
         }
         finally
@@ -416,6 +423,39 @@ public sealed partial class ReaderPage : Page
     {
         _continuousLoadCancellation?.Cancel();
         _continuousLoadCancellation = null;
+    }
+
+    private void ResetContinuousReadingState()
+    {
+        CancelContinuousLoad();
+        _continuousAttachmentState.Reset();
+        _continuousLoadState.Reset();
+    }
+
+    private void TryAttachPendingContinuousChapter()
+    {
+        if (!_continuousAttachmentState.TryTake(out var chapter, out var expectedTailUrl)
+            || chapter is null
+            || expectedTailUrl is null)
+        {
+            return;
+        }
+
+        if (!Store.AttachPreparedNextChapter(expectedTailUrl, chapter))
+        {
+            return;
+        }
+
+        Items.AddRange(ReaderItemBuilder.BuildEntry(Store.ReaderSession.Entries[^1]));
+        RefreshCatalogListIfVisible();
+        _continuousLoadState.MarkAttached();
+        HideContinuationBoundary();
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            ReaderRepeater.UpdateLayout();
+            ReaderScrollViewer.UpdateLayout();
+            ScheduleContinuousLoadFromViewport();
+        });
     }
 
     private async void ContinuationRetry_Click(object sender, RoutedEventArgs e)
@@ -478,6 +518,9 @@ public sealed partial class ReaderPage : Page
                 _continuousLoadState.MarkCheckingLatest();
                 ContinuationMessage.Text = "正在检查新章节…";
                 break;
+            case NextChapterPreparationStatus.Ready:
+                _continuousLoadState.MarkReady();
+                break;
             case NextChapterPreparationStatus.Attached:
                 _continuousLoadState.MarkAttached();
                 break;
@@ -496,7 +539,7 @@ public sealed partial class ReaderPage : Page
         SetNavigationEnabled(false);
         try
         {
-            _continuousLoadState.Reset();
+            ResetContinuousReadingState();
             var selected = await Store.SelectChapterAsync(chapter);
             if (!selected)
             {
@@ -525,7 +568,7 @@ public sealed partial class ReaderPage : Page
         SetNavigationEnabled(false);
         try
         {
-            _continuousLoadState.Reset();
+            ResetContinuousReadingState();
             var chapter = await Store.NavigateChapterAsync(offset);
             if (chapter is null)
             {
@@ -564,6 +607,7 @@ public sealed partial class ReaderPage : Page
         SetNavigationEnabled(false);
         try
         {
+            ResetContinuousReadingState();
             var target = await Store.NavigateFromChapterAsync(chapter, offset);
             if (target is null)
             {
@@ -602,6 +646,7 @@ public sealed partial class ReaderPage : Page
             CatalogList.SelectionChanged += CatalogList_SelectionChanged;
             _synchronizingCatalog = false;
         }
+        _catalogDirty = false;
         ToolbarChapterTitle.Text = Store.SelectedChapter?.Title ?? "";
         if (CatalogSplitView.IsPaneOpen && CatalogList.SelectedItem is not null)
         {
@@ -618,6 +663,18 @@ public sealed partial class ReaderPage : Page
                     });
                 }
             });
+        }
+    }
+
+    private void RefreshCatalogListIfVisible()
+    {
+        if (CatalogSplitView.IsPaneOpen)
+        {
+            RefreshCatalogList();
+        }
+        else
+        {
+            _catalogDirty = true;
         }
     }
 
@@ -686,7 +743,10 @@ public sealed partial class ReaderPage : Page
     private void OpenCatalog(bool focusSearch)
     {
         CatalogSplitView.IsPaneOpen = true;
-        RefreshCatalogList();
+        if (_catalogDirty || CatalogList.ItemsSource is null)
+        {
+            RefreshCatalogList();
+        }
         if (focusSearch) DispatcherQueue.TryEnqueue(() => CatalogSearchBox.Focus(FocusState.Programmatic));
     }
 
@@ -707,7 +767,7 @@ public sealed partial class ReaderPage : Page
             if (await Store.RefreshSelectedCatalogAsync())
             {
                 RefreshCatalogList();
-                _continuousLoadState.Reset();
+                ResetContinuousReadingState();
                 Store.RearmSelectedChapterPrefetch();
                 HideContinuationBoundary();
                 CatalogStatusText.Text = $"已更新，共 {Store.SelectedBook?.Chapters.Count ?? 0} 章";
@@ -855,7 +915,7 @@ public sealed partial class ReaderPage : Page
     private void ApplyAppearanceChange()
     {
         var anchor = CaptureReaderAnchor();
-        _continuousLoadState.Reset();
+        ResetContinuousReadingState();
         Store.ConfigureNextChapterPrefetch(_preferences.PrefetchNextChapter);
         ApplyPreferences();
         ReapplyRealizedItemStyles();
@@ -934,7 +994,7 @@ public sealed partial class ReaderPage : Page
 
     private void Back_Click(object sender, RoutedEventArgs e)
     {
-        CancelContinuousLoad();
+        ResetContinuousReadingState();
         Store.CancelCatalogRefresh();
         if (_window is MainWindow mainWindow)
         {

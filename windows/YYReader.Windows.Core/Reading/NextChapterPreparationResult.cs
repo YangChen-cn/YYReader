@@ -6,6 +6,7 @@ public enum NextChapterPreparationStatus
 {
     LoadingNext,
     CheckingLatest,
+    Ready,
     Attached,
     ConfirmedLatest,
     Failed

@@ -292,13 +292,14 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         {
             return FailedNextChapter(onStatusChanged, "下一章加载失败");
         }
-        if (!ReaderSession.AttachNext(next))
-        {
-            return FailedNextChapter(onStatusChanged, "下一章加载失败", next);
-        }
+        onStatusChanged?.Invoke(NextChapterPreparationStatus.Ready);
+        return new NextChapterPreparationResult(NextChapterPreparationStatus.Ready, next);
+    }
 
-        onStatusChanged?.Invoke(NextChapterPreparationStatus.Attached);
-        return new NextChapterPreparationResult(NextChapterPreparationStatus.Attached, next);
+    public bool AttachPreparedNextChapter(string expectedTailUrl, Chapter chapter)
+    {
+        return ReaderSession.LastChapter?.SourceUrl == expectedTailUrl
+            && ReaderSession.AttachNext(chapter);
     }
 
     private async Task<Chapter?> ProbeNextChapterAsync(

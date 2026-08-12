@@ -141,9 +141,9 @@ public sealed class SyncEngine(
     }
 }
 
-public sealed record SyncApplicationResult(bool Changed, IReadOnlyList<string> CatalogRefreshSourceUrls)
+public sealed record SyncApplicationResult(bool Changed)
 {
-    public static SyncApplicationResult None { get; } = new(false, []);
+    public static SyncApplicationResult None { get; } = new(false);
 }
 
 public sealed record SyncExecutionResult(
