@@ -25,6 +25,7 @@ public sealed partial class ReaderPage : Page
     private readonly Dictionary<int, UIElement> _realizedElements = new();
     private readonly ReaderContinuousLoadState _continuousLoadState = new();
     private CancellationTokenSource? _preferenceSaveCancellation;
+    private CancellationTokenSource? _continuousLoadCancellation;
     private ReaderPreferences _preferences = ReaderPreferences.Defaults;
     private ReaderThemePalette _palette = ReaderThemePalette.FromName("system");
     private bool _initialized;
@@ -56,6 +57,8 @@ public sealed partial class ReaderPage : Page
     public Book Book { get; }
     public RangeObservableCollection<ReaderItem> Items { get; }
 
+    public static double OfflineIndicatorOpacity(bool isAvailableOffline) => isAvailableOffline ? 1 : 0;
+
     private async void ReaderPage_Loaded(object sender, RoutedEventArgs e)
     {
         if (ReaderToolbar.Parent is Panel parent) parent.Children.Remove(ReaderToolbar);
@@ -77,6 +80,8 @@ public sealed partial class ReaderPage : Page
 
     private async void ReaderPage_Unloaded(object sender, RoutedEventArgs e)
     {
+        CancelContinuousLoad();
+        Store.CancelCatalogRefresh();
         if (_window is MainWindow mainWindow) mainWindow.ClearPageTitleBar(ReaderToolbar);
         _progressTimer.Stop();
         _offlineDownloadManager.StateChanged -= OfflineDownloadManager_StateChanged;
@@ -215,6 +220,10 @@ public sealed partial class ReaderPage : Page
         if (IsNearEndOfLoadedEntries())
         {
             _continuousLoadState.ObserveNearEnd(lastLoadedUrl, isNearEnd: true);
+            if (_continuousLoadState.Phase != ReaderContinuousLoadPhase.Idle)
+            {
+                return;
+            }
             _ = LoadNextContinuousChapterAsync(false);
             return;
         }
@@ -350,42 +359,63 @@ public sealed partial class ReaderPage : Page
     {
         var lastLoadedUrl = Store.ReaderSession.Entries.LastOrDefault()?.Chapter.SourceUrl;
         if (!_continuousLoadState.TryBegin(lastLoadedUrl, DateTimeOffset.UtcNow, explicitRetry)) return;
+        var cancellation = new CancellationTokenSource();
+        _continuousLoadCancellation = cancellation;
         _loadingNext = true;
         SetNavigationEnabled(false);
         ShowContinuationLoading();
         try
         {
             var before = Store.ReaderSession.Entries.Count;
-            var preparation = await Store.PrepareNextChapterAsync();
+            var preparation = await Store.PrepareNextChapterAsync(
+                explicitRetry,
+                ApplyNextChapterPreparationStatus,
+                cancellation.Token);
             if (preparation.Status == NextChapterPreparationStatus.Attached
                 && Store.ReaderSession.Entries.Count > before)
             {
-                var stableOffset = ReaderScrollViewer.VerticalOffset;
                 Items.AddRange(ReaderItemBuilder.BuildEntry(Store.ReaderSession.Entries[^1]));
                 RefreshCatalogList();
+                _continuousLoadState.MarkAttached();
                 HideContinuationBoundary();
                 DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
                 {
                     ReaderRepeater.UpdateLayout();
-                    ReaderScrollViewer.ChangeView(null, stableOffset, null, true);
+                    ReaderScrollViewer.UpdateLayout();
                 });
                 return;
             }
 
-            if (preparation.Status == NextChapterPreparationStatus.EndOfCatalog)
+            if (preparation.Status == NextChapterPreparationStatus.ConfirmedLatest)
             {
                 ShowContinuationMessage("已到最新章节", false);
                 return;
             }
 
             _continuousLoadState.MarkFailed(DateTimeOffset.UtcNow);
-            ShowContinuationMessage("下一章加载失败", true);
+            ShowContinuationMessage(preparation.Message ?? "检查新章节失败", true);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            _continuousLoadState.Reset();
+            HideContinuationBoundary();
         }
         finally
         {
+            if (ReferenceEquals(_continuousLoadCancellation, cancellation))
+            {
+                _continuousLoadCancellation = null;
+            }
+            cancellation.Dispose();
             _loadingNext = false;
             SetNavigationEnabled(true);
         }
+    }
+
+    private void CancelContinuousLoad()
+    {
+        _continuousLoadCancellation?.Cancel();
+        _continuousLoadCancellation = null;
     }
 
     private async void ContinuationRetry_Click(object sender, RoutedEventArgs e)
@@ -400,9 +430,11 @@ public sealed partial class ReaderPage : Page
         ContinuationBoundary.Opacity = 1;
         ContinuationBoundary.IsHitTestVisible = true;
         ContinuationProgress.IsActive = true;
-        ContinuationProgress.Visibility = Visibility.Visible;
+        ContinuationProgress.Opacity = 1;
         ContinuationMessage.Text = "正在准备下一章…";
-        ContinuationRetryButton.Visibility = Visibility.Collapsed;
+        ContinuationMessage.Opacity = 1;
+        ContinuationRetryButton.Opacity = 0;
+        ContinuationRetryButton.IsHitTestVisible = false;
     }
 
     private void ShowContinuationMessage(string message, bool canRetry)
@@ -412,20 +444,49 @@ public sealed partial class ReaderPage : Page
         ContinuationBoundary.Opacity = 1;
         ContinuationBoundary.IsHitTestVisible = true;
         ContinuationProgress.IsActive = false;
-        ContinuationProgress.Visibility = Visibility.Collapsed;
+        ContinuationProgress.Opacity = 0;
         ContinuationMessage.Text = message;
-        ContinuationRetryButton.Visibility = canRetry ? Visibility.Visible : Visibility.Collapsed;
+        ContinuationMessage.Opacity = 1;
+        ContinuationRetryButton.Opacity = canRetry ? 1 : 0;
+        ContinuationRetryButton.IsHitTestVisible = canRetry;
     }
 
     private void HideContinuationBoundary()
     {
         _continuationHasStatus = false;
         ContinuationProgress.IsActive = false;
+        ContinuationProgress.Opacity = 0;
+        ContinuationMessage.Opacity = 0;
+        ContinuationRetryButton.Opacity = 0;
+        ContinuationRetryButton.IsHitTestVisible = false;
         ContinuationBoundary.Opacity = 0;
         ContinuationBoundary.IsHitTestVisible = false;
         ContinuationBoundary.Visibility = _preferences.ContinuousReading
             ? Visibility.Visible
             : Visibility.Collapsed;
+    }
+
+    private void ApplyNextChapterPreparationStatus(NextChapterPreparationStatus status)
+    {
+        switch (status)
+        {
+            case NextChapterPreparationStatus.LoadingNext:
+                _continuousLoadState.MarkLoadingNext();
+                ShowContinuationLoading();
+                break;
+            case NextChapterPreparationStatus.CheckingLatest:
+                _continuousLoadState.MarkCheckingLatest();
+                ContinuationMessage.Text = "正在检查新章节…";
+                break;
+            case NextChapterPreparationStatus.Attached:
+                _continuousLoadState.MarkAttached();
+                break;
+            case NextChapterPreparationStatus.ConfirmedLatest:
+                _continuousLoadState.MarkConfirmedLatest();
+                break;
+            case NextChapterPreparationStatus.Failed:
+                break;
+        }
     }
 
     private async void CatalogList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -680,6 +741,7 @@ public sealed partial class ReaderPage : Page
         if (Store.SelectedBook is not { } book || Store.SelectedChapter is not { } chapter) return;
         await _offlineDownloadManager.DownloadAsync(book, chapter, scope);
         await Store.RefreshOfflineMetadataAsync(book.Id);
+        RefreshCatalogList();
     }
 
     private void CancelDownload_Click(object sender, RoutedEventArgs e) => _offlineDownloadManager.Cancel();
@@ -700,6 +762,7 @@ public sealed partial class ReaderPage : Page
         {
             await _offlineDownloadManager.ClearOfflineCacheAsync(book);
             await Store.RefreshOfflineMetadataAsync(book.Id);
+            RefreshCatalogList();
         }
     }
 
@@ -871,6 +934,8 @@ public sealed partial class ReaderPage : Page
 
     private void Back_Click(object sender, RoutedEventArgs e)
     {
+        CancelContinuousLoad();
+        Store.CancelCatalogRefresh();
         if (_window is MainWindow mainWindow)
         {
             mainWindow.ShowLibrary();

@@ -2,7 +2,8 @@
     x:Class="YYReader.Windows.Views.ReaderPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:YYReader.Windows.Views">
+    xmlns:local="using:YYReader.Windows.Views"
+    xmlns:models="using:YYReader.Windows.Core.Models">
     <Page.Resources>
         <DataTemplate x:Key="ReaderHeaderTemplate" x:DataType="local:ReaderItem">
             <StackPanel Spacing="10">
@@ -53,7 +54,19 @@
                         <TextBox x:Name="CatalogSearchBox" Grid.Row="1" PlaceholderText="搜索章节"
                                  TextChanged="CatalogSearchBox_TextChanged" />
                         <ListView x:Name="CatalogList" Grid.Row="2" SelectionMode="Single"
-                                  DisplayMemberPath="Title" SelectionChanged="CatalogList_SelectionChanged" />
+                                  SelectionChanged="CatalogList_SelectionChanged">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="models:Chapter">
+                                    <Grid ColumnDefinitions="10,*" ColumnSpacing="7" Padding="0,3">
+                                        <Ellipse Width="5" Height="5" VerticalAlignment="Center"
+                                                 Fill="{ThemeResource AccentFillColorDefaultBrush}"
+                                                 Opacity="{x:Bind local:ReaderPage.OfflineIndicatorOpacity(IsAvailableOffline)}" />
+                                        <TextBlock Grid.Column="1" Text="{x:Bind Title}" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
                         <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8">
                             <ProgressRing x:Name="CatalogProgress" Width="16" Height="16" IsActive="False" />
                             <TextBlock x:Name="CatalogStatusText" VerticalAlignment="Center" TextWrapping="Wrap" />
@@ -180,12 +193,12 @@
                                 <ItemsRepeater.Layout><StackLayout Spacing="0" /></ItemsRepeater.Layout>
                             </ItemsRepeater>
                             <Border x:Name="ContinuationBoundary" Grid.Row="1" Visibility="Collapsed"
-                                    Margin="0,18,0,28" Padding="12" MinHeight="54"
+                                    Width="300" Height="72" Margin="0,18,0,28" Padding="12"
                                     CornerRadius="6" HorizontalAlignment="Center">
                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                     <ProgressRing x:Name="ContinuationProgress" Width="16" Height="16" IsActive="False" />
-                                    <TextBlock x:Name="ContinuationMessage" VerticalAlignment="Center" />
-                                    <Button x:Name="ContinuationRetryButton" Content="重试" Visibility="Collapsed"
+                                    <TextBlock x:Name="ContinuationMessage" VerticalAlignment="Center" TextWrapping="NoWrap" />
+                                    <Button x:Name="ContinuationRetryButton" Content="重试"
                                             Click="ContinuationRetry_Click" />
                                 </StackPanel>
                             </Border>

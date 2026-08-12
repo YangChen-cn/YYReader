@@ -55,7 +55,7 @@
                             <FontIcon Glyph="&#xE8D2;" FontSize="17" Opacity="0.68" />
                             <StackPanel Grid.Column="1" Spacing="2">
                                 <TextBlock Text="原生舒适阅读" FontWeight="SemiBold" />
-                                <TextBlock Text="WinUI 原生段落渲染、连续章节、阅读位置恢复与多套阅读主题。"
+                                <TextBlock Text="WinUI 原生段落渲染、稳定连续阅读、阅读位置恢复与多套阅读主题。章末通过下一章链接增量检查，不再扫描完整目录。"
                                            TextWrapping="Wrap" Style="{StaticResource YYSecondaryTextStyle}" />
                             </StackPanel>
                         </Grid>
@@ -63,7 +63,7 @@
                             <FontIcon Glyph="&#xE8A5;" FontSize="17" Opacity="0.68" />
                             <StackPanel Grid.Column="1" Spacing="2">
                                 <TextBlock Text="目录与离线阅读" FontWeight="SemiBold" />
-                                <TextBlock Text="完整目录刷新、章节搜索、下一章预取，以及当前、后 20 章和整书下载。"
+                                <TextBlock Text="完整目录刷新、章节搜索、下一章预取，以及当前、后 20 章和整书下载；目录中的小点表示正文已缓存，可离线打开。"
                                            TextWrapping="Wrap" Style="{StaticResource YYSecondaryTextStyle}" />
                             </StackPanel>
                         </Grid>
@@ -79,7 +79,7 @@
                             <FontIcon Glyph="&#xE945;" FontSize="17" Opacity="0.68" />
                             <StackPanel Grid.Column="1" Spacing="2">
                                 <TextBlock Text="稳定的后台任务" FontWeight="SemiBold" />
-                                <TextBlock Text="目录刷新、同步和离线下载不会重建正在阅读的正文或抢走当前章节。"
+                                <TextBlock Text="修复章末误报最新、连续阅读抖动与重复探测；目录刷新、同步和离线下载不会重建正在阅读的正文或抢走当前章节。"
                                            TextWrapping="Wrap" Style="{StaticResource YYSecondaryTextStyle}" />
                             </StackPanel>
                         </Grid>

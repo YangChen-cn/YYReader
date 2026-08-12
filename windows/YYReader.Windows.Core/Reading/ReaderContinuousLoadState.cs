@@ -1,5 +1,15 @@
 namespace YYReader.Windows.Core.Reading;
 
+public enum ReaderContinuousLoadPhase
+{
+    Idle,
+    LoadingNext,
+    CheckingLatest,
+    Attached,
+    ConfirmedLatest,
+    Failed
+}
+
 public sealed class ReaderContinuousLoadState(TimeSpan? retryDelay = null)
 {
     private readonly TimeSpan _retryDelay = retryDelay ?? TimeSpan.FromSeconds(4);
@@ -8,19 +18,31 @@ public sealed class ReaderContinuousLoadState(TimeSpan? retryDelay = null)
     private bool _attemptedDuringNearEndVisit;
     private DateTimeOffset _retryAt;
 
+    public ReaderContinuousLoadPhase Phase { get; private set; } = ReaderContinuousLoadPhase.Idle;
+
     public void ObserveNearEnd(string? chapterUrl, bool isNearEnd)
     {
         if (!isNearEnd || string.IsNullOrWhiteSpace(chapterUrl))
         {
             _nearEndChapterUrl = null;
             _attemptedDuringNearEndVisit = false;
+            _attemptedAfterChapterUrl = null;
+            _retryAt = DateTimeOffset.MinValue;
+            Phase = ReaderContinuousLoadPhase.Idle;
             return;
         }
 
         if (!string.Equals(_nearEndChapterUrl, chapterUrl, StringComparison.Ordinal))
         {
             _nearEndChapterUrl = chapterUrl;
+            if (_attemptedDuringNearEndVisit)
+            {
+                return;
+            }
             _attemptedDuringNearEndVisit = false;
+            _attemptedAfterChapterUrl = null;
+            _retryAt = DateTimeOffset.MinValue;
+            Phase = ReaderContinuousLoadPhase.Idle;
         }
     }
 
@@ -37,13 +59,23 @@ public sealed class ReaderContinuousLoadState(TimeSpan? retryDelay = null)
         _attemptedAfterChapterUrl = chapterUrl;
         _nearEndChapterUrl = chapterUrl;
         _attemptedDuringNearEndVisit = true;
+        Phase = ReaderContinuousLoadPhase.LoadingNext;
         return true;
     }
+
+    public void MarkCheckingLatest() => Phase = ReaderContinuousLoadPhase.CheckingLatest;
+
+    public void MarkLoadingNext() => Phase = ReaderContinuousLoadPhase.LoadingNext;
+
+    public void MarkAttached() => Phase = ReaderContinuousLoadPhase.Attached;
+
+    public void MarkConfirmedLatest() => Phase = ReaderContinuousLoadPhase.ConfirmedLatest;
 
     public void MarkFailed(DateTimeOffset now)
     {
         _attemptedAfterChapterUrl = null;
         _retryAt = now + _retryDelay;
+        Phase = ReaderContinuousLoadPhase.Failed;
     }
 
     public void Reset()
@@ -52,5 +84,6 @@ public sealed class ReaderContinuousLoadState(TimeSpan? retryDelay = null)
         _nearEndChapterUrl = null;
         _attemptedDuringNearEndVisit = false;
         _retryAt = DateTimeOffset.MinValue;
+        Phase = ReaderContinuousLoadPhase.Idle;
     }
 }

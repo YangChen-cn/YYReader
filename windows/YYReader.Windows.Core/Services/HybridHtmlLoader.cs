@@ -40,7 +40,7 @@ public sealed class HybridHtmlLoader : IRenderedDomFallbackLoading
         {
             return await _staticLoader.LoadAsync(url, cancellationToken).ConfigureAwait(false);
         }
-        catch (HtmlLoadException ex) when (ex.Kind == HtmlLoadErrorKind.VerificationRequired)
+        catch (HtmlLoadException ex) when (ShouldUseBrowserFallback(ex))
         {
             _browserPreferredHosts.TryAdd(url.DnsSafeHost, 0);
             return await _browserLoader.LoadAsync(url, cancellationToken).ConfigureAwait(false);
@@ -51,4 +51,8 @@ public sealed class HybridHtmlLoader : IRenderedDomFallbackLoading
         _browserLoader.LoadRenderedDomAsync(url, cancellationToken);
 
     public void PromoteRenderedDomHost(Uri url) => _browserPreferredHosts.TryAdd(url.DnsSafeHost, 0);
+
+    private static bool ShouldUseBrowserFallback(HtmlLoadException exception) =>
+        exception.Kind == HtmlLoadErrorKind.VerificationRequired
+        || (exception.Kind == HtmlLoadErrorKind.HttpStatus && exception.StatusCode == 403);
 }

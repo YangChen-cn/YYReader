@@ -4,11 +4,14 @@ namespace YYReader.Windows.Core.Reading;
 
 public enum NextChapterPreparationStatus
 {
+    LoadingNext,
+    CheckingLatest,
     Attached,
-    EndOfCatalog,
+    ConfirmedLatest,
     Failed
 }
 
 public sealed record NextChapterPreparationResult(
     NextChapterPreparationStatus Status,
-    Chapter? Chapter = null);
+    Chapter? Chapter = null,
+    string? Message = null);
