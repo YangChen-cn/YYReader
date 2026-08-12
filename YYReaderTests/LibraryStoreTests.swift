@@ -470,6 +470,44 @@ struct LibraryStoreTests {
     }
 
     @Test
+    func continuationStatusDoesNotCreateChapterDuringViewEvaluation() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        let book = Book(
+            title: "无目录连续阅读",
+            author: "测试作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/book/catalogless/"
+        )
+        let chapter = Chapter(
+            sourceURL: "https://example.com/book/catalogless/1.html",
+            title: "第1章",
+            sortIndex: 1,
+            bodyText: "第一章正文",
+            nextURL: "https://example.com/book/catalogless/2.html",
+            cachedAt: .now,
+            book: book
+        )
+        book.chapters = [chapter]
+        book.currentChapterID = chapter.id
+        context.insert(book)
+        context.insert(chapter)
+        try context.save()
+
+        let store = LibraryStore(
+            modelContext: context,
+            coordinator: NovelImportCoordinator(loader: MockHTMLLoader(documents: [:]))
+        )
+        store.restoreSelection(bookID: book.id, chapterID: chapter.id)
+
+        #expect(store.continuationStatus(after: chapter.id) == .idle)
+        #expect(book.chapters.map(\.id) == [chapter.id])
+        #expect(store.sortedChapters.map(\.id) == [chapter.id])
+        #expect(!context.hasChanges)
+    }
+
+    @Test
     func continuousPrefetchCachesNextChapterWithoutChangingRenderedEntries() async throws {
         let nextURL = try #require(URL(string: "https://example.com/book/continuous/2.html"))
         let thirdURL = try #require(URL(string: "https://example.com/book/continuous/3.html"))

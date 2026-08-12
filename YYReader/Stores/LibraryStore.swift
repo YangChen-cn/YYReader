@@ -254,9 +254,14 @@ final class LibraryStore {
     }
 
     func continuationStatus(after chapterID: UUID) -> ReaderContinuationStatus {
-        guard let chapter = chapterByID[chapterID],
-              let next = neighbor(of: chapter, offset: 1) else {
+        guard let chapter = chapterByID[chapterID] else {
             return .unavailable
+        }
+        guard let next = existingNeighbor(of: chapter, offset: 1) else {
+            // A catalog-less chapter may only expose nextURL. The boundary's
+            // onAppear action will create and prefetch that chapter outside the
+            // SwiftUI body evaluation; this status query must remain read-only.
+            return chapter.nextURL == nil ? .unavailable : .idle
         }
         if next.isCached { return .ready }
         if continuousLoadFailures.contains(next.id) { return .failed }
@@ -761,17 +766,12 @@ final class LibraryStore {
     }
 
     private func neighbor(of chapter: Chapter, offset: Int) -> Chapter? {
-        guard let index = chapterIndexByID[chapter.id] else {
-            return nil
-        }
-        let targetIndex = index + offset
-        if sortedChapters.indices.contains(targetIndex) {
-            return sortedChapters[targetIndex]
+        if let existing = existingNeighbor(of: chapter, offset: offset) {
+            return existing
         }
 
         let linkedURL = offset > 0 ? chapter.nextURL : chapter.previousURL
         guard let linkedURL, let book = selectedBook else { return nil }
-        if let existing = chapterForURL(linkedURL) { return existing }
 
         let generated = Chapter(
             sourceURL: linkedURL,
@@ -785,6 +785,20 @@ final class LibraryStore {
         rebuildSelectedBookChapters()
         saveChanges(failureMessage: "保存章节失败")
         return generated
+    }
+
+    private func existingNeighbor(of chapter: Chapter, offset: Int) -> Chapter? {
+        guard let index = chapterIndexByID[chapter.id] else {
+            return nil
+        }
+        let targetIndex = index + offset
+        if sortedChapters.indices.contains(targetIndex) {
+            return sortedChapters[targetIndex]
+        }
+
+        let linkedURL = offset > 0 ? chapter.nextURL : chapter.previousURL
+        guard let linkedURL else { return nil }
+        return chapterForURL(linkedURL)
     }
 
     private func upsert(_ result: NovelImportResult) throws -> Chapter {

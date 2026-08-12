@@ -90,6 +90,7 @@ struct AboutSettingsView: View {
                     Label("对端文件仅在成功读取并合并后确认，失败时保留重试机会。", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
                     Label("远端删除不会打断正在阅读的书籍，退出阅读后再安全刷新。", systemImage: "checkmark.shield")
                     Label("修复同步引起的跳章、滚动错位与后台监听崩溃。", systemImage: "checkmark.circle")
+                    Label("修复无目录小说连续阅读到章末时可能闪退的问题。", systemImage: "book.pages")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
