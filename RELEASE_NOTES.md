@@ -13,6 +13,7 @@ YYReader 1.2.0 同时提供原生 macOS 与 Windows 客户端，并加入可选�
 
 ### 同步稳定性
 
+- 修复 iCloud Drive、OneDrive、Dropbox、NAS 或 File Provider 不可用时可能阻塞应用启动和前台恢复的问题；YYReader 会先显示本地书架并保持 Reader 可用，再在后台恢复权限和尝试同步。
 - 本地书架与阅读进度变化走独立发布路径，只构建 Mac 快照并更新 `mac.json`，不会读取或解析 `windows.json`。
 - 仅在启动、回到前台、手动同步或检测到 Windows 文件确实变化时执行完整合并。
 - Windows 文件 signature 只在读取、合并和落库全部成功后确认；读取失败后 watcher 与低频轮询仍可重试。
@@ -27,7 +28,7 @@ YYReader 1.2.0 同时提供原生 macOS 与 Windows 客户端，并加入可选�
 
 ### macOS 验证
 
-- 全量单元与回归测试：88 项全部通过。
+- 全量单元与回归测试：89 项全部通过。
 - Release 为纯 arm64、版本 1.2.0（build 5），App Sandbox 保留用户选择文件夹读写和出站网络权限。
 - ad-hoc 签名、DMG 校验和、挂载后签名、应用图标、资源及便携性检查全部通过。
 

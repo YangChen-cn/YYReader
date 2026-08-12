@@ -85,6 +85,7 @@ struct AboutSettingsView: View {
 
             GroupBox("版本 1.2.0") {
                 VStack(alignment: .leading, spacing: 10) {
+                    Label("云盘或 NAS 不可用时不再阻塞启动，本地书架和阅读始终可用。", systemImage: "bolt.shield")
                     Label("本地进度只发布 Mac 快照，不读取 Windows 文件，不干扰当前阅读。", systemImage: "arrow.up.doc")
                     Label("对端文件仅在成功读取并合并后确认，失败时保留重试机会。", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
                     Label("远端删除不会打断正在阅读的书籍，退出阅读后再安全刷新。", systemImage: "checkmark.shield")
