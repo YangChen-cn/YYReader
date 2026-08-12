@@ -335,7 +335,7 @@ final class FolderSyncController {
         generation: UUID
     ) async {
         guard let selectedFolderURL, let store else { return }
-        let chapterRanksByBook = store.syncChapterRanks()
+        let chapterRanksByBook = applyMergedRecords ? store.syncChapterRanks() : [:]
         let localBooks = SyncMerger.merge(
             store.syncRecords() + Array(tombstones.values),
             chapterRanksByBook: chapterRanksByBook

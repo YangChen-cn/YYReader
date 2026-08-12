@@ -10,7 +10,7 @@ struct ChapterListRow: View {
 
             Spacer(minLength: 6)
 
-            if chapter.isCached {
+            if chapter.isAvailableOffline {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.caption)
                     .foregroundStyle(.secondary)

@@ -25,16 +25,21 @@ struct ReaderContinuationBoundary: View {
             }
 
             switch status {
-            case .idle, .loading:
+            case .idle, .loading, .checkingLatest:
                 ProgressView()
                     .controlSize(.small)
                     .tint(accent)
                     .frame(maxWidth: .infinity, alignment: .trailing)
-                    .accessibilityLabel("正在准备下一章")
+                    .accessibilityLabel(status == .checkingLatest ? "正在检查最新章节" : "正在准备下一章")
             case .failed:
                 Button("加载下一章失败，重试", systemImage: "arrow.clockwise", action: retry)
                     .buttonStyle(.borderless)
                     .foregroundStyle(accent)
+            case .confirmedLatest:
+                Button("已是最新章节，重新检查", systemImage: "arrow.clockwise", action: retry)
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(secondaryForeground)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             case .ready, .attached, .unavailable:
                 EmptyView()
             }

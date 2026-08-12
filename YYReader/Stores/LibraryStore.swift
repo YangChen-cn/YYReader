@@ -15,6 +15,8 @@ final class LibraryStore {
     private var progressSaveTask: Task<Void, Never>?
     private var continuousLoadTasks: [UUID: Task<Void, Never>] = [:]
     private var continuousLoadFailures: Set<UUID> = []
+    private var continuousTailProbeTasks: [UUID: Task<Void, Never>] = [:]
+    private var continuousTailProbeStates: [UUID: ContinuousReaderTailProbeState] = [:]
     private var visibleChapterDebounceTask: Task<Void, Never>?
     private var visibilityGate = ContinuousReaderVisibilityGate()
     private var pendingContinuousAttachmentChapterID: UUID?
@@ -22,6 +24,8 @@ final class LibraryStore {
     private var hasPendingProgressChanges = false
     private var isReaderPresented = false
     private var deferredRemoteTombstones: [String: SyncBookRecord] = [:]
+    private var cachedSyncChapterRanks: SyncMerger.ChapterRanksByBook?
+    private let continuousTailProbeTTL: TimeInterval
 
     let readerSession = ContinuousReaderSession()
     let offlineDownloads: OfflineDownloadManager
@@ -43,12 +47,14 @@ final class LibraryStore {
         modelContext: ModelContext,
         coordinator: NovelImportCoordinator,
         folderSync: FolderSyncController? = nil,
-        progressSaveDelay: Duration = .milliseconds(600)
+        progressSaveDelay: Duration = .milliseconds(600),
+        continuousTailProbeTTL: TimeInterval = 45
     ) {
         self.modelContext = modelContext
         self.coordinator = coordinator
         self.folderSync = folderSync
         self.progressSaveDelay = progressSaveDelay
+        self.continuousTailProbeTTL = continuousTailProbeTTL
         self.offlineDownloads = OfflineDownloadManager(modelContext: modelContext, coordinator: coordinator)
         refreshBooks()
     }
@@ -111,6 +117,7 @@ final class LibraryStore {
             selectedBookID = previousID
             return
         }
+        cancelContinuousTailProbes()
         selectedBookID = id
         rebuildSelectedBookChapters()
         selectInitialChapter(preferredID: nil)
@@ -133,6 +140,7 @@ final class LibraryStore {
         }
         prefetchTask?.cancel()
         prefetchTask = nil
+        cancelContinuousTailProbes()
         selectedChapterID = id
         guard let chapter = selectedChapter else {
             updateChapterNavigationSnapshot()
@@ -193,17 +201,28 @@ final class LibraryStore {
     func deleteOfflineCache() {
         guard let book = selectedBook else { return }
         let retainedChapterID = selectedChapterID
-        for chapter in book.chapters where chapter.id != retainedChapterID {
-            chapter.replaceBodyText(nil)
-            chapter.cachedAt = nil
+        let chapters = book.chapters.filter { $0.id != retainedChapterID }
+        let chapterIDs = chapters.map(\.id)
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await offlineDownloads.clearPersistedBodies(chapterIDs: chapterIDs)
+                for chapter in chapters {
+                    chapter.replaceBodyText(nil)
+                    chapter.cachedAt = nil
+                }
+                try modelContext.save()
+                refreshReaderSession()
+            } catch {
+                presentedError = PresentedError(message: "删除离线缓存失败：\(error.localizedDescription)")
+            }
         }
-        saveChanges(failureMessage: "删除离线缓存失败")
-        refreshReaderSession()
     }
 
     func configureContinuousReading(_ isEnabled: Bool) {
         guard continuousReadingEnabled != isEnabled else { return }
         continuousReadingEnabled = isEnabled
+        cancelContinuousTailProbes()
         candidateVisibleChapterID = nil
         visibleChapterDebounceTask?.cancel()
         pendingContinuousAttachmentChapterID = nil
@@ -233,24 +252,29 @@ final class LibraryStore {
     func prepareContinuousChapterAttachment(after chapterID: UUID) {
         guard continuousReadingEnabled,
               chapterID == selectedChapterID,
-              let chapter = chapterByID[chapterID],
-              let next = neighbor(of: chapter, offset: 1) else {
+              let chapter = chapterByID[chapterID] else {
             return
         }
 
         pendingContinuousAttachmentChapterID = chapterID
+        guard let next = neighbor(of: chapter, offset: 1) else {
+            startContinuousTailProbe(for: chapter)
+            return
+        }
         prefetchContinuousChapter(after: chapterID)
         guard next.isCached else { return }
         attachPendingContinuousChapterIfSafe()
     }
 
     func retryContinuousChapter(after chapterID: UUID) {
-        guard let chapter = chapterByID[chapterID],
-              let next = neighbor(of: chapter, offset: 1) else {
-            return
+        guard let chapter = chapterByID[chapterID] else { return }
+        if let next = neighbor(of: chapter, offset: 1) {
+            continuousLoadFailures.remove(next.id)
+            startContinuousLoad(for: next)
+        } else {
+            continuousTailProbeStates.removeValue(forKey: chapterID)
+            startContinuousTailProbe(for: chapter, bypassingTTL: true)
         }
-        continuousLoadFailures.remove(next.id)
-        startContinuousLoad(for: next)
     }
 
     func continuationStatus(after chapterID: UUID) -> ReaderContinuationStatus {
@@ -261,7 +285,18 @@ final class LibraryStore {
             // A catalog-less chapter may only expose nextURL. The boundary's
             // onAppear action will create and prefetch that chapter outside the
             // SwiftUI body evaluation; this status query must remain read-only.
-            return chapter.nextURL == nil ? .unavailable : .idle
+            if chapter.nextURL != nil { return .idle }
+            guard isLocalCatalogTail(chapter) else { return .unavailable }
+            switch continuousTailProbeStates[chapterID] {
+            case .checking:
+                return .checkingLatest
+            case let .confirmedLatest(expiresAt) where expiresAt > .now:
+                return .confirmedLatest
+            case .failed:
+                return .failed
+            case .confirmedLatest, nil:
+                return .idle
+            }
         }
         if next.isCached { return .ready }
         if continuousLoadFailures.contains(next.id) { return .failed }
@@ -471,6 +506,7 @@ final class LibraryStore {
     }
 
     func syncChapterRanks() -> SyncMerger.ChapterRanksByBook {
+        if let cachedSyncChapterRanks { return cachedSyncChapterRanks }
         var result: SyncMerger.ChapterRanksByBook = [:]
         for book in books {
             var ranks: [String: Int] = [:]
@@ -479,6 +515,7 @@ final class LibraryStore {
             }
             result[URLCanonicalizer.canonicalString(book.sourceBookURL)] = ranks
         }
+        cachedSyncChapterRanks = result
         return result
     }
 
@@ -671,7 +708,15 @@ final class LibraryStore {
     }
 
     private func ensureChapterLoaded(_ chapter: Chapter) async {
-        guard !chapter.isCached, let url = URL(string: chapter.sourceURL) else { return }
+        guard !chapter.isCached else { return }
+        if chapter.isAvailableOffline,
+           let bodyText = try? await offlineDownloads.loadPersistedBody(chapterID: chapter.id),
+           !bodyText.isEmpty {
+            chapter.replaceBodyText(bodyText)
+            refreshReaderSession()
+            return
+        }
+        guard let url = URL(string: chapter.sourceURL) else { return }
         await performLoading("正在加载章节…") {
             let result = try await coordinator.loadChapterContent(from: url)
             apply(result, to: chapter)
@@ -701,6 +746,14 @@ final class LibraryStore {
             guard let self else { return }
             defer { continuousLoadTasks[chapter.id] = nil }
             do {
+                if chapter.isAvailableOffline,
+                   let bodyText = try await offlineDownloads.loadPersistedBody(chapterID: chapter.id),
+                   !bodyText.isEmpty {
+                    chapter.replaceBodyText(bodyText)
+                    continuousLoadFailures.remove(chapter.id)
+                    attachPendingContinuousChapterIfSafe()
+                    return
+                }
                 let result = try await coordinator.loadChapterContent(from: url)
                 guard !Task.isCancelled else { return }
                 apply(result, to: chapter)
@@ -715,6 +768,64 @@ final class LibraryStore {
                 continuousLoadFailures.insert(chapter.id)
             }
         }
+    }
+
+    private func startContinuousTailProbe(for chapter: Chapter, bypassingTTL: Bool = false) {
+        guard continuousReadingEnabled,
+              chapter.id == selectedChapterID,
+              isLocalCatalogTail(chapter),
+              chapter.nextURL == nil,
+              continuousTailProbeTasks[chapter.id] == nil,
+              let url = URL(string: chapter.sourceURL) else {
+            return
+        }
+        if !bypassingTTL,
+           case let .confirmedLatest(expiresAt) = continuousTailProbeStates[chapter.id],
+           expiresAt > .now {
+            return
+        }
+
+        continuousTailProbeStates[chapter.id] = .checking
+        continuousTailProbeTasks[chapter.id] = Task { [weak self] in
+            guard let self else { return }
+            defer { continuousTailProbeTasks[chapter.id] = nil }
+            do {
+                let result = try await coordinator.loadChapterContent(from: url)
+                guard !Task.isCancelled else { return }
+                chapter.title = result.title
+                chapter.previousURL = result.previousChapterURL?.absoluteString
+                chapter.nextURL = result.nextChapterURL?.absoluteString
+                chapter.cachedAt = chapter.cachedAt ?? .now
+                try modelContext.save()
+
+                guard result.nextChapterURL != nil else {
+                    continuousTailProbeStates[chapter.id] = .confirmedLatest(
+                        expiresAt: Date.now.addingTimeInterval(continuousTailProbeTTL)
+                    )
+                    return
+                }
+                continuousTailProbeStates.removeValue(forKey: chapter.id)
+                guard let next = neighbor(of: chapter, offset: 1) else { return }
+                startContinuousLoad(for: next)
+                if next.isCached { attachPendingContinuousChapterIfSafe() }
+            } catch is CancellationError {
+                return
+            } catch HTMLLoadError.cancelled {
+                return
+            } catch {
+                continuousTailProbeStates[chapter.id] = .failed
+            }
+        }
+    }
+
+    private func cancelContinuousTailProbes() {
+        for task in continuousTailProbeTasks.values { task.cancel() }
+        continuousTailProbeTasks.removeAll()
+        continuousTailProbeStates.removeAll()
+    }
+
+    private func isLocalCatalogTail(_ chapter: Chapter) -> Bool {
+        sortedChapters.last?.id == chapter.id
     }
 
     private func schedulePrefetch(after chapter: Chapter) {
@@ -893,6 +1004,7 @@ final class LibraryStore {
     }
 
     private func rebuildSelectedBookChapters() {
+        cachedSyncChapterRanks = nil
         sortedChapters = selectedBook?.chapters.sorted { lhs, rhs in
             if lhs.sortIndex == rhs.sortIndex { return lhs.title < rhs.title }
             return lhs.sortIndex < rhs.sortIndex

@@ -508,6 +508,78 @@ struct LibraryStoreTests {
     }
 
     @Test
+    func staleTailProbeDiscoversAndAttachesNewChapterAfterScrollEnds() async throws {
+        let tailURL = try #require(URL(string: "https://example.com/book/tail/1.html"))
+        let nextURL = try #require(URL(string: "https://example.com/book/tail/2.html"))
+        let loader = MockHTMLLoader(documents: [
+            tailURL: genericCataloglessChapter(title: "第1章 尾章", body: "重新探测后的尾章正文", nextURL: nextURL),
+            nextURL: genericCataloglessChapter(title: "第2章 新章", body: "网站刚刚出现的新章节")
+        ])
+        let (store, chapter, context) = try makeTailProbeStore(loader: loader, tailURL: tailURL)
+
+        #expect(store.continuationStatus(after: chapter.id) == .idle)
+        #expect(!context.hasChanges)
+        store.configureContinuousReading(true)
+        store.beginReaderScrollTransaction()
+        store.prepareContinuousChapterAttachment(after: chapter.id)
+        try await waitForContinuationStatus(.ready, after: chapter.id, in: store)
+
+        #expect(chapter.nextURL == nextURL.absoluteString)
+        #expect(store.sortedChapters.count == 2)
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapter.id])
+
+        store.endReaderScrollTransaction(topVisibleChapterID: chapter.id)
+        #expect(store.readerSession.entries.count == 2)
+    }
+
+    @Test
+    func tailProbeConfirmsLatestAndUsesTTL() async throws {
+        let tailURL = try #require(URL(string: "https://example.com/book/latest/1.html"))
+        let loader = MockHTMLLoader(documents: [
+            tailURL: genericCataloglessChapter(title: "第1章 最新", body: "仍然是网站尾章")
+        ])
+        let (store, chapter, context) = try makeTailProbeStore(loader: loader, tailURL: tailURL)
+        store.configureContinuousReading(true)
+
+        store.prepareContinuousChapterAttachment(after: chapter.id)
+        try await waitForContinuationStatus(.confirmedLatest, after: chapter.id, in: store)
+        #expect(loader.requestedURLs == [tailURL])
+
+        for _ in 0..<3 {
+            #expect(store.continuationStatus(after: chapter.id) == .confirmedLatest)
+            store.prepareContinuousChapterAttachment(after: chapter.id)
+        }
+        #expect(loader.requestedURLs == [tailURL])
+        #expect(!context.hasChanges)
+
+        store.retryContinuousChapter(after: chapter.id)
+        try await waitForRequestCount(2, in: loader)
+        #expect(loader.requestedURLs == [tailURL, tailURL])
+    }
+
+    @Test
+    func failedTailProbeCanBeRetriedManually() async throws {
+        let tailURL = try #require(URL(string: "https://example.com/book/retry-tail/1.html"))
+        let nextURL = try #require(URL(string: "https://example.com/book/retry-tail/2.html"))
+        let loader = MockHTMLLoader(
+            documents: [
+                tailURL: genericCataloglessChapter(title: "第1章 尾章", body: "重试成功后的尾章", nextURL: nextURL),
+                nextURL: genericCataloglessChapter(title: "第2章 新章", body: "重试后找到的新章")
+            ],
+            failuresBeforeSuccess: [tailURL: 1]
+        )
+        let (store, chapter, _) = try makeTailProbeStore(loader: loader, tailURL: tailURL)
+        store.configureContinuousReading(true)
+
+        store.prepareContinuousChapterAttachment(after: chapter.id)
+        try await waitForContinuationStatus(.failed, after: chapter.id, in: store)
+        store.retryContinuousChapter(after: chapter.id)
+        try await waitForContinuationStatus(.ready, after: chapter.id, in: store)
+
+        #expect(loader.requestedURLs.prefix(2) == [tailURL, tailURL])
+    }
+
+    @Test
     func continuousPrefetchCachesNextChapterWithoutChangingRenderedEntries() async throws {
         let nextURL = try #require(URL(string: "https://example.com/book/continuous/2.html"))
         let thirdURL = try #require(URL(string: "https://example.com/book/continuous/3.html"))
@@ -747,13 +819,61 @@ struct LibraryStoreTests {
         try await waitForOfflineDownload(store)
 
         #expect(loader.requestedURLs == [secondURL, thirdURL])
-        #expect(second.isCached)
-        #expect(third.isCached)
+        #expect(second.isAvailableOffline)
+        #expect(third.isAvailableOffline)
 
         store.deleteOfflineCache()
+        try await waitForOfflineCacheDeletion([second, third])
         #expect(first.isCached)
-        #expect(!second.isCached)
-        #expect(!third.isCached)
+        #expect(!second.isAvailableOffline)
+        #expect(!third.isAvailableOffline)
+    }
+
+    @Test
+    func offlineDownloadContinuesAfterSingleChapterFailure() async throws {
+        let failedURL = try #require(URL(string: "https://example.com/book/offline-failure/2.html"))
+        let succeedingURL = try #require(URL(string: "https://example.com/book/offline-failure/3.html"))
+        let loader = MockHTMLLoader(documents: [
+            succeedingURL: genericCataloglessChapter(title: "第3章 成功", body: "失败章节之后仍成功下载")
+        ])
+        let (store, _, _) = try makeOfflineStore(
+            loader: loader,
+            chapterURLs: [failedURL, succeedingURL]
+        )
+
+        store.downloadEntireBook()
+        try await waitForOfflineDownload(store)
+
+        #expect(loader.requestedURLs == [failedURL, succeedingURL])
+        #expect(store.offlineDownloads.failedCount == 1)
+        #expect(store.offlineDownloads.completedCount == store.offlineDownloads.totalCount)
+        let downloadedChapter = store.sortedChapters[2]
+        #expect(try await store.offlineDownloads.loadPersistedBody(chapterID: downloadedChapter.id) != nil)
+
+        store.selectChapter(downloadedChapter.id)
+        await store.ensureSelectedChapterLoaded()
+        #expect(downloadedChapter.isCached)
+        #expect(loader.requestedURLs == [failedURL, succeedingURL])
+    }
+
+    @Test
+    func offlineDownloadCancellationStopsBeforeRemainingChapters() async throws {
+        let urls = try (1...4).map { index in
+            try #require(URL(string: "https://example.com/book/offline-cancel/\(index).html"))
+        }
+        let documents = Dictionary(uniqueKeysWithValues: urls.map { url in
+            (url, genericCataloglessChapter(title: "取消测试", body: "用于验证取消传播的正文"))
+        })
+        let loader = MockHTMLLoader(documents: documents, delay: .milliseconds(200))
+        let (store, _, _) = try makeOfflineStore(loader: loader, chapterURLs: urls)
+
+        store.downloadEntireBook()
+        try await Task.sleep(for: .milliseconds(30))
+        store.cancelOfflineDownload()
+        try await waitForOfflineDownload(store)
+
+        #expect(loader.requestedURLs.count == 1)
+        #expect(store.offlineDownloads.completedCount < store.offlineDownloads.totalCount)
     }
 }
 
@@ -786,12 +906,117 @@ private func waitForOfflineDownload(_ store: LibraryStore) async throws {
 private func genericCataloglessChapter(
     title: String,
     bookTitle: String = "",
-    body: String
+    body: String,
+    nextURL: URL? = nil
 ) -> String {
     """
     <meta name="author" content="测试作者">
     <title>\(title)_\(bookTitle)</title>
+    \(nextURL.map { "<a rel=\"next\" href=\"\($0.absoluteString)\">下一章</a>" } ?? "")
     <h1>\(title)</h1>
     <article><p>\(body)的自造测试正文用于验证无目录书籍身份。这里继续补充足够的内容，使通用解析器可以确认这是章节而不是导航区域。所有文字均为测试用途，不包含第三方小说内容。</p><p>第二段继续说明，这两个章节地址共享同一个书籍级父路径，因此导入协调器必须产生完全一致的 sourceBookURL。这样既不会使用当前章节地址作为身份，也不会在第二次导入时创建重复书籍。</p></article>
     """
+}
+
+@MainActor
+private func makeTailProbeStore(
+    loader: MockHTMLLoader,
+    tailURL: URL
+) throws -> (LibraryStore, Chapter, ModelContext) {
+    let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+    let context = container.mainContext
+    context.autosaveEnabled = false
+    let book = Book(
+        title: "尾章探测测试",
+        author: "测试作者",
+        sourceHost: tailURL.host ?? "",
+        catalogURL: "https://example.com/book/tail/",
+        hasCatalog: true
+    )
+    let chapter = Chapter(
+        sourceURL: tailURL.absoluteString,
+        title: "第1章 尾章",
+        sortIndex: 1,
+        bodyText: "本地缓存的尾章正文",
+        cachedAt: .now,
+        book: book
+    )
+    book.chapters = [chapter]
+    book.currentChapterID = chapter.id
+    context.insert(book)
+    context.insert(chapter)
+    try context.save()
+    let store = LibraryStore(modelContext: context, coordinator: NovelImportCoordinator(loader: loader))
+    store.restoreSelection(bookID: book.id, chapterID: chapter.id)
+    return (store, chapter, context)
+}
+
+@MainActor
+private func makeOfflineStore(
+    loader: MockHTMLLoader,
+    chapterURLs: [URL]
+) throws -> (LibraryStore, Book, ModelContext) {
+    let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+    let context = container.mainContext
+    context.autosaveEnabled = false
+    let book = Book(
+        title: "离线批量测试",
+        author: "测试作者",
+        sourceHost: "example.com",
+        catalogURL: "https://example.com/book/offline-batch/",
+        hasCatalog: true
+    )
+    let current = Chapter(
+        sourceURL: "https://example.com/book/offline-batch/current.html",
+        title: "当前章",
+        sortIndex: 0,
+        bodyText: "当前章已缓存",
+        cachedAt: .now,
+        book: book
+    )
+    let chapters = chapterURLs.enumerated().map { index, url in
+        Chapter(sourceURL: url.absoluteString, title: "第\(index + 1)章", sortIndex: index + 1, book: book)
+    }
+    book.chapters = [current] + chapters
+    book.currentChapterID = current.id
+    context.insert(book)
+    context.insert(current)
+    for chapter in chapters { context.insert(chapter) }
+    try context.save()
+    let store = LibraryStore(modelContext: context, coordinator: NovelImportCoordinator(loader: loader))
+    store.restoreSelection(bookID: book.id, chapterID: current.id)
+    return (store, book, context)
+}
+
+@MainActor
+private func waitForContinuationStatus(
+    _ expected: ReaderContinuationStatus,
+    after chapterID: UUID,
+    in store: LibraryStore
+) async throws {
+    for _ in 0..<200 {
+        if store.continuationStatus(after: chapterID) == expected { return }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    Issue.record("等待连续阅读状态 \(expected) 超时")
+}
+
+@MainActor
+private func waitForOfflineCacheDeletion(_ chapters: [Chapter]) async throws {
+    for _ in 0..<100 {
+        if chapters.allSatisfy({ !$0.isAvailableOffline }) { return }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    Issue.record("等待离线缓存删除超时")
+}
+
+@MainActor
+private func waitForRequestCount(_ expected: Int, in loader: MockHTMLLoader) async throws {
+    for _ in 0..<100 {
+        if loader.requestedURLs.count == expected { return }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    Issue.record("等待请求次数达到 \(expected) 超时")
 }

@@ -62,6 +62,10 @@ final class Chapter {
         return !bodyText.isEmpty
     }
 
+    var isAvailableOffline: Bool {
+        cachedAt != nil
+    }
+
     private static func normalizedBodyText(_ bodyText: String) -> String {
         bodyText
             .split(separator: "\n", omittingEmptySubsequences: true)
