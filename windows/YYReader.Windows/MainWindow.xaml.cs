@@ -75,8 +75,23 @@ public sealed partial class MainWindow : Window
     private async Task InitializeStoreAsync()
     {
         await _store.InitializeAsync();
-        await _folderSyncService.InitializeAsync();
         _libraryPage.RefreshView();
+        // Cloud-backed folders can block inside ordinary file-system calls while their
+        // provider is reconnecting. The library must become usable without waiting for sync.
+        _ = InitializeFolderSyncAsync();
+    }
+
+    private async Task InitializeFolderSyncAsync()
+    {
+        try
+        {
+            await _folderSyncService.InitializeAsync();
+        }
+        catch
+        {
+            // FolderSyncService reports recoverable errors through its state. Startup and
+            // local reading remain available even if the selected folder is offline.
+        }
     }
 
     private void OpenBookRequested(object? sender, BookRequestedEventArgs args)
