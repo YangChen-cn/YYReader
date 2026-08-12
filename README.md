@@ -24,6 +24,36 @@
 
 > macOS 版本使用 ad-hoc 签名且尚未经过 Apple 公证，首次启动时可能需要在 Finder 中右键 YYReader 并选择“打开”。Windows 安装程序尚未使用商业代码签名，SmartScreen 可能提示“未知发布者”。
 
+## 界面预览
+
+YYReader 在 macOS 与 Windows 上分别使用 SwiftUI 和 WinUI 3 构建，保留各自平台熟悉的窗口、目录与设置体验；网页只负责提供内容，正文始终由原生控件渲染。
+
+<h3 align="center">macOS</h3>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/yyreader-macos-library.png" alt="YYReader macOS 书架、章节目录与正文阅读界面"></td>
+    <td width="50%"><img src="docs/images/yyreader-macos-reading-settings.png" alt="YYReader macOS 沉浸阅读与阅读设置界面"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>三栏书架、目录与原生正文阅读</sub></td>
+    <td align="center"><sub>沉浸阅读、主题、字体与版式调节</sub></td>
+  </tr>
+</table>
+
+<h3 align="center">Windows</h3>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/yyreader-windows-library.png" alt="YYReader Windows 章节目录与正文阅读界面"></td>
+    <td width="50%"><img src="docs/images/yyreader-windows-reading-settings.png" alt="YYReader Windows 沉浸阅读与阅读设置界面"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>可收起目录、章节状态与连续阅读</sub></td>
+    <td align="center"><sub>主题、字体、行距、宽度与缩进设置</sub></td>
+  </tr>
+</table>
+
 ## 为什么选择 YYReader
 
 | 原生阅读 | 本地优先 | 连续沉浸 | 跨端同步 |
