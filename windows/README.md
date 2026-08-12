@@ -39,12 +39,12 @@ windows/YYReader.Windows/bin/Debug/net8.0-windows10.0.26100.0/win-x64/
 .\windows\scripts\package-release.ps1
 ```
 
-脚本会运行 Release 测试并生成包含 .NET 8 和 Windows App Runtime 的完整自包含 Setup.exe。Windows App SDK 只引用 YYReader 实际使用的 WinUI、Foundation、InteractiveExperiences 和 Runtime 组件，不携带未使用的 AI/ML、ONNX Runtime 或 DirectML。
+脚本会先删除 Windows 各项目之前生成的 Debug/Release `bin`、`obj` 及 `dist/windows` 中的旧应用包，再运行 Release 测试并生成包含 .NET 8 和 Windows App Runtime 的完整自包含 Setup.exe。结束时再次删除 `bin`、`obj` 和解包后的临时应用，只保留最终安装包。Windows App SDK 只引用 YYReader 实际使用的 WinUI、Foundation、InteractiveExperiences 和 Runtime 组件，不携带未使用的 AI/ML、ONNX Runtime 或 DirectML。
 
 输出位于：
 
 ```text
-dist/windows/YYReader-Setup-x64-1.2.0.exe
+dist/windows/YYReader-Setup-x64-1.2.1.exe
 ```
 
 `Setup.exe` 无需目标电脑预装 .NET 或 Windows App Runtime，也不会在安装或启动时联网下载运行库。
@@ -58,7 +58,7 @@ dist/windows/YYReader-Setup-x64-1.2.0.exe
 需要临时指定其他版本号时：
 
 ```powershell
-.\windows\scripts\package-release.ps1 -Version 1.2.0
+.\windows\scripts\package-release.ps1 -Version 1.2.1
 ```
 
 安装程序和应用都使用 `YYReader.Windows/Assets/AppIcon.ico`。安装向导使用仓库内固定的 Inno Setup 官方源码仓库 `ChineseSimplified.isl` 简体中文语言文件，更新来源为 <https://github.com/jrsoftware/issrc/blob/main/Files/Languages/ChineseSimplified.isl>。

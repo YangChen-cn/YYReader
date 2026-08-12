@@ -272,7 +272,7 @@ public sealed class PersistenceTests
     }
 
     [TestMethod]
-    public async Task SyncKeepsUnknownMacChapterAndRequestsCatalogRefresh()
+    public async Task SyncKeepsUnknownMacChapterWithoutRequestingNetworkCatalogRefresh()
     {
         var path = Path.Combine(Path.GetTempPath(), $"yyreader-sync-sparse-{Guid.NewGuid():N}.db");
         try
@@ -306,7 +306,10 @@ public sealed class PersistenceTests
 
             var snapshot = await repository.BuildSyncSnapshotAsync("windows");
             Assert.AreEqual(chapter400.AbsoluteUri, snapshot.Books.Single().CurrentChapterUrl);
-            CollectionAssert.Contains(result.CatalogRefreshSourceUrls.ToList(), book.SourceBookUrl);
+            Assert.IsTrue(result.Changed);
+            var reloaded = (await repository.GetBooksAsync()).Single();
+            Assert.AreEqual(chapter400.AbsoluteUri, reloaded.CurrentChapterUrl);
+            Assert.IsTrue(reloaded.Chapters.Any(chapter => chapter.SourceUrl == chapter400.AbsoluteUri));
         }
         finally
         {

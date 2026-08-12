@@ -83,14 +83,14 @@ struct AboutSettingsView: View {
             Text("最新改进")
                 .font(.headline)
 
-            GroupBox("版本 1.2.0") {
+            GroupBox("版本 1.2.1") {
                 VStack(alignment: .leading, spacing: 10) {
-                    Label("云盘或 NAS 不可用时不再阻塞启动，本地书架和阅读始终可用。", systemImage: "bolt.shield")
-                    Label("本地进度只发布 Mac 快照，不读取 Windows 文件，不干扰当前阅读。", systemImage: "arrow.up.doc")
-                    Label("对端文件仅在成功读取并合并后确认，失败时保留重试机会。", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
-                    Label("远端删除不会打断正在阅读的书籍，退出阅读后再安全刷新。", systemImage: "checkmark.shield")
-                    Label("修复同步引起的跳章、滚动错位与后台监听崩溃。", systemImage: "checkmark.circle")
-                    Label("修复无目录小说连续阅读到章末时可能闪退的问题。", systemImage: "book.pages")
+                    Label("新增跨平台文件夹同步与书架导入导出，只交换元数据和阅读位置。", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
+                    Label("云盘或 NAS 不可用时不阻塞启动，同步失败会保留安全重试机会。", systemImage: "bolt.shield")
+                    Label("目录尾章会轻量检查网站新章节，确认最新或失败重试均有明确状态。", systemImage: "book.pages")
+                    Label("下一章加载完成后仍等待滚动事务结束再挂接，保持正文位置稳定。", systemImage: "scroll")
+                    Label("整书离线下载逐章持久化，支持取消、失败续传并降低正文内存压力。", systemImage: "externaldrive")
+                    Label("本地同步发布缓存章节序号，减少阅读进度保存时的主线程扫描。", systemImage: "memorychip")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }

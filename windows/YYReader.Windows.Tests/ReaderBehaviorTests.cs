@@ -35,12 +35,36 @@ public sealed class ReaderBehaviorTests
         var third = NewChapter("https://example.com/3.html", "第三段");
 
         session.Reset(first);
+        Assert.AreSame(first, session.LastChapter);
         Assert.IsFalse(first.IsCached, "连续会话解析段落后应释放聚合正文字符串");
         CollectionAssert.AreEqual(new[] { "第一段" }, session.Entries[0].Paragraphs.ToArray());
         Assert.IsTrue(session.AttachNext(second));
         Assert.IsTrue(session.AttachNext(third));
+        Assert.AreSame(third, session.LastChapter,
+            "查找连续阅读后继必须从 session 尾部开始，不能依赖可能滞后的可见章节");
         Assert.AreEqual(3, session.Entries.Count);
         Assert.IsFalse(session.AttachNext(second));
+    }
+
+    [TestMethod]
+    public void RestorePositionUsesSessionParagraphCountAfterBodyTextIsReleased()
+    {
+        var chapter = NewChapter(
+            "https://example.com/1.html",
+            string.Join("\n\n", Enumerable.Range(0, 12).Select(index => $"第{index}段")));
+        chapter.ApplyProgress(7, 12, DateTimeOffset.UtcNow);
+        var session = new ContinuousReaderSession();
+
+        session.Reset(chapter);
+
+        Assert.IsFalse(chapter.IsCached, "session 创建后应继续释放 BodyText");
+        Assert.AreEqual(0, chapter.Paragraphs.Count);
+        var paragraphCount = session.ParagraphCount(chapter.SourceUrl);
+        Assert.AreEqual(12, paragraphCount);
+        Assert.AreEqual(7, ReaderPosition.RestoreParagraphIndex(
+            chapter.ParagraphIndex,
+            chapter.Progress,
+            paragraphCount));
     }
 
     [TestMethod]
@@ -58,19 +82,28 @@ public sealed class ReaderBehaviorTests
         Assert.IsFalse(ReaderPageScroll.ShouldLoadNext(6_000, 8_000, 800));
         Assert.IsTrue(ReaderPageScroll.ShouldLoadNext(7_100, 8_000, 800));
         Assert.IsTrue(ReaderPageScroll.ShouldLoadNext(8_000, 8_000, 800));
+        Assert.IsFalse(ReaderPageScroll.ShouldRearmNextLoad(7_000, 8_100, 800),
+            "加载边界自身的微小高度变化不能重新武装自动加载");
+        Assert.IsTrue(ReaderPageScroll.ShouldRearmNextLoad(5_000, 8_100, 800));
     }
 
     [TestMethod]
-    public void ContinuousFailedLoadCanRetryAfterCooldownOrImmediatelyByUser()
+    public void ContinuousFailedLoadRetriesOnlyAfterLeavingNearEndOrImmediatelyByUser()
     {
         var state = new ReaderContinuousLoadState(TimeSpan.FromSeconds(4));
         var now = DateTimeOffset.Parse("2026-08-12T00:00:00Z");
 
+        state.ObserveNearEnd("https://example.com/1.html", isNearEnd: true);
         Assert.IsTrue(state.TryBegin("https://example.com/1.html", now));
         state.MarkFailed(now);
         Assert.IsFalse(state.TryBegin("https://example.com/1.html", now.AddSeconds(2)));
         Assert.IsTrue(state.TryBegin("https://example.com/1.html", now.AddSeconds(2), explicitRetry: true));
         state.MarkFailed(now.AddSeconds(2));
+
+        Assert.IsFalse(state.TryBegin("https://example.com/1.html", now.AddSeconds(7)),
+            "停留在章末时不能因布局/ViewChanged 反复自动重试");
+        state.ObserveNearEnd("https://example.com/1.html", isNearEnd: false);
+        state.ObserveNearEnd("https://example.com/1.html", isNearEnd: true);
         Assert.IsTrue(state.TryBegin("https://example.com/1.html", now.AddSeconds(7)));
     }
 

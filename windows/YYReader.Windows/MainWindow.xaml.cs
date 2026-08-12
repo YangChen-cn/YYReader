@@ -24,7 +24,6 @@ public sealed partial class MainWindow : Window
     private TaskCompletionSource<bool>? _verificationCompletion;
     private bool _closeReady;
     private bool _syncReloadPending;
-    private readonly HashSet<string> _pendingCatalogRefreshSources = new(StringComparer.Ordinal);
     private RectInt32[] _titleBarPassthroughRects = [];
 
     public MainWindow()
@@ -75,8 +74,23 @@ public sealed partial class MainWindow : Window
     private async Task InitializeStoreAsync()
     {
         await _store.InitializeAsync();
-        await _folderSyncService.InitializeAsync();
         _libraryPage.RefreshView();
+        // Cloud-backed folders can block inside ordinary file-system calls while their
+        // provider is reconnecting. The library must become usable without waiting for sync.
+        _ = InitializeFolderSyncAsync();
+    }
+
+    private async Task InitializeFolderSyncAsync()
+    {
+        try
+        {
+            await _folderSyncService.InitializeAsync();
+        }
+        catch
+        {
+            // FolderSyncService reports recoverable errors through its state. Startup and
+            // local reading remain available even if the selected folder is offline.
+        }
     }
 
     private void OpenBookRequested(object? sender, BookRequestedEventArgs args)
@@ -90,13 +104,11 @@ public sealed partial class MainWindow : Window
         if (_syncReloadPending) _ = RefreshLibraryAfterSyncAsync();
     }
 
-    private async Task RemoteSyncAppliedAsync(IReadOnlyList<string> catalogRefreshSources)
+    private async Task RemoteSyncAppliedAsync()
     {
-        foreach (var source in catalogRefreshSources) _pendingCatalogRefreshSources.Add(source);
         if (ReferenceEquals(ContentFrame.Content, _libraryPage))
         {
             await _store.ReloadAsync();
-            await RefreshPendingSyncedCatalogsAsync();
             _libraryPage.RefreshView();
         }
         else
@@ -112,19 +124,7 @@ public sealed partial class MainWindow : Window
         _syncReloadPending = false;
         await _store.FlushPendingProgressAsync();
         await _store.ReloadAsync();
-        await RefreshPendingSyncedCatalogsAsync();
         _libraryPage.RefreshView();
-    }
-
-    private async Task RefreshPendingSyncedCatalogsAsync()
-    {
-        foreach (var source in _pendingCatalogRefreshSources.ToArray())
-        {
-            if (await _store.RefreshCatalogForSourceAsync(source))
-            {
-                _pendingCatalogRefreshSources.Remove(source);
-            }
-        }
     }
 
     private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)

@@ -504,35 +504,9 @@ public sealed class SqliteLibraryRepository
                 StringComparer.Ordinal),
             StringComparer.Ordinal);
         var normalizedRemote = SyncMergePlanner.Merge([], remote.Books, chapterRanks);
-        var refreshSources = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var remoteBook in normalizedRemote)
-        {
-            if (remoteBook.DeletedAt is not null
-                || string.IsNullOrWhiteSpace(remoteBook.CurrentChapterUrl)) continue;
-            var localBook = storedBooks.FirstOrDefault(book => book.SourceBookUrl == remoteBook.CanonicalSourceUrl);
-            if (localBook is null || !localBook.HasCatalog) continue;
-            // An initial URL import intentionally stores only the first catalog page. When a
-            // paired device knows this book, complete small catalogs in the background so a
-            // synced position is not stranded behind that first page.
-            if (localBook.Chapters.Count <= 50)
-            {
-                refreshSources.Add(remoteBook.CanonicalSourceUrl);
-            }
-            var remoteChapterUrl = UrlCanonicalizer.CanonicalizeChapter(remoteBook.CurrentChapterUrl).AbsoluteUri;
-            var remoteChapter = localBook.Chapters.FirstOrDefault(chapter => chapter.SourceUrl == remoteChapterUrl);
-            var remoteIsPlaceholder = remoteChapter is not null
-                && remoteChapter.SortIndex == 1
-                && !remoteChapter.IsAvailableOffline
-                && (remoteChapter.Title == localBook.Title || remoteChapter.Title == "当前章节");
-            if (remoteChapter is null || remoteIsPlaceholder)
-            {
-                refreshSources.Add(remoteBook.CanonicalSourceUrl);
-            }
-        }
-
         var merged = SyncMergePlanner.Merge(local.Books, normalizedRemote, chapterRanks);
         var normalizedLocal = SyncMergePlanner.Merge(local.Books, [], chapterRanks);
-        if (normalizedLocal.SequenceEqual(merged)) return new SyncApplicationResult(false, refreshSources.ToArray());
+        if (normalizedLocal.SequenceEqual(merged)) return SyncApplicationResult.None;
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction();
         foreach (var entry in merged)
@@ -599,7 +573,7 @@ public sealed class SqliteLibraryRepository
             }
         }
         transaction.Commit();
-        return new SyncApplicationResult(true, refreshSources.ToArray());
+        return new SyncApplicationResult(true);
     }
 
     private async Task<SqliteConnection> OpenAsync(CancellationToken cancellationToken)

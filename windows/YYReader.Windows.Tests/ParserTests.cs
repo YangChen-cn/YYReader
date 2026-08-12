@@ -142,6 +142,21 @@ public sealed class ParserTests
         Assert.AreEqual(12, loader.BrowserPreferredHosts.Count);
     }
 
+    [TestMethod]
+    public async Task HybridLoaderFallsBackToBrowserForPlainHttp403()
+    {
+        var staticLoader = new ThrowingHtmlLoader(
+            new HtmlLoadException(HtmlLoadErrorKind.HttpStatus, statusCode: 403));
+        var browserLoader = new ConstantRenderedLoader();
+        var loader = new HybridHtmlLoader(staticLoader, browserLoader);
+        var url = new Uri("https://example.com/book/101.html");
+
+        var result = await loader.LoadAsync(url);
+
+        Assert.AreEqual(HtmlRetrievalKind.WebView2, result.RetrievalKind);
+        CollectionAssert.Contains(loader.BrowserPreferredHosts.ToList(), url.DnsSafeHost);
+    }
+
     private static string ReadFixture(string name) =>
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", $"{name}.html"));
 
@@ -163,6 +178,16 @@ public sealed class ParserTests
             }
             return Task.FromResult(new LoadedHtml(url, url, html, HtmlRetrievalKind.UrlSession));
         }
+    }
+
+    private sealed class ThrowingHtmlLoader(Exception exception) : IHtmlDocumentLoader
+    {
+        public void BeginOperation()
+        {
+        }
+
+        public Task<LoadedHtml> LoadAsync(Uri url, CancellationToken cancellationToken = default) =>
+            Task.FromException<LoadedHtml>(exception);
     }
 
     private sealed class TransientCatalogLoader(Uri first, Uri second, bool failSecondPageOnce) : IHtmlDocumentLoader

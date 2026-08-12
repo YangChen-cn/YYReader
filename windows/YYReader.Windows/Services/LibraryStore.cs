@@ -18,6 +18,8 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
     private CancellationTokenSource? _prefetchCancellation;
     private CancellationTokenSource? _catalogRefreshCancellation;
     private readonly SemaphoreSlim _catalogRefreshGate = new(1, 1);
+    private Task<bool>? _catalogRefreshTask;
+    private string? _catalogRefreshBookId;
     private Task? _prefetchTask;
     private string? _prefetchTargetUrl;
     private PendingProgress? _pendingProgress;
@@ -221,29 +223,100 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         BooksChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public async Task<Chapter?> PrepareNextChapterAsync(CancellationToken cancellationToken = default)
+    public Task<NextChapterPreparationResult> PrepareNextChapterAsync(CancellationToken cancellationToken = default) =>
+        PrepareNextChapterAsync(explicitRetry: false, onStatusChanged: null, cancellationToken);
+
+    public async Task<NextChapterPreparationResult> PrepareNextChapterAsync(
+        bool explicitRetry,
+        Action<NextChapterPreparationStatus>? onStatusChanged = null,
+        CancellationToken cancellationToken = default)
     {
-        if (SelectedBook is null || SelectedChapter is null)
+        onStatusChanged?.Invoke(NextChapterPreparationStatus.LoadingNext);
+        if (SelectedBook is not { } book)
         {
-            return null;
+            return FailedNextChapter(onStatusChanged);
         }
 
-        var next = Neighbor(SelectedBook, SelectedChapter, 1);
+        // Continuous reading may already have attached chapters below the currently visible
+        // chapter. Progress sampling is debounced, so SelectedChapter can legitimately lag
+        // behind the session tail while the user scrolls quickly.
+        var lastLoadedChapter = ReaderSession.LastChapter ?? SelectedChapter;
+        if (lastLoadedChapter is null)
+        {
+            return FailedNextChapter(onStatusChanged);
+        }
+
+        var next = LocalNeighbor(book, lastLoadedChapter, 1);
 
         if (next is null)
         {
-            return null;
+            onStatusChanged?.Invoke(NextChapterPreparationStatus.CheckingLatest);
+            try
+            {
+                next = await ProbeNextChapterAsync(book, lastLoadedChapter, cancellationToken).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                return FailedNextChapter(onStatusChanged, ex.Message);
+            }
+
+            if (next is null)
+            {
+                onStatusChanged?.Invoke(NextChapterPreparationStatus.ConfirmedLatest);
+                return new NextChapterPreparationResult(NextChapterPreparationStatus.ConfirmedLatest);
+            }
         }
         if (!next.IsCached)
         {
-            await LoadChapterIntoMemoryAsync(next, cancellationToken).ConfigureAwait(true);
+            try
+            {
+                // The chapter-end workflow is already serialized. Do not route this through
+                // RunBusyAsync: its busy guard may skip a newly discovered successor, and
+                // its exception handling hides browser-verification failures.
+                await LoadChapterCoreAsync(book, next, cancellationToken).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                return FailedNextChapter(onStatusChanged, ex.Message, next);
+            }
         }
         if (!next.IsCached)
         {
-            return null;
+            return FailedNextChapter(onStatusChanged, "下一章加载失败");
         }
-        ReaderSession.AttachNext(next);
-        return next;
+        onStatusChanged?.Invoke(NextChapterPreparationStatus.Ready);
+        return new NextChapterPreparationResult(NextChapterPreparationStatus.Ready, next);
+    }
+
+    public bool AttachPreparedNextChapter(string expectedTailUrl, Chapter chapter)
+    {
+        return ReaderSession.LastChapter?.SourceUrl == expectedTailUrl
+            && ReaderSession.AttachNext(chapter);
+    }
+
+    private async Task<Chapter?> ProbeNextChapterAsync(
+        Book book,
+        Chapter chapter,
+        CancellationToken cancellationToken)
+    {
+        // A catalog may span hundreds of pages. Match the macOS reader by refreshing only
+        // the session tail chapter and following its authoritative next-chapter link.
+        var result = await _coordinator.LoadChapterContentAsync(
+            new Uri(chapter.SourceUrl),
+            cancellationToken).ConfigureAwait(true);
+        chapter.Title = result.Title;
+        chapter.PreviousUrl = result.PreviousChapterUrl?.AbsoluteUri;
+        chapter.NextUrl = result.NextChapterUrl?.AbsoluteUri;
+        await _repository.SaveChapterAsync(book.Id, result, chapter.SortIndex, cancellationToken).ConfigureAwait(true);
+        return Neighbor(book, chapter, 1);
     }
 
     public async Task<Chapter?> NavigateChapterAsync(int offset, CancellationToken cancellationToken = default)
@@ -366,12 +439,43 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
             return false;
         }
 
-        _catalogRefreshCancellation?.Cancel();
+        if (_catalogRefreshTask is { } activeTask)
+        {
+            if (_catalogRefreshBookId == book.Id)
+            {
+                return await activeTask.WaitAsync(cancellationToken).ConfigureAwait(true);
+            }
+
+            await activeTask.WaitAsync(cancellationToken).ConfigureAwait(true);
+        }
+
         var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _catalogRefreshCancellation = linkedCancellation;
+        var refreshTask = RefreshCatalogCoreAsync(book, catalogUrl, linkedCancellation);
+        _catalogRefreshTask = refreshTask;
+        _catalogRefreshBookId = book.Id;
+        try
+        {
+            return await refreshTask.WaitAsync(cancellationToken).ConfigureAwait(true);
+        }
+        finally
+        {
+            if (ReferenceEquals(_catalogRefreshTask, refreshTask))
+            {
+                _catalogRefreshTask = null;
+                _catalogRefreshBookId = null;
+            }
+        }
+    }
+
+    private async Task<bool> RefreshCatalogCoreAsync(
+        Book book,
+        Uri catalogUrl,
+        CancellationTokenSource linkedCancellation)
+    {
         var succeeded = false;
         var uiContext = SynchronizationContext.Current;
         var gateEntered = false;
+        _catalogRefreshCancellation = linkedCancellation;
         try
         {
             await _catalogRefreshGate.WaitAsync(linkedCancellation.Token).ConfigureAwait(true);
@@ -536,6 +640,27 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
             : null;
     }
 
+    private static Chapter? LocalNeighbor(Book book, Chapter chapter, int offset)
+    {
+        var linkedUrl = offset > 0 ? chapter.NextUrl : chapter.PreviousUrl;
+        if (!string.IsNullOrWhiteSpace(linkedUrl))
+        {
+            var canonical = UrlCanonicalizer.CanonicalizeChapter(linkedUrl).AbsoluteUri;
+            var linked = book.Chapters.FirstOrDefault(candidate => candidate.SourceUrl == canonical);
+            if (linked is not null)
+            {
+                return linked;
+            }
+        }
+
+        var ordered = book.Chapters.OrderBy(candidate => candidate.SortIndex).ToArray();
+        var index = Array.FindIndex(ordered, candidate => candidate.SourceUrl == chapter.SourceUrl);
+        var targetIndex = index + offset;
+        return index >= 0 && targetIndex >= 0 && targetIndex < ordered.Length
+            ? ordered[targetIndex]
+            : null;
+    }
+
     private void CancelPrefetch()
     {
         _prefetchCancellation?.Cancel();
@@ -638,6 +763,15 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         _catalogRefreshCancellation?.Dispose();
         await FlushPendingProgressAsync().ConfigureAwait(true);
         _progressSaveCancellation?.Dispose();
+    }
+
+    private static NextChapterPreparationResult FailedNextChapter(
+        Action<NextChapterPreparationStatus>? onStatusChanged,
+        string message = "下一章加载失败",
+        Chapter? chapter = null)
+    {
+        onStatusChanged?.Invoke(NextChapterPreparationStatus.Failed);
+        return new NextChapterPreparationResult(NextChapterPreparationStatus.Failed, chapter, message);
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>

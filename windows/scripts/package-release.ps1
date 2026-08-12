@@ -15,6 +15,14 @@ $releaseBuildDirectory = Join-Path $repositoryRoot "windows\YYReader.Windows\bin
 $outputDirectory = Join-Path $repositoryRoot "dist\windows"
 $fullRootDirectory = Join-Path $outputDirectory "full"
 $fullAppDirectory = Join-Path $fullRootDirectory "YYReader"
+$generatedBuildDirectories = @(
+    (Join-Path $repositoryRoot "windows\YYReader.Windows\bin"),
+    (Join-Path $repositoryRoot "windows\YYReader.Windows\obj"),
+    (Join-Path $repositoryRoot "windows\YYReader.Windows.Core\bin"),
+    (Join-Path $repositoryRoot "windows\YYReader.Windows.Core\obj"),
+    (Join-Path $repositoryRoot "windows\YYReader.Windows.Tests\bin"),
+    (Join-Path $repositoryRoot "windows\YYReader.Windows.Tests\obj")
+)
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $versionLine = Select-String -LiteralPath $projectPath -Pattern '<Version>([^<]+)</Version>' | Select-Object -First 1
@@ -29,7 +37,6 @@ if ($Version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
 }
 
 $installerPath = Join-Path $outputDirectory "YYReader-Setup-x64-$Version.exe"
-$legacyFullArchivePath = Join-Path $outputDirectory "YYReader-Windows-x64-$Version-Full.zip"
 $innoCandidates = @(
     (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
     (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe")
@@ -52,6 +59,28 @@ function Remove-ReleasePath {
     if (Test-Path -LiteralPath $resolvedTarget) {
         Remove-Item -LiteralPath $resolvedTarget -Recurse -Force
     }
+}
+
+function Remove-GeneratedBuildPath {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $resolvedTarget = [System.IO.Path]::GetFullPath($Path)
+    $allowedTargets = $generatedBuildDirectories | ForEach-Object { [System.IO.Path]::GetFullPath($_) }
+    if ($resolvedTarget -notin $allowedTargets) {
+        throw "Refusing to clean an unexpected build path: $resolvedTarget"
+    }
+
+    if (Test-Path -LiteralPath $resolvedTarget) {
+        Remove-Item -LiteralPath $resolvedTarget -Recurse -Force
+    }
+}
+
+function Clear-PreviousBuildOutputs {
+    Write-Host "[1/4] Removing previous Debug, Release and packaged app outputs..." -ForegroundColor Cyan
+    foreach ($directory in $generatedBuildDirectories) {
+        Remove-GeneratedBuildPath -Path $directory
+    }
+    Remove-ReleasePath -Path $outputDirectory
 }
 
 function Copy-WinUIResources {
@@ -127,18 +156,17 @@ function Invoke-AppPublish {
 
 Push-Location $repositoryRoot
 try {
-    # Full.zip is no longer a release artifact; remove a stale archive from earlier builds.
-    Remove-ReleasePath -Path $legacyFullArchivePath
+    Clear-PreviousBuildOutputs
 
     if (-not $SkipTests) {
-        Write-Host "[1/3] Running Windows Release tests..." -ForegroundColor Cyan
+        Write-Host "[2/4] Running Windows Release tests..." -ForegroundColor Cyan
         & dotnet test $testProjectPath --configuration Release
         if ($LASTEXITCODE -ne 0) { throw "Release tests failed." }
     } else {
-        Write-Host "[1/3] Tests skipped." -ForegroundColor Yellow
+        Write-Host "[2/4] Tests skipped." -ForegroundColor Yellow
     }
 
-    Write-Host "[2/3] Publishing full self-contained x64 app..." -ForegroundColor Cyan
+    Write-Host "[3/4] Publishing full self-contained x64 app..." -ForegroundColor Cyan
     Remove-ReleasePath -Path $fullRootDirectory
     New-Item -ItemType Directory -Path $fullAppDirectory -Force | Out-Null
     Invoke-AppPublish -SelfContained $true -Destination $fullAppDirectory
@@ -148,7 +176,7 @@ try {
         }
     }
 
-    Write-Host "[3/3] Compiling the full self-contained installer..." -ForegroundColor Cyan
+    Write-Host "[4/4] Compiling the full self-contained installer..." -ForegroundColor Cyan
     New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
     Remove-ReleasePath -Path $installerPath
     & $innoCompiler `
@@ -165,5 +193,10 @@ try {
     Write-Host "Full self-contained installer: $installerPath ($installerSizeMb MB)" -ForegroundColor Green
     Remove-ReleasePath -Path $fullRootDirectory
 } finally {
+    # Keep only the finished installer. All build trees and the unpacked app are reproducible.
+    foreach ($directory in $generatedBuildDirectories) {
+        Remove-GeneratedBuildPath -Path $directory
+    }
+    Remove-ReleasePath -Path $fullRootDirectory
     Pop-Location
 }

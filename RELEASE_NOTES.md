@@ -1,39 +1,82 @@
-# YYReader 1.2.0
+# YYReader 1.2.1
 
-YYReader 1.2.0 同时提供原生 macOS 与 Windows 客户端，并加入可选的跨平台书架与阅读位置交换。两个客户端都保持原生正文渲染，不同步正文缓存、Cookie 或网页验证状态。
+YYReader 1.2.1 是跨平台稳定性与性能更新。Windows 版本已先行发布，本次补齐 macOS arm64 DMG；两端重点对齐文件夹同步、连续阅读尾章探测、滚动稳定性和大规模离线正文管理。
 
-## macOS 1.2.0
+## macOS 1.2.1
 
-### 文件夹同步与手动传输
+### 文件夹同步与书架传输
 
-- 新增文件夹自动同步。用户可选择 iCloud Drive、Dropbox、OneDrive、Syncthing 或其他任意共享目录，不绑定具体云盘。
-- 使用 SyncSnapshot v2 与 Windows 交换书籍元数据、章节序号和阅读位置；Mac 只写 `mac.json`、读取 `windows.json`。
-- 新增 `.yyreader`/JSON 文件及剪贴板的书架导入、导出，导入前会预览新增、已有、无效和重复条目。
-- 书籍按 canonical source URL 合并；阅读位置只允许由目录中更后的章节或同章更后的段落覆盖。
+- 新增 SyncSnapshot v2 文件夹同步。用户可选择 iCloud Drive、Dropbox、OneDrive、Syncthing、NAS 或其他共享目录；Mac 只写 `mac.json`、读取 `windows.json`。
+- 新增 `.yyreader`、JSON 文件与剪贴板书架导入导出，导入前区分新增、已有、无效和重复条目；同步与传输均不包含正文缓存、Cookie 或验证状态。
+- 云盘或 File Provider 暂不可用时先显示本地书架，同步权限恢复、文件 I/O 和失败重试不会阻塞应用启动或当前 Reader。
+- 本地阅读进度只发布 Mac 快照，不读取 Windows 文件；完整 peer merge 仅在启动、回到前台、手动同步或对端 signature 改变时执行。
+- 章节 rank map 按目录变化失效并复用，普通段落进度发布不再反复 canonicalize 全书架章节。
+- 远端 tombstone 会等当前阅读退出后再安全应用；同步失败不会清空本地书架，也不会重建当前连续阅读 session。
 
-### 同步稳定性
+### 连续阅读
 
-- 修复 iCloud Drive、OneDrive、Dropbox、NAS 或 File Provider 不可用时可能阻塞应用启动和前台恢复的问题；YYReader 会先显示本地书架并保持 Reader 可用，再在后台恢复权限和尝试同步。
-- 本地书架与阅读进度变化走独立发布路径，只构建 Mac 快照并更新 `mac.json`，不会读取或解析 `windows.json`。
-- 仅在启动、回到前台、手动同步或检测到 Windows 文件确实变化时执行完整合并。
-- Windows 文件 signature 只在读取、合并和落库全部成功后确认；读取失败后 watcher 与低频轮询仍可重试。
-- 远端 tombstone 不会立即破坏当前 Reader session；正在阅读的书会在退出阅读后再安全刷新。
-- 修复同步触发跳章、旧章节覆盖新章节、后台重复同步及目录暂不可访问时错误清空本地状态的问题。
-- 修复无完整目录的小说在连续阅读章末查询下一章时修改界面状态、导致 Reader 偶发闪退的问题。
+- 本地目录尾章缺少下一章链接时，轻量重新加载当前尾章并读取权威 `nextChapterURL`，不刷新数百页完整目录。
+- 探测到新章节后更新尾章 metadata、创建或复用下一章，并进入既有预取与挂接流程；仍无下一章时显示“已是最新章节”。
+- 最新状态使用 45 秒 TTL，避免章末上下滚动反复请求；手动“重新检查”可绕过 TTL。
+- 探测或加载失败只在章节边界显示重试，不弹阻塞式对话框，也不影响当前正文阅读。
+- `continuationStatus` 保持只读，修复 SwiftUI body 查询状态时创建模型对象导致的偶发闪退。
+- 保留滚动事务 attach gate：下一章可以提前加载，但用户滚动时不改变 entries，滚动安全结束后才追加；已滚过章节和文档顶部几何保持不变。
 
-### macOS 安装
+### 离线下载与内存
 
-- 支持 Apple 芯片 Mac，要求 macOS 15 或更高版本。
-- 下载 `YYReader-1.2.0-arm64.dmg`，打开后将 YYReader 拖入 Applications。
+- 整书下载改用轻量 chapter descriptor，非当前章通过独立 SwiftData actor/context 逐章持久化，正文按阅读需要取回。
+- 当前阅读章仍可保留正文；目录中的离线状态与当前内存是否已加载正文分离，降低上千章下载时的 Reader 内存和 MainActor 压力。
+- 单章失败累计失败数并继续后续章节；取消仍立即停止，已经成功保存的章节继续可离线阅读。
+- 删除离线缓存通过后台持久化层清除正文，同时保留当前阅读章。
+- 8 章段落 LRU 容量与内容更新失效规则保持不变。
+
+### macOS 安装与验证
+
+- 下载 `YYReader-1.2.1-arm64.dmg`，打开后将 YYReader 拖入 Applications；要求 Apple 芯片 Mac 与 macOS 15 或更高版本。
+- Release 为纯 arm64、版本 1.2.1（build 6），保留 App Sandbox 用户选择文件夹读写与出站网络权限。
+- macOS 单元与回归测试：95 项全部通过；Swift 6 严格并发构建无新增 warning/error。
 - 使用 ad-hoc 签名且未经过 Apple 公证；首次启动时可能需要在 Finder 中右键应用并选择“打开”。
 
-### macOS 验证
+## Windows 1.2.1
 
-- 全量单元与回归测试：90 项全部通过。
-- Release 为纯 arm64、版本 1.2.0（build 5），App Sandbox 保留用户选择文件夹读写和出站网络权限。
-- ad-hoc 签名、DMG 校验和、挂载后签名、应用图标、资源及便携性检查全部通过。
+### 文件夹同步
 
-## Windows 1.2.0
+- 同步目录探测、读取、写入和文件替换移出 UI 线程，应用启动和打开书籍不再等待云盘响应。
+- 增加同步恢复保护、后台看门狗和更稳健的文件发布流程，降低云盘占位文件、暂时离线或异常中断造成的卡住与回滚风险。
+- 同步只合并书籍元数据、当前章节 URL 和阅读位置；遇到本地未知章节时保存 URL 占位并按需加载，不再自动刷新数百页完整目录。
+- 云端导入或立即同步后不会重建正在阅读的正文、抢走当前章节，也不会重复启动目录刷新。
+
+### 连续阅读正确性
+
+- 本地目录到尾部时不再直接判定“已到最新章节”；阅读器会重新加载当前尾章，并通过适配器解析权威的下一章链接。
+- 启迪小说与通用站点统一使用增量尾章探测，不扫描完整目录；远端确认没有下一章后才显示“已到最新章节”。
+- 探测或验证失败显示可重试错误，不伪装成最新章节，也不会在停留章末时反复自动请求。
+- 静态请求遇到 HTTP 403 时可进入 WebView2 验证 fallback，验证后的正文仍由原生 WinUI 阅读器显示。
+
+### Reader 性能与内存
+
+- continuation 状态区保持固定高度，加载、检查、最新和失败切换不再改变正文布局，修复章末抖动和闪烁反馈环。
+- 下一章网络加载与正文 attach 分离：滚动中可以完成加载，待滚动停止后再一次性追加，保持当前可视 anchor。
+- 新 tail 会为短章节重新武装连续加载，同一 tail 不重复探测；单次 near-end visit 设置补章上限，兼顾短章衔接与请求安全。
+- 修复 `BodyText` 释放后阅读位置段落数变为 0、重新进入章节回到开头的回归；继续避免聚合正文与段落数组双份常驻。
+- 目录面板关闭时 append 章节只标记 dirty，不再排序和重新绑定完整目录；打开目录后才按需刷新。
+- 目录用小点标记已缓存或已下载正文的章节，离线状态更直观。
+
+### Windows 验证
+
+- Windows Core 单元测试：63 项全部通过。
+- Debug 与 Release 构建要求 0 warning、0 error。
+- 发布产物为自包含 x64 安装程序 `YYReader-Setup-x64-1.2.1.exe`，包含 .NET 8 与 Windows App Runtime，不包含未使用的 AI/ML、ONNX Runtime 或 DirectML 组件。
+
+### 系统要求与已知限制
+
+- x64 Windows 10 1809 或更高版本，推荐 Windows 11。
+- 安装程序尚未使用商业代码签名证书，Windows SmartScreen 可能显示“未知发布者”。
+- 不自动解决 CAPTCHA，不绕过登录、付费墙或网站访问控制；第三方网站结构变化仍可能影响解析。
+
+---
+
+# YYReader 1.2.0
 
 YYReader 1.2.0 是首个可正式分享的原生 Windows 版本。它使用 C#、.NET 8、WinUI 3、Windows App SDK 和 SQLite，延续 macOS 版“原生、简洁、流畅、适合长期阅读”的核心方向。
 

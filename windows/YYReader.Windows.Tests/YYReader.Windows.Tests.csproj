@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\YYReader.Windows.Core\YYReader.Windows.Core.csproj" />
+    <Compile Include="..\YYReader.Windows\Services\LibraryStore.cs" Link="ProductionSources\LibraryStore.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="MSTest.TestAdapter" Version="3.6.4" />
     <PackageReference Include="MSTest.TestFramework" Version="3.6.4" />

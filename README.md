@@ -5,7 +5,7 @@
   <p>粘贴章节网页，YYReader 会识别书籍、目录与正文，并以系统原生控件呈现干净的阅读界面。</p>
 
   <p>
-    <a href="https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.0"><img src="https://img.shields.io/badge/release-v1.2.0-2ea44f?style=flat-square" alt="Release v1.2.0"></a>
+    <a href="https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.1"><img src="https://img.shields.io/badge/release-v1.2.1-2ea44f?style=flat-square" alt="Release v1.2.1"></a>
     <img src="https://img.shields.io/badge/macOS-15%2B-111111?style=flat-square&logo=apple" alt="macOS 15+">
     <img src="https://img.shields.io/badge/Windows-10%201809%2B-0078D4?style=flat-square&logo=windows11" alt="Windows 10 1809+">
     <img src="https://img.shields.io/badge/Swift-6-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 6">
@@ -17,10 +17,10 @@
 
 | 平台 | 安装包 | 系统要求 |
 | --- | --- | --- |
-| **macOS** | [下载 YYReader 1.2.0 arm64 DMG](https://github.com/YangChen-cn/YYReader/releases/download/v1.2.0/YYReader-1.2.0-arm64.dmg) | Apple 芯片，macOS 15 或更高版本 |
-| **Windows** | [下载 YYReader 1.2.0 x64 安装程序](https://github.com/YangChen-cn/YYReader/releases/download/v1.2.0/YYReader-Setup-x64-1.2.0.exe) | x64 Windows 10 1809 或更高版本，推荐 Windows 11 |
+| **macOS** | [下载 YYReader 1.2.1 arm64 DMG](https://github.com/YangChen-cn/YYReader/releases/download/v1.2.1/YYReader-1.2.1-arm64.dmg) | Apple 芯片，macOS 15 或更高版本 |
+| **Windows** | [下载 YYReader 1.2.1 x64 安装程序](https://github.com/YangChen-cn/YYReader/releases/download/v1.2.1/YYReader-Setup-x64-1.2.1.exe) | x64 Windows 10 1809 或更高版本，推荐 Windows 11 |
 
-也可以前往 [YYReader 1.2.0 Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.0) 查看校验信息和完整发布说明。
+也可以前往 [YYReader 1.2.1 Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.1) 查看校验信息和完整发布说明。
 
 > macOS 版本使用 ad-hoc 签名且尚未经过 Apple 公证，首次启动时可能需要在 Finder 中右键 YYReader 并选择“打开”。Windows 安装程序尚未使用商业代码签名，SmartScreen 可能提示“未知发布者”。
 
@@ -67,6 +67,16 @@ macOS 快捷键：
 - `⌘L`：添加网页。
 - `⌘[` / `⌘]`：上一章 / 下一章。
 - 方向键：整页或小幅滚动正文。
+
+## 1.2.1 更新摘要
+
+- macOS 与 Windows 均支持非阻塞文件夹同步和手动书架传输；本地进度发布不会读取对端文件或打断当前阅读。
+- 连续阅读到本地目录尾部时会轻量重新检查当前尾章，不刷新完整目录；确认最新、检查失败和手动重试都有明确状态。
+- 下一章允许在滚动中完成网络加载，但只在滚动事务安全结束后追加，保持可视位置和文档顶部几何稳定。
+- macOS 整书离线下载逐章持久化，单章失败继续、取消保留已完成章节，并减少大量正文进入 MainActor 模型的压力。
+- Windows 进一步优化 Reader 虚拟化、短章节连续补载、目录延迟刷新、HTTP 403 验证 fallback 和离线标记。
+
+完整内容见 [YYReader 1.2.1 发布说明](RELEASE_NOTES.md)。
 
 ## 技术架构
 
