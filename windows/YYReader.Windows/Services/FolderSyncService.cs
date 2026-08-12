@@ -23,6 +23,7 @@ public sealed class FolderSyncService : IAsyncDisposable
     private CancellationTokenSource? _localDebounceCancellation;
     private CancellationTokenSource? _remoteDebounceCancellation;
     private FileSystemWatcher? _watcher;
+    private readonly object _signatureLock = new();
     private DateTime _observedMacWriteTimeUtc;
     private long _observedMacLength = -1;
     private bool _disposed;
@@ -41,7 +42,7 @@ public sealed class FolderSyncService : IAsyncDisposable
         Engine = new SyncEngine(
             token => _repository.BuildSyncSnapshotAsync("windows", token),
             (snapshot, token) => _repository.ApplySyncSnapshotAsync(snapshot, token));
-        _pollTimer = new Timer(_ => Poll(), null, Timeout.Infinite, Timeout.Infinite);
+        _pollTimer = new Timer(_ => QueuePoll(), null, Timeout.Infinite, Timeout.Infinite);
         _store.BooksChanged += StoreBooksChanged;
         _store.ProgressPersisted += StoreProgressPersisted;
     }
@@ -54,7 +55,7 @@ public sealed class FolderSyncService : IAsyncDisposable
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         Preferences = await _preferencesStore.LoadAsync(cancellationToken);
-        await Task.Run(ConfigureWatcher, cancellationToken).ConfigureAwait(false);
+        await ConfigureWatcherAsync(cancellationToken).ConfigureAwait(false);
         _pollTimer.Change(TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
         if (Preferences.IsEnabled) ScheduleRemoteSync(TimeSpan.Zero, onlyIfMacChanged: false);
     }
@@ -67,7 +68,7 @@ public sealed class FolderSyncService : IAsyncDisposable
             FolderPath = string.IsNullOrWhiteSpace(folderPath) ? null : Path.GetFullPath(folderPath)
         };
         await _preferencesStore.SaveAsync(Preferences, cancellationToken);
-        await Task.Run(ConfigureWatcher, cancellationToken).ConfigureAwait(false);
+        await ConfigureWatcherAsync(cancellationToken).ConfigureAwait(false);
         if (enabled) ScheduleRemoteSync(TimeSpan.Zero, onlyIfMacChanged: false);
     }
 
@@ -85,7 +86,8 @@ public sealed class FolderSyncService : IAsyncDisposable
         _localDebounceCancellation?.Dispose();
         var cancellation = new CancellationTokenSource();
         _localDebounceCancellation = cancellation;
-        _ = PublishLocalAfterDelayAsync(delay ?? TimeSpan.FromMilliseconds(1500), cancellation);
+        _ = Task.Run(
+            () => PublishLocalAfterDelayAsync(delay ?? TimeSpan.FromMilliseconds(1500), cancellation));
     }
 
     private void ScheduleRemoteSync(TimeSpan? delay = null, bool onlyIfMacChanged = true)
@@ -95,10 +97,11 @@ public sealed class FolderSyncService : IAsyncDisposable
         _remoteDebounceCancellation?.Dispose();
         var cancellation = new CancellationTokenSource();
         _remoteDebounceCancellation = cancellation;
-        _ = SynchronizeRemoteAfterDelayAsync(
-            delay ?? TimeSpan.FromMilliseconds(350),
-            onlyIfMacChanged,
-            cancellation);
+        _ = Task.Run(
+            () => SynchronizeRemoteAfterDelayAsync(
+                delay ?? TimeSpan.FromMilliseconds(350),
+                onlyIfMacChanged,
+                cancellation));
     }
 
     public Task SynchronizeNowAsync(CancellationToken cancellationToken = default) =>
@@ -122,7 +125,7 @@ public sealed class FolderSyncService : IAsyncDisposable
             var now = DateTimeOffset.UtcNow;
             Preferences = Preferences with { LastSyncAt = now };
             await _preferencesStore.SaveAsync(Preferences, operationToken);
-            UpdateObservedMacWriteTime();
+            await UpdateObservedMacWriteTimeAsync(operationToken).ConfigureAwait(false);
             if (result.Application.Changed || result.Application.CatalogRefreshSourceUrls.Count > 0)
             {
                 _suppressScheduling = true;
@@ -202,7 +205,8 @@ public sealed class FolderSyncService : IAsyncDisposable
             await Task.Delay(delay, scheduled.Token).ConfigureAwait(false);
             if (!ReferenceEquals(_remoteDebounceCancellation, scheduled)) return;
             _remoteDebounceCancellation = null;
-            if (onlyIfMacChanged && !MacSnapshotSignatureChanged()) return;
+            if (onlyIfMacChanged
+                && !await MacSnapshotSignatureChangedAsync(scheduled.Token).ConfigureAwait(false)) return;
             await SynchronizeRemoteCoreAsync(userInitiated: false, scheduled.Token);
         }
         catch (OperationCanceledException)
@@ -214,7 +218,10 @@ public sealed class FolderSyncService : IAsyncDisposable
         }
     }
 
-    private void ConfigureWatcher()
+    private Task ConfigureWatcherAsync(CancellationToken cancellationToken = default) =>
+        Task.Run(ConfigureWatcherCore, cancellationToken);
+
+    private void ConfigureWatcherCore()
     {
         _watcher?.Dispose();
         _watcher = null;
@@ -231,7 +238,7 @@ public sealed class FolderSyncService : IAsyncDisposable
             _watcher.Changed += MacSnapshotChanged;
             _watcher.Created += MacSnapshotChanged;
             _watcher.Renamed += MacSnapshotChanged;
-            UpdateObservedMacWriteTime();
+            UpdateObservedMacWriteTimeCore();
         }
         catch (Exception exception)
         {
@@ -242,19 +249,27 @@ public sealed class FolderSyncService : IAsyncDisposable
     private void MacSnapshotChanged(object sender, FileSystemEventArgs e) =>
         ScheduleRemoteSync(onlyIfMacChanged: true);
 
-    private void Poll()
+    private void QueuePoll()
+    {
+        if (_disposed) return;
+        _ = Task.Run(PollFolderIo, _lifetimeCancellation.Token);
+    }
+
+    private void PollFolderIo()
     {
         if (!Preferences.IsEnabled || string.IsNullOrWhiteSpace(Preferences.FolderPath)) return;
         try
         {
-            if (_watcher is null) ConfigureWatcher();
-            var path = Path.Combine(SyncEngine.ResolveSyncDirectory(Preferences.FolderPath), SyncEngine.MacFileName);
-            if (!File.Exists(path)) return;
-            var info = new FileInfo(path);
-            if (info.LastWriteTimeUtc != _observedMacWriteTimeUtc || info.Length != _observedMacLength)
+            if (_watcher is null) ConfigureWatcherCore();
+            var signature = ReadMacSnapshotSignatureCore(Preferences.FolderPath);
+            bool changed;
+            lock (_signatureLock)
             {
-                ScheduleRemoteSync(TimeSpan.Zero, onlyIfMacChanged: true);
+                changed = signature.Exists
+                    && (signature.LastWriteTimeUtc != _observedMacWriteTimeUtc
+                        || signature.Length != _observedMacLength);
             }
+            if (changed) ScheduleRemoteSync(TimeSpan.Zero, onlyIfMacChanged: true);
         }
         catch
         {
@@ -262,28 +277,46 @@ public sealed class FolderSyncService : IAsyncDisposable
         }
     }
 
-    private void UpdateObservedMacWriteTime()
+    private Task UpdateObservedMacWriteTimeAsync(CancellationToken cancellationToken = default) =>
+        Task.Run(UpdateObservedMacWriteTimeCore, cancellationToken);
+
+    private void UpdateObservedMacWriteTimeCore()
     {
         if (string.IsNullOrWhiteSpace(Preferences.FolderPath)) return;
-        var path = Path.Combine(SyncEngine.ResolveSyncDirectory(Preferences.FolderPath), SyncEngine.MacFileName);
-        if (!File.Exists(path))
+        var signature = ReadMacSnapshotSignatureCore(Preferences.FolderPath);
+        lock (_signatureLock)
         {
-            _observedMacWriteTimeUtc = DateTime.MinValue;
-            _observedMacLength = -1;
-            return;
+            _observedMacWriteTimeUtc = signature.LastWriteTimeUtc;
+            _observedMacLength = signature.Length;
         }
-        var info = new FileInfo(path);
-        _observedMacWriteTimeUtc = info.LastWriteTimeUtc;
-        _observedMacLength = info.Length;
     }
 
-    private bool MacSnapshotSignatureChanged()
+    private Task<bool> MacSnapshotSignatureChangedAsync(CancellationToken cancellationToken = default) =>
+        Task.Run(MacSnapshotSignatureChangedCore, cancellationToken);
+
+    private bool MacSnapshotSignatureChangedCore()
     {
         if (string.IsNullOrWhiteSpace(Preferences.FolderPath)) return false;
-        var path = Path.Combine(SyncEngine.ResolveSyncDirectory(Preferences.FolderPath), SyncEngine.MacFileName);
-        if (!File.Exists(path)) return false;
+        var signature = ReadMacSnapshotSignatureCore(Preferences.FolderPath);
+        if (!signature.Exists) return false;
+        lock (_signatureLock)
+        {
+            return signature.LastWriteTimeUtc != _observedMacWriteTimeUtc
+                || signature.Length != _observedMacLength;
+        }
+    }
+
+    private static MacSnapshotSignature ReadMacSnapshotSignatureCore(string folderPath)
+    {
+        var path = Path.Combine(SyncEngine.ResolveSyncDirectory(folderPath), SyncEngine.MacFileName);
+        if (!File.Exists(path)) return MacSnapshotSignature.Missing;
         var info = new FileInfo(path);
-        return info.LastWriteTimeUtc != _observedMacWriteTimeUtc || info.Length != _observedMacLength;
+        return new(true, info.LastWriteTimeUtc, info.Length);
+    }
+
+    private readonly record struct MacSnapshotSignature(bool Exists, DateTime LastWriteTimeUtc, long Length)
+    {
+        public static MacSnapshotSignature Missing { get; } = new(false, DateTime.MinValue, -1);
     }
 
     private Task RunOnUiThreadAsync(Func<Task> operation)
@@ -327,7 +360,8 @@ public sealed class FolderSyncService : IAsyncDisposable
         _localDebounceCancellation?.Dispose();
         _remoteDebounceCancellation?.Cancel();
         _remoteDebounceCancellation?.Dispose();
-        _watcher?.Dispose();
+        var watcher = Interlocked.Exchange(ref _watcher, null);
+        if (watcher is not null) _ = Task.Run(watcher.Dispose);
         _pollTimer.Dispose();
         _lifetimeCancellation.Cancel();
         // A disconnected cloud provider can leave a Windows file-system call blocked in
