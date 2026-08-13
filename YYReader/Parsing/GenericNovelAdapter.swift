@@ -172,7 +172,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         let bookTitle = metaContent(named: "og:novel:book_name", in: document)
             ?? jsonLDValue(named: "isPartOf", in: document)
             ?? visibleBookTitle(in: document)
-            ?? bookTitleFromDecoratedTitle(description, allowUnderscoreFallback: false)
+            ?? bookTitleFromDescription(description)
             ?? bookTitleFromDecoratedTitle(ogTitle)
             ?? bookTitleFromDecoratedTitle(pageTitle)
         return (normalizedMetadata(bookTitle), normalizedMetadata(author))
@@ -263,10 +263,12 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         return content
     }
 
-    private func bookTitleFromDecoratedTitle(
-        _ value: String?,
-        allowUnderscoreFallback: Bool = true
-    ) -> String? {
+    private func bookTitleFromDescription(_ value: String?) -> String? {
+        guard let value else { return nil }
+        return HTMLParsingSupport.firstCapture("《([^》]+)》", in: value)
+    }
+
+    private func bookTitleFromDecoratedTitle(_ value: String?) -> String? {
         guard let value else { return nil }
         if let quoted = HTMLParsingSupport.firstCapture("《([^》]+)》", in: value) {
             return quoted
@@ -274,7 +276,6 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         if let prefix = HTMLParsingSupport.firstCapture("^(.+?)\\s+第\\s*\\d+\\s*[章回节]", in: value) {
             return prefix
         }
-        guard allowUnderscoreFallback else { return nil }
         let pieces = value.split(separator: "_")
         return pieces.count > 1 ? String(pieces[1]) : nil
     }

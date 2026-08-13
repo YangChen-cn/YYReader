@@ -70,6 +70,109 @@ struct LibraryStoreTests {
     }
 
     @Test
+    func placeholderBookPromotesCatalogWhenDiscoveredURLMatchesHTTPIdentity() async throws {
+        let chapterURL = try #require(URL(string: "https://example.com/book/promoted/1.html"))
+        let catalogURL = try #require(URL(string: "https://example.com/book/promoted/"))
+        let loader = MockHTMLLoader(documents: [
+            chapterURL: """
+                <meta name="author" content="测试作者">
+                <h1>第1章 开始</h1>
+                <article><p>这是用于验证占位书籍恢复真实目录能力的自造章节正文，内容长度足以通过通用解析器现有阈值。</p><p>加载完成以后书籍应当可以刷新完整目录，同时保持原有 HTTP 同步身份语义不变。</p></article>
+                <a href="/book/promoted/">目录</a>
+                """,
+            catalogURL: """
+                <h1>目录能力恢复测试</h1><p>作者：测试作者</p>
+                <div class="chapter-list">
+                    <a href="/book/promoted/1.html">第1章 开始</a>
+                    <a href="/book/promoted/2.html">第2章 继续</a>
+                </div>
+                """
+        ])
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        let book = Book(
+            title: "同步占位书籍",
+            author: "测试作者",
+            sourceHost: "example.com",
+            catalogURL: "https://EXAMPLE.com:443/book/promoted/#sync",
+            hasCatalog: false
+        )
+        let chapter = Chapter(
+            sourceURL: chapterURL.absoluteString,
+            title: "第1章 开始",
+            sortIndex: 1,
+            book: book
+        )
+        book.chapters = [chapter]
+        book.currentChapterID = chapter.id
+        context.insert(book)
+        context.insert(chapter)
+        try context.save()
+        let store = LibraryStore(
+            modelContext: context,
+            coordinator: NovelImportCoordinator(loader: loader)
+        )
+        store.restoreSelection(bookID: book.id, chapterID: chapter.id)
+
+        await store.ensureSelectedChapterLoaded()
+
+        #expect(book.hasCatalog)
+        #expect(book.catalogURL == catalogURL.absoluteString)
+        #expect(store.canRefreshSelectedCatalog)
+
+        await store.refreshSelectedCatalog()
+
+        #expect(loader.requestedURLs == [chapterURL, catalogURL])
+        #expect(store.sortedChapters.map(\.title) == ["第1章 开始", "第2章 继续"])
+    }
+
+    @Test
+    func syntheticIdentityBookDoesNotPromoteDiscoveredCatalog() async throws {
+        let chapterURL = try #require(URL(string: "https://example.com/read/1.html"))
+        let syntheticIdentity = "yyreader-book://example.com/测试小说/测试作者"
+        let loader = MockHTMLLoader(documents: [
+            chapterURL: """
+                <h1>第1章 开始</h1>
+                <article><p>这是用于验证合成同步身份保持稳定的自造章节正文，内容长度足以通过通用解析器已有阈值。</p><p>即使网页发现真实目录，也不能迁移或替换 yyreader-book 身份。</p></article>
+                <a href="/book/discovered/">目录</a>
+                """
+        ])
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        let book = Book(
+            title: "测试小说",
+            author: "测试作者",
+            sourceHost: "example.com",
+            catalogURL: syntheticIdentity,
+            hasCatalog: false
+        )
+        let chapter = Chapter(
+            sourceURL: chapterURL.absoluteString,
+            title: "第1章 开始",
+            sortIndex: 1,
+            book: book
+        )
+        book.chapters = [chapter]
+        book.currentChapterID = chapter.id
+        context.insert(book)
+        context.insert(chapter)
+        try context.save()
+        let store = LibraryStore(
+            modelContext: context,
+            coordinator: NovelImportCoordinator(loader: loader)
+        )
+        store.restoreSelection(bookID: book.id, chapterID: chapter.id)
+
+        await store.ensureSelectedChapterLoaded()
+
+        #expect(!book.hasCatalog)
+        #expect(book.catalogURL == syntheticIdentity)
+        #expect(!store.canRefreshSelectedCatalog)
+    }
+
+    @Test
     func initialCatalogPageDoesNotImmediatelyTriggerFullRefresh() async throws {
         let chapter1 = try #require(URL(string: "https://www.qidiy.com/book/100/1.html"))
         let chapter2 = try #require(URL(string: "https://www.qidiy.com/book/100/1/2.html"))

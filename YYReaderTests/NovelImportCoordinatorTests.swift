@@ -352,6 +352,27 @@ struct NovelImportCoordinatorTests {
     }
 
     @Test
+    func completeCatalogDeduplicatesCanonicalChapterURLsInDOMOrder() async throws {
+        let catalogURL = try #require(URL(string: "https://example.com/book/123/"))
+        let loader = MockHTMLLoader(documents: [
+            catalogURL: """
+                <h1>章节分页去重测试</h1><p>作者：测试作者</p>
+                <div class="chapter-list">
+                    <a href="/book/123/1.html">第1章 开始</a>
+                    <a href="/book/123/1/2.html">第1章 第二页</a>
+                    <a href="/book/123/2.html">第2章 继续</a>
+                </div>
+                """
+        ])
+
+        let catalog = try await NovelImportCoordinator(loader: loader).refreshCatalog(from: catalogURL)
+
+        #expect(catalog.chapters.map(\.title) == ["第1章 开始", "第2章 继续"])
+        #expect(catalog.chapters.map(\.sortIndex) == [1, 2])
+        #expect(catalog.chapters.first?.url.absoluteString == "https://example.com/book/123/1.html")
+    }
+
+    @Test
     func catalogRefreshRejectsTrueTwoPageLoop() async throws {
         let first = try #require(URL(string: "https://example.com/book/loop/"))
         let second = try #require(URL(string: "https://example.com/book/loop/2/"))

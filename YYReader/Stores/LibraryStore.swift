@@ -1013,6 +1013,22 @@ final class LibraryStore {
         chapter.previousURL = result.previousChapterURL?.absoluteString
         chapter.nextURL = result.nextChapterURL?.absoluteString
         chapter.cachedAt = .now
+        promoteCatalogIfSafe(from: result, for: chapter)
+    }
+
+    private func promoteCatalogIfSafe(from result: ChapterLoadResult, for chapter: Chapter) {
+        guard let book = chapter.book,
+              !book.hasCatalog,
+              let catalogURL = result.catalogURL,
+              let identityURL = URL(string: book.sourceBookURL),
+              ["http", "https"].contains(identityURL.scheme?.lowercased() ?? ""),
+              URLCanonicalizer.canonicalString(book.sourceBookURL)
+                == URLCanonicalizer.canonicalString(catalogURL.absoluteString) else {
+            return
+        }
+        book.catalogURL = catalogURL.absoluteString
+        book.hasCatalog = true
+        book.updatedAt = .now
     }
 
     private func selectInitialChapter(preferredID: UUID?) {

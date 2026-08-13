@@ -189,7 +189,9 @@ final class NovelImportCoordinator {
             let page = try await parseCatalogPage(document)
             if bookTitle.isEmpty { bookTitle = page.title }
             if author == "未知作者" { author = page.author }
-            let pageChapterURLs = Set(page.chapters.map { $0.url.absoluteString })
+            let pageChapterURLs = Set(page.chapters.map {
+                URLCanonicalizer.canonicalChapterString($0.url.absoluteString)
+            })
             if page.chapters.count > allChapters.count,
                !seenChapterURLs.isEmpty,
                seenChapterURLs.isSubset(of: pageChapterURLs) {
@@ -200,8 +202,11 @@ final class NovelImportCoordinator {
                 allChapters.removeAll(keepingCapacity: true)
                 seenChapterURLs.removeAll(keepingCapacity: true)
             }
-            for seed in page.chapters where seenChapterURLs.insert(seed.url.absoluteString).inserted {
-                allChapters.append(seed)
+            for seed in page.chapters {
+                let chapterKey = URLCanonicalizer.canonicalChapterString(seed.url.absoluteString)
+                if seenChapterURLs.insert(chapterKey).inserted {
+                    allChapters.append(seed)
+                }
             }
             if let candidate = page.nextPageURL,
                URLCanonicalizer.canonicalString(candidate.absoluteString)

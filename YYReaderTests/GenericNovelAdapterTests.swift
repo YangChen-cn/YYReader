@@ -153,10 +153,10 @@ struct GenericNovelAdapterTests {
             finalURL: url,
             html: """
             <head>
-              <meta name="description" content="小说站_今日推荐内容与阅读说明">
+              <meta name="description" content="测试小说 第3章在线阅读">
             </head>
             <h1>第3章 测试</h1>
-            <article>这是用于验证普通描述不会被下划线规则误猜成书名的虚构正文。这里继续补充完全自造的句子，确保正文评分稳定超过六十分，同时不提供其他书名元数据。</article>
+            <article>这是用于验证普通章节描述不会被猜成书名的虚构正文。这里继续补充完全自造的句子，确保正文评分稳定超过六十分，同时不提供其他书名元数据。</article>
             """,
             retrievalKind: .urlSession
         )
