@@ -68,8 +68,13 @@ final class ReaderScrollState {
         return destination
     }
 
-    func pageDestinationY(direction: Double) -> Double {
-        destinationY(distance: ReaderPageScroll.pageDistance(viewportHeight: metrics.viewportHeight) * direction)
+    func pageDestinationY(direction: Double, fallbackViewportHeight: Double = 0) -> Double {
+        let viewportHeight = metrics.viewportHeight > 0
+            ? metrics.viewportHeight
+            : max(fallbackViewportHeight, 0)
+        return destinationY(
+            distance: ReaderPageScroll.pageDistance(viewportHeight: viewportHeight) * direction
+        )
     }
 
     func requestDeferredCommit() {

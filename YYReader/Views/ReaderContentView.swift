@@ -104,7 +104,12 @@ struct ReaderContentView: View {
             .textSelection(.enabled)
             .background {
                 if keyboardNavigationEnabled {
-                    ReaderKeyboardEventBridge(handle: handleKeyboardCommand)
+                    ReaderKeyboardEventBridge { command in
+                        handleKeyboardCommand(
+                            command,
+                            fallbackViewportHeight: geometry.size.height
+                        )
+                    }
                 }
             }
         }
@@ -212,16 +217,19 @@ struct ReaderContentView: View {
         commitVisibleTarget(target)
     }
 
-    private func handleKeyboardCommand(_ command: ReaderKeyboardCommand) {
+    private func handleKeyboardCommand(
+        _ command: ReaderKeyboardCommand,
+        fallbackViewportHeight: Double
+    ) {
         switch command {
         case .moveUp:
             moveVertically(distance: -ReaderPageScroll.smallStep)
         case .moveDown:
             moveVertically(distance: ReaderPageScroll.smallStep)
         case .pageBackward:
-            moveByPage(direction: -1)
+            moveByPage(direction: -1, fallbackViewportHeight: fallbackViewportHeight)
         case .pageForward:
-            moveByPage(direction: 1)
+            moveByPage(direction: 1, fallbackViewportHeight: fallbackViewportHeight)
         }
     }
 
@@ -229,8 +237,13 @@ struct ReaderContentView: View {
         scroll(to: scrollState.destinationY(distance: distance))
     }
 
-    private func moveByPage(direction: Double) {
-        scroll(to: scrollState.pageDestinationY(direction: direction))
+    private func moveByPage(direction: Double, fallbackViewportHeight: Double) {
+        scroll(
+            to: scrollState.pageDestinationY(
+                direction: direction,
+                fallbackViewportHeight: fallbackViewportHeight
+            )
+        )
     }
 
     private func scroll(to destinationY: Double) {

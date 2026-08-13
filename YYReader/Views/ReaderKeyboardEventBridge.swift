@@ -15,60 +15,70 @@ struct ReaderKeyboardEventBridge: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ nsView: ReaderKeyboardEventView, coordinator: ()) {
-        nsView.stopMonitoring()
+        nsView.stopObservingWindow()
     }
 }
 
 @MainActor
 final class ReaderKeyboardEventView: NSView {
     var handle: (@MainActor (ReaderKeyboardCommand) -> Void)?
-    private var eventMonitor: Any?
+
+    override var acceptsFirstResponder: Bool { true }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil {
-            stopMonitoring()
-        } else {
-            startMonitoring()
+        stopObservingWindow()
+        guard let window else { return }
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowMayNeedReaderResponder(_:)),
+            name: NSWindow.didBecomeKeyNotification,
+            object: window
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowMayNeedReaderResponder(_:)),
+            name: NSWindow.didUpdateNotification,
+            object: window
+        )
+        claimFirstResponderIfAppropriate()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard let command = ReaderKeyboardCommand.resolve(
+            keyCode: event.keyCode,
+            modifierFlags: event.modifierFlags
+        ) else {
+            nextResponder?.keyDown(with: event)
+            return
+        }
+
+        handle?(command)
+    }
+
+    func stopObservingWindow() {
+        NotificationCenter.default.removeObserver(self)
+        if let window, window.firstResponder === self {
+            window.makeFirstResponder(nil)
         }
     }
 
-    func stopMonitoring() {
-        guard let eventMonitor else { return }
-        NSEvent.removeMonitor(eventMonitor)
-        self.eventMonitor = nil
+    @objc
+    private func windowMayNeedReaderResponder(_ notification: Notification) {
+        claimFirstResponderIfAppropriate()
     }
 
-    private func startMonitoring() {
-        guard eventMonitor == nil else { return }
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { @MainActor [weak self] event in
-            self?.process(event) ?? event
-        }
-    }
-
-    private func process(_ event: NSEvent) -> NSEvent? {
+    private func claimFirstResponderIfAppropriate() {
         guard let window,
               window.isKeyWindow,
-              eventBelongsToReaderWindow(event, window: window),
-              let command = ReaderKeyboardCommand.resolve(
-                keyCode: event.keyCode,
-                modifierFlags: event.modifierFlags
-              ),
+              window.firstResponder !== self,
               !ReaderKeyboardRouting.shouldDeferToFocusedControl(
                 window.firstResponder,
                 in: window
               ) else {
-            return event
+            return
         }
-
-        handle?(command)
-        // Returning nil is essential: forwarding an already-handled arrow key to
-        // the responder chain makes AppKit emit the system "unhandled key" beep.
-        return nil
-    }
-
-    private func eventBelongsToReaderWindow(_ event: NSEvent, window: NSWindow) -> Bool {
-        if event.window === window { return true }
-        return event.windowNumber == window.windowNumber
+        window.makeFirstResponder(self)
     }
 }

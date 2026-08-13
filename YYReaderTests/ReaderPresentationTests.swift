@@ -225,6 +225,22 @@ struct ReaderPresentationTests {
         )
     }
 
+    @Test @MainActor
+    func pageMovementUsesViewportFallbackBeforeScrollGeometryIsReady() {
+        let state = ReaderScrollState()
+        state.update(
+            metrics: ReaderScrollMetrics(
+                contentOffsetY: 1_000,
+                viewportHeight: 0,
+                contentHeight: 5_000
+            )
+        )
+
+        #expect(
+            state.pageDestinationY(direction: 1, fallbackViewportHeight: 800) == 1_704
+        )
+    }
+
     @Test
     func readerKeyboardCommandsResolveArrowsWithoutStealingModifiedShortcuts() {
         #expect(ReaderKeyboardCommand.resolve(keyCode: 126, modifierFlags: []) == .moveUp)

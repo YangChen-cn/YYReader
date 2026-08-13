@@ -31,7 +31,7 @@ enum ReaderKeyboardRouting {
            (view.window !== window || view.isHiddenOrHasHiddenAncestor) {
             return false
         }
-        if isDirectionalControl(responder) { return true }
+        if isDirectionalControl(responder, in: window) { return true }
         guard let view = responder as? NSView else { return false }
 
         var ancestor: NSView? = view.superview
@@ -40,14 +40,23 @@ enum ReaderKeyboardRouting {
                (current.window !== window || current.isHiddenOrHasHiddenAncestor) {
                 return false
             }
-            if isDirectionalControl(current) { return true }
+            if isDirectionalControl(current, in: window) { return true }
             ancestor = current.superview
         }
         return false
     }
 
-    private static func isDirectionalControl(_ responder: NSResponder?) -> Bool {
+    private static func isDirectionalControl(
+        _ responder: NSResponder?,
+        in window: NSWindow?
+    ) -> Bool {
         if let textView = responder as? NSTextView {
+            if textView.isFieldEditor,
+               let owner = textView.delegate as? NSView,
+               let window,
+               (owner.window !== window || owner.isHiddenOrHasHiddenAncestor) {
+                return false
+            }
             return textView.isEditable || textView.isFieldEditor
         }
         return responder is NSTextField
