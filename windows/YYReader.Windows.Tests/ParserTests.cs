@@ -110,6 +110,94 @@ public sealed class ParserTests
     }
 
     [TestMethod]
+    public async Task CataloglessChapterKeepsDerivedBookIdentityAndNullParsedCatalog()
+    {
+        var chapterUrl = new Uri("https://example.com/serial/quiet-river/12.html");
+        var loader = new DictionaryHtmlLoader(new Dictionary<Uri, string>
+        {
+            [chapterUrl] = """
+                <meta property="og:title" content="《静河》 第12章 无目录">
+                <meta name="author" content="测试作者">
+                <h1>第12章 无目录</h1>
+                <article>
+                  <p>这是一段没有目录链接的自造章节正文，长度足以通过通用正文识别并保留阅读内容。</p>
+                  <p>页面仍然提供上一章与下一章，但这些导航不能被误认为书籍目录地址。</p>
+                </article>
+                <a href="11.html">上一章</a><a href="13.html">下一章</a>
+                """
+        });
+        var coordinator = new NovelImportCoordinator(loader);
+
+        var loaded = await coordinator.LoadChapterContentAsync(chapterUrl);
+        var imported = await coordinator.ImportNovelAsync(chapterUrl);
+
+        Assert.IsNull(loaded.CatalogUrl);
+        Assert.IsFalse(imported.HasCatalog);
+        Assert.AreEqual("https://example.com/serial/quiet-river/", imported.SourceBookUrl.AbsoluteUri);
+        Assert.AreEqual(chapterUrl.AbsoluteUri, imported.CatalogUrl.AbsoluteUri, "CatalogUrl 只是持久化占位，不代表存在目录");
+        Assert.AreEqual("静河", imported.BookTitle);
+    }
+
+    [TestMethod]
+    public void SemanticArticleWinsBeforeLongCatalogGuard()
+    {
+        var url = new Uri("https://example.com/read/20.html");
+        var links = string.Concat(Enumerable.Range(1, 10)
+            .Select(index => $"<a href='{index}.html'>第{index}章 侧栏</a>"));
+        var page = ParseGenericChapter(url, $$"""
+            <h1>第20章 正文优先</h1>
+            <article>
+              <p>这是可靠语义容器中的第一段自造正文，即使侧栏列出很多章节链接也必须正常识别。</p>
+              <p>这是第二段自造正文，用于保证内容长度稳定超过通用解析器的最低正文阈值。</p>
+            </article>
+            <aside class="chapter-list">{{links}}</aside>
+            """);
+
+        Assert.AreEqual("第20章 正文优先", page.Title);
+        Assert.AreEqual(2, page.Paragraphs.Count);
+    }
+
+    [TestMethod]
+    public async Task PrefaceTitleIsHighConfidenceChapterWithCatalogLikeSidebar()
+    {
+        var url = new Uri("https://example.com/read/preface.html");
+        var links = string.Concat(Enumerable.Range(1, 10)
+            .Select(index => $"<a href='{index}.html'>第{index}章 侧栏</a>"));
+        var loader = new DictionaryHtmlLoader(new Dictionary<Uri, string>
+        {
+            [url] = $$"""
+                <meta property="og:title" content="《序言测试小说》序言">
+                <h1>序言</h1>
+                <article>这是一段长度超过最低阈值但不足长正文阈值的自造序言内容。标题与下一章导航共同证明这是章节，而不是侧栏目录。继续补充虚构的阅读场景，确保测试稳定跨过六十字阈值，同时仍依赖序言标题和章节导航进行高置信度判定。</article>
+                <aside class="chapter-list">{{links}}</aside>
+                <a href="1.html">下一章</a>
+                """
+        });
+
+        var result = await new NovelImportCoordinator(loader).ImportNovelAsync(url);
+
+        Assert.AreEqual("序言", result.ChapterTitle);
+        Assert.IsFalse(result.HasCatalog);
+        StringAssert.Contains(result.BodyText, "自造序言内容");
+    }
+
+    [TestMethod]
+    public void MetadataExtractsQuotedBookTitleBeforeNormalization()
+    {
+        var url = new Uri("https://example.com/read/3.html");
+        var page = ParseGenericChapter(url, """
+            <meta property="og:title" content="《测试小说》第3章">
+            <h1>第3章 测试</h1>
+            <article>
+              <p>第一段自造正文用于验证书名书名号在 metadata 匹配前不会被提前裁掉。</p>
+              <p>第二段自造正文补足稳定长度，最终提取出的书名应该不包含章节标题。</p>
+            </article>
+            """);
+
+        Assert.AreEqual("测试小说", page.BookTitle);
+    }
+
+    [TestMethod]
     public void GenericParserDoesNotMistakeLongCatalogForChapter()
     {
         var url = new Uri("https://example.com/read/1490/");
@@ -207,6 +295,74 @@ public sealed class ParserTests
             new[] { "序言", "第1章 开始", "第2章 结束", "后记" },
             catalog.Chapters.Select(chapter => chapter.Title).ToArray());
         CollectionAssert.AreEqual(new[] { 1, 2, 3, 4 }, catalog.Chapters.Select(chapter => chapter.SortIndex).ToArray());
+    }
+
+    [TestMethod]
+    public async Task SelfReferencingCompleteCatalogStopsWithoutPaginationLoop()
+    {
+        var catalogUrl = new Uri("https://example.com/book/self/list/");
+        var loader = new DictionaryHtmlLoader(new Dictionary<Uri, string>
+        {
+            [catalogUrl] = """
+                <h1>自循环目录</h1><div class="chapter-list">
+                  <a href="../1.html">第1章 开始</a>
+                  <a href="../2.html">第2章 继续</a>
+                </div>
+                <a href="./">全部章节</a>
+                """
+        });
+
+        var catalog = await new NovelImportCoordinator(loader).RefreshCatalogAsync(catalogUrl);
+
+        Assert.AreEqual(2, catalog.Chapters.Count);
+        CollectionAssert.AreEqual(new[] { catalogUrl }, loader.RequestedUris.ToArray());
+    }
+
+    [TestMethod]
+    public async Task MultiPageCatalogStillRejectsRealCycle()
+    {
+        var first = new Uri("https://example.com/book/cycle/");
+        var second = new Uri("https://example.com/book/cycle/page-2/");
+        var loader = new DictionaryHtmlLoader(new Dictionary<Uri, string>
+        {
+            [first] = """
+                <h1>循环目录</h1><div class="chapter-list"><a href="1.html">第1章</a></div>
+                <a href="page-2/">下一页</a>
+                """,
+            [second] = """
+                <h1>循环目录</h1><div class="chapter-list"><a href="../2.html">第2章</a></div>
+                <a href="../">下一页</a>
+                """
+        });
+
+        var error = await Assert.ThrowsExceptionAsync<NovelParsingException>(
+            () => new NovelImportCoordinator(loader).RefreshCatalogAsync(first));
+
+        Assert.AreEqual(NovelParsingErrorKind.PaginationLoop, error.Kind);
+    }
+
+    [TestMethod]
+    public async Task CatalogCanonicalizesChapterPaginationAtDedupBoundaryWithoutReordering()
+    {
+        var catalogUrl = new Uri("https://example.com/book/100/");
+        var loader = new DictionaryHtmlLoader(new Dictionary<Uri, string>
+        {
+            [catalogUrl] = """
+                <h1>分页身份测试</h1><div class="chapter-list">
+                  <a href="1.html">第1章 正文</a>
+                  <a href="1/2.html">第1章 正文续页</a>
+                  <a href="2.html">第2章 后续</a>
+                </div>
+                """
+        });
+
+        var catalog = await new NovelImportCoordinator(loader).RefreshCatalogAsync(catalogUrl);
+
+        CollectionAssert.AreEqual(
+            new[] { "https://example.com/book/100/1.html", "https://example.com/book/100/2.html" },
+            catalog.Chapters.Select(chapter => chapter.Url.AbsoluteUri).ToArray());
+        CollectionAssert.AreEqual(new[] { "第1章 正文", "第2章 后续" }, catalog.Chapters.Select(chapter => chapter.Title).ToArray());
+        CollectionAssert.AreEqual(new[] { 1, 2 }, catalog.Chapters.Select(chapter => chapter.SortIndex).ToArray());
     }
 
     [TestMethod]

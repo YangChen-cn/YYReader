@@ -84,17 +84,17 @@ public sealed class GenericNovelAdapter : INovelSourceAdapter
             return dedicated.Element;
         }
 
-        // A long catalog often has an outer id/class containing "content" or "read".
-        // Without a reliable narrow body container it must not be treated as a chapter.
-        if (LikelyChapterAnchorCount(document) >= 8)
-        {
-            return null;
-        }
-
         var semantic = BestScored(document.QuerySelectorAll("article, main"));
         if (semantic.Element is not null && semantic.Score >= 60)
         {
             return semantic.Element;
+        }
+
+        // A long catalog often has an outer id/class containing "content" or "read".
+        // Only apply this guard after reliable dedicated and semantic bodies failed.
+        if (LikelyChapterAnchorCount(document) >= 8)
+        {
+            return null;
         }
 
         var candidates = document.QuerySelectorAll(
@@ -165,20 +165,18 @@ public sealed class GenericNovelAdapter : INovelSourceAdapter
     private static (string? BookTitle, string? Author) Metadata(IDocument document)
     {
         var pageTitle = document.Title ?? string.Empty;
-        var ogTitle = MetaContent("og:title", document);
-        // Keep Chinese book-title quotes intact here; NormalizeMetadata trims a leading
-        // 《 from full description sentences before the decorated-title matcher sees it.
-        var description = document.QuerySelector("meta[name='description']")?.GetAttribute("content");
+        var ogTitle = RawMetaContent("og:title", document);
+        var description = RawMetaContent("description", document);
         var author = FirstNonempty(
             MetaContent("author", document),
             MetaContent("og:novel:author", document),
             JsonLdValue("author", document),
             VisibleAuthor(document));
         var bookTitle = FirstNonempty(
-            MetaContent("og:novel:book_name", document),
+            RawMetaContent("og:novel:book_name", document),
             JsonLdValue("isPartOf", document),
             VisibleBookTitle(document),
-            BookTitleFromDecoratedTitle(description),
+            BookTitleFromDescription(description),
             BookTitleFromDecoratedTitle(ogTitle),
             BookTitleFromDecoratedTitle(pageTitle));
         return (bookTitle, author);
@@ -278,7 +276,15 @@ public sealed class GenericNovelAdapter : INovelSourceAdapter
         HtmlParsingSupport.Normalize(string.Concat(element.ChildNodes.OfType<IText>().Select(text => text.Data)));
 
     private static string? MetaContent(string name, IDocument document) =>
-        NormalizeMetadata(document.QuerySelector($"meta[name='{name}'], meta[property='{name}']")?.GetAttribute("content"));
+        NormalizeMetadata(RawMetaContent(name, document));
+
+    private static string? RawMetaContent(string name, IDocument document) =>
+        document.QuerySelector($"meta[name='{name}'], meta[property='{name}']")?.GetAttribute("content");
+
+    private static string? BookTitleFromDescription(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? null
+            : HtmlParsingSupport.FirstCapture("《([^》]+)》", value);
 
     private static string? BookTitleFromDecoratedTitle(string? value)
     {

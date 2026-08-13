@@ -184,7 +184,7 @@ public sealed class NovelImportCoordinator
             firstPage.Title,
             firstPage.BookTitle,
             firstPage.Author,
-            firstPage.CatalogUrl ?? firstDocument.FinalUri,
+            firstPage.CatalogUrl,
             chapterUrl,
             string.Join("\n\n", paragraphs),
             firstPage.PreviousChapterUrl,
@@ -253,7 +253,10 @@ public sealed class NovelImportCoordinator
                 }
             }
 
-            nextUrl = page.NextPageUrl;
+            nextUrl = page.NextPageUrl is { } candidateNextUrl
+                && UrlCanonicalizer.Canonicalize(candidateNextUrl).AbsoluteUri == UrlCanonicalizer.Canonicalize(document.FinalUri).AbsoluteUri
+                    ? null
+                    : page.NextPageUrl;
         }
 
         var ordered = chapters.Select((seed, index) => seed with { SortIndex = index + 1 }).ToArray();
@@ -415,5 +418,5 @@ public sealed class NovelImportCoordinator
 
     private static bool LooksLikeChapterTitle(string title) =>
         HtmlParsingSupport.ChapterNumber(title) is not null
-        || Regex.IsMatch(title, "^(?:序章|楔子|引子|尾声|后记|番外)", RegexOptions.CultureInvariant);
+        || Regex.IsMatch(title, "^(?:序章|序言|楔子|引子|尾声|后记|番外)", RegexOptions.CultureInvariant);
 }

@@ -316,6 +316,7 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         chapter.PreviousUrl = result.PreviousChapterUrl?.AbsoluteUri;
         chapter.NextUrl = result.NextChapterUrl?.AbsoluteUri;
         await _repository.SaveChapterAsync(book.Id, result, chapter.SortIndex, cancellationToken).ConfigureAwait(true);
+        await PromoteDiscoveredCatalogAsync(book, result, cancellationToken).ConfigureAwait(true);
         return Neighbor(book, chapter, 1);
     }
 
@@ -442,7 +443,8 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
 
     public async Task<bool> RefreshCatalogAsync(Book book, CancellationToken cancellationToken = default)
     {
-        if (!Uri.TryCreate(book.CatalogUrl, UriKind.Absolute, out var catalogUrl)
+        if (!book.HasCatalog
+            || !Uri.TryCreate(book.CatalogUrl, UriKind.Absolute, out var catalogUrl)
             || !UrlCanonicalizer.IsHttp(catalogUrl))
         {
             ErrorMessage = "这本小说没有可刷新的目录地址。";
@@ -583,21 +585,31 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         chapter.PreviousUrl = result.PreviousChapterUrl?.AbsoluteUri;
         chapter.NextUrl = result.NextChapterUrl?.AbsoluteUri;
         await _repository.SaveChapterAsync(book.Id, result, chapter.SortIndex, cancellationToken).ConfigureAwait(true);
-        if (result.CatalogUrl is { } discoveredCatalogUrl)
+        await PromoteDiscoveredCatalogAsync(book, result, cancellationToken).ConfigureAwait(true);
+    }
+
+    private async Task PromoteDiscoveredCatalogAsync(
+        Book book,
+        ChapterLoadResult result,
+        CancellationToken cancellationToken)
+    {
+        if (result.CatalogUrl is not { } discoveredCatalogUrl)
         {
-            var canonicalCatalogUrl = UrlCanonicalizer.Canonicalize(discoveredCatalogUrl).AbsoluteUri;
-            await _repository.PromoteBookCatalogAsync(
-                book.Id,
-                discoveredCatalogUrl,
-                result.BookTitle,
-                result.Author,
-                cancellationToken).ConfigureAwait(true);
-            book.CatalogUrl = canonicalCatalogUrl;
-            book.HasCatalog = true;
-            if (!string.IsNullOrWhiteSpace(result.BookTitle)) book.Title = result.BookTitle;
-            if (!string.IsNullOrWhiteSpace(result.Author) && result.Author != "未知作者") book.Author = result.Author;
-            BooksChanged?.Invoke(this, EventArgs.Empty);
+            return;
         }
+
+        var canonicalCatalogUrl = UrlCanonicalizer.Canonicalize(discoveredCatalogUrl).AbsoluteUri;
+        await _repository.PromoteBookCatalogAsync(
+            book.Id,
+            discoveredCatalogUrl,
+            result.BookTitle,
+            result.Author,
+            cancellationToken).ConfigureAwait(true);
+        book.CatalogUrl = canonicalCatalogUrl;
+        book.HasCatalog = true;
+        if (!string.IsNullOrWhiteSpace(result.BookTitle)) book.Title = result.BookTitle;
+        if (!string.IsNullOrWhiteSpace(result.Author) && result.Author != "未知作者") book.Author = result.Author;
+        BooksChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void ScheduleNextChapterPrefetch()

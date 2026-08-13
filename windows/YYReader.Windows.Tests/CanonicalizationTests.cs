@@ -29,6 +29,17 @@ public sealed class CanonicalizationTests
     }
 
     [TestMethod]
+    public void CataloglessFallbackIdentityMatchesMacCaseAndDiacriticFolding()
+    {
+        var identity = UrlCanonicalizer.SourceBookIdentityForChapter(
+            new Uri("https://example.com/read/12.html"),
+            "Café Story",
+            "ÉLODIE");
+
+        Assert.AreEqual("yyreader-book://example.com/cafe%20story/elodie", identity.AbsoluteUri);
+    }
+
+    [TestMethod]
     public void InputWithoutSchemeDefaultsToHttpsAndRejectsNonHttp()
     {
         Assert.AreEqual("https://example.com/book/", UrlCanonicalizer.NormalizeInput("example.com/book/")!.AbsoluteUri);

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -122,12 +123,18 @@ public static partial class UrlCanonicalizer
             && EffectivePort(candidate) == EffectivePort(origin);
     }
 
-    private static string NormalizeIdentityComponent(string value) =>
-        string.Join(' ', value
+    private static string NormalizeIdentityComponent(string value)
+    {
+        var whitespaceNormalized = string.Join(' ', value
             .Replace('\u00a0', ' ')
             .Replace('\u3000', ' ')
-            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
-            .Normalize(NormalizationForm.FormKC);
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        var decomposed = whitespaceNormalized.Normalize(NormalizationForm.FormD);
+        var folded = new string(decomposed
+            .Where(character => CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark)
+            .ToArray());
+        return folded.Normalize(NormalizationForm.FormKC).ToLowerInvariant();
+    }
 
     [GeneratedRegex(@"^(.*\/\d+\/\d+)/\d+\.html$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ChapterPageSuffixRegex();

@@ -167,15 +167,24 @@ public sealed class OfflineDownloadTests
             var book = store.Books.Single();
             store.SelectBook(book);
 
+            Assert.IsFalse(book.HasCatalog);
+            Assert.AreEqual(catalogUrl.AbsoluteUri, book.SourceBookUrl);
+            Assert.AreEqual(chapterUrl.AbsoluteUri, book.CatalogUrl, "未发现目录前只能保存章节 URL 占位");
+            Assert.IsFalse(await store.RefreshCatalogAsync(book), "章节 URL 占位不能被当作真实目录刷新");
+            Assert.IsFalse(await store.PrepareOfflineDownloadAsync(book, OfflineDownloadScope.AllChapters));
+            Assert.AreEqual(0, loader.RequestedUris.Count);
+
             Assert.IsTrue(await store.EnsureSelectedChapterLoadedAsync());
             Assert.IsTrue(book.HasCatalog);
             Assert.AreEqual(catalogUrl.AbsoluteUri, book.CatalogUrl);
+            Assert.AreEqual(catalogUrl.AbsoluteUri, book.SourceBookUrl, "发现目录不能把同步 identity 改成当前章节 URL");
             Assert.AreEqual("娱乐春秋（加料福利版）", book.Title);
             Assert.AreEqual("姬叉", book.Author);
 
             var persisted = (await repository.GetBooksAsync()).Single();
             Assert.IsTrue(persisted.HasCatalog);
             Assert.AreEqual(catalogUrl.AbsoluteUri, persisted.CatalogUrl);
+            Assert.AreEqual(catalogUrl.AbsoluteUri, persisted.SourceBookUrl);
             Assert.AreEqual("娱乐春秋（加料福利版）", persisted.Title);
             Assert.AreEqual("姬叉", persisted.Author);
         }
