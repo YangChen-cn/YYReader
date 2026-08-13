@@ -44,7 +44,7 @@ windows/YYReader.Windows/bin/Debug/net8.0-windows10.0.26100.0/win-x64/
 输出位于：
 
 ```text
-dist/windows/YYReader-Setup-x64-1.2.1.exe
+dist/windows/YYReader-Setup-x64-1.2.2.exe
 ```
 
 `Setup.exe` 无需目标电脑预装 .NET 或 Windows App Runtime，也不会在安装或启动时联网下载运行库。
@@ -58,7 +58,7 @@ dist/windows/YYReader-Setup-x64-1.2.1.exe
 需要临时指定其他版本号时：
 
 ```powershell
-.\windows\scripts\package-release.ps1 -Version 1.2.1
+.\windows\scripts\package-release.ps1 -Version 1.2.2
 ```
 
 安装程序和应用都使用 `YYReader.Windows/Assets/AppIcon.ico`。安装向导使用仓库内固定的 Inno Setup 官方源码仓库 `ChineseSimplified.isl` 简体中文语言文件，更新来源为 <https://github.com/jrsoftware/issrc/blob/main/Files/Languages/ChineseSimplified.isl>。
@@ -69,7 +69,7 @@ dist/windows/YYReader-Setup-x64-1.2.1.exe
 
 - `YYReader.Windows.Core`：模型、解析、SQLite、阅读位置、缓存和书架交换协议。
 
-通用网页解析器升级时应与 macOS 保持规则一致，当前站点回归矩阵和正文清理要求见 [双端通用解析器说明](../shared/generic-parser/README.md)。
+> 通用网页解析器升级时应与 macOS 保持规则一致，站点回归矩阵和正文清理要求见 [双端通用解析器说明](../shared/generic-parser/README.md)。
 - `YYReader.Windows`：WinUI 3 书架、原生阅读器和 WebView2 验证 fallback。
 - `YYReader.Windows.Tests`：核心行为等价测试与精简 HTML fixture 测试。
 - `../shared/bookshelf-transfer`：Mac 与 Windows 共用的 BookshelfTransfer v1 schema、示例和说明。

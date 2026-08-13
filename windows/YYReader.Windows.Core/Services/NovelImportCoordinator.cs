@@ -184,7 +184,7 @@ public sealed class NovelImportCoordinator
             firstPage.Title,
             firstPage.BookTitle,
             firstPage.Author,
-            firstPage.CatalogUrl ?? firstDocument.FinalUri,
+            firstPage.CatalogUrl,
             chapterUrl,
             string.Join("\n\n", paragraphs),
             firstPage.PreviousChapterUrl,
@@ -231,6 +231,19 @@ public sealed class NovelImportCoordinator
             var page = await ParseCatalogPageAsync(document, cancellationToken).ConfigureAwait(false);
             if (title.Length == 0) title = page.Title;
             if (author == "未知作者") author = page.Author;
+            var pageChapterUrls = page.Chapters
+                .Select(seed => UrlCanonicalizer.CanonicalizeChapter(seed.Url).AbsoluteUri)
+                .ToHashSet(StringComparer.Ordinal);
+            if (page.Chapters.Count > chapters.Count
+                && seenChapterUrls.Count > 0
+                && seenChapterUrls.IsSubsetOf(pageChapterUrls))
+            {
+                // A landing page can expose a short, reverse-ordered latest-chapter preview
+                // before linking to the complete catalog. The complete page replaces that
+                // preview so the site's canonical DOM order is preserved.
+                chapters.Clear();
+                seenChapterUrls.Clear();
+            }
             foreach (var seed in page.Chapters)
             {
                 var key = UrlCanonicalizer.CanonicalizeChapter(seed.Url).AbsoluteUri;
@@ -240,7 +253,10 @@ public sealed class NovelImportCoordinator
                 }
             }
 
-            nextUrl = page.NextPageUrl;
+            nextUrl = page.NextPageUrl is { } candidateNextUrl
+                && UrlCanonicalizer.Canonicalize(candidateNextUrl).AbsoluteUri == UrlCanonicalizer.Canonicalize(document.FinalUri).AbsoluteUri
+                    ? null
+                    : page.NextPageUrl;
         }
 
         var ordered = chapters.Select((seed, index) => seed with { SortIndex = index + 1 }).ToArray();
@@ -402,5 +418,5 @@ public sealed class NovelImportCoordinator
 
     private static bool LooksLikeChapterTitle(string title) =>
         HtmlParsingSupport.ChapterNumber(title) is not null
-        || Regex.IsMatch(title, "^(?:序章|楔子|引子|尾声|后记|番外)", RegexOptions.CultureInvariant);
+        || Regex.IsMatch(title, "^(?:序章|序言|楔子|引子|尾声|后记|番外)", RegexOptions.CultureInvariant);
 }

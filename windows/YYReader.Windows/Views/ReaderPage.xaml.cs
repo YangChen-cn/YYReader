@@ -799,12 +799,30 @@ public sealed partial class ReaderPage : Page
     private async Task StartOfflineDownloadAsync(OfflineDownloadScope scope)
     {
         if (Store.SelectedBook is not { } book || Store.SelectedChapter is not { } chapter) return;
+        if (!await Store.PrepareOfflineDownloadAsync(book, scope))
+        {
+            ReaderInfoBar.Title = "无法准备离线下载";
+            ReaderInfoBar.Message = Store.ErrorMessage ?? "完整目录刷新未完成，请稍后重试。";
+            ReaderInfoBar.Severity = InfoBarSeverity.Error;
+            ReaderInfoBar.IsOpen = true;
+            return;
+        }
+        if (scope == OfflineDownloadScope.AllChapters)
+        {
+            RefreshCatalogList();
+            ResetContinuousReadingState();
+            Store.RearmSelectedChapterPrefetch();
+        }
         await _offlineDownloadManager.DownloadAsync(book, chapter, scope);
         await Store.RefreshOfflineMetadataAsync(book.Id);
         RefreshCatalogList();
     }
 
-    private void CancelDownload_Click(object sender, RoutedEventArgs e) => _offlineDownloadManager.Cancel();
+    private void CancelDownload_Click(object sender, RoutedEventArgs e)
+    {
+        Store.CancelCatalogRefresh();
+        _offlineDownloadManager.Cancel();
+    }
 
     private async void ClearOfflineCache_Click(object sender, RoutedEventArgs e)
     {
