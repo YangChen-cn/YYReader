@@ -229,7 +229,7 @@ struct LibraryRootView: View {
     }
 
     private var readerDetail: some View {
-        ReaderView(store: store)
+        ReaderView(store: store, keyboardNavigationEnabled: isReading)
             .inspector(isPresented: $showingAppearanceInspector) {
                 AppearanceInspectorView(dismiss: hideAdvancedAppearance)
                     .inspectorColumnWidth(min: 260, ideal: 300, max: 360)

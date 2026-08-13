@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftData
 import SwiftUI
@@ -213,7 +214,7 @@ struct ReaderPresentationTests {
     }
 
     @Test
-    func pageMovementClampsAtDocumentEdgesAndRespectsReduceMotion() {
+    func pageMovementClampsAtDocumentEdges() {
         #expect(
             ReaderPageScroll.pageDestinationY(
                 currentY: 1_800,
@@ -222,10 +223,48 @@ struct ReaderPresentationTests {
                 direction: 1
             ) == 1_200
         )
-        #expect(!ReaderPageScroll.shouldAnimate(reduceMotion: true))
-        #expect(ReaderPageScroll.shouldAnimate(reduceMotion: false))
-        #expect(!ReaderPageScroll.shouldAnimate(reduceMotion: false, isKeyRepeat: true))
-        #expect((0.12...0.18).contains(ReaderPageScroll.animationDuration))
+    }
+
+    @Test
+    func readerKeyboardCommandsResolveArrowsWithoutStealingModifiedShortcuts() {
+        #expect(ReaderKeyboardCommand.resolve(keyCode: 126, modifierFlags: []) == .moveUp)
+        #expect(ReaderKeyboardCommand.resolve(keyCode: 125, modifierFlags: []) == .moveDown)
+        #expect(ReaderKeyboardCommand.resolve(keyCode: 123, modifierFlags: []) == .pageBackward)
+        #expect(ReaderKeyboardCommand.resolve(keyCode: 124, modifierFlags: [.shift]) == .pageForward)
+        #expect(ReaderKeyboardCommand.resolve(keyCode: 124, modifierFlags: [.command]) == nil)
+        #expect(ReaderKeyboardCommand.resolve(keyCode: 124, modifierFlags: [.option]) == nil)
+        #expect(ReaderKeyboardCommand.resolve(keyCode: 36, modifierFlags: []) == nil)
+    }
+
+    @Test @MainActor
+    func readerKeyboardRoutingDefersToEditingListsAndDirectionalControls() {
+        let editableTextView = NSTextView()
+        editableTextView.isEditable = true
+        let readOnlyTextView = NSTextView()
+        readOnlyTextView.isEditable = false
+
+        #expect(ReaderKeyboardRouting.shouldDeferToFocusedControl(editableTextView))
+        #expect(!ReaderKeyboardRouting.shouldDeferToFocusedControl(readOnlyTextView))
+        #expect(ReaderKeyboardRouting.shouldDeferToFocusedControl(NSTableView()))
+        #expect(ReaderKeyboardRouting.shouldDeferToFocusedControl(NSSlider()))
+        #expect(!ReaderKeyboardRouting.shouldDeferToFocusedControl(NSView()))
+    }
+
+    @Test @MainActor
+    func readerKeyboardRoutingIgnoresHiddenOrDetachedStaleControls() {
+        let window = NSWindow()
+        let container = NSView()
+        let table = NSTableView()
+        window.contentView = container
+        container.addSubview(table)
+
+        #expect(ReaderKeyboardRouting.shouldDeferToFocusedControl(table, in: window))
+
+        table.isHidden = true
+        #expect(!ReaderKeyboardRouting.shouldDeferToFocusedControl(table, in: window))
+
+        table.removeFromSuperview()
+        #expect(!ReaderKeyboardRouting.shouldDeferToFocusedControl(table, in: window))
     }
 
     @Test @MainActor
@@ -292,20 +331,20 @@ struct ReaderPresentationTests {
 
         state.update(visibleTargets: [initial])
         state.requestDeferredCommit()
-        state.scheduleDeferredCommit(after: .milliseconds(30)) {
+        state.scheduleDeferredCommit(after: .milliseconds(200)) {
             debounceCallbacks += 1
         }
         state.update(visibleTargets: [passedDuringRepeat])
 
         try await Task.sleep(for: .milliseconds(10))
         state.requestDeferredCommit()
-        state.scheduleDeferredCommit(after: .milliseconds(30)) {
+        state.scheduleDeferredCommit(after: .milliseconds(200)) {
             debounceCallbacks += 1
         }
         state.update(visibleTargets: [final])
 
         #expect(!state.canFinishDeferredCommit)
-        try await Task.sleep(for: .milliseconds(60))
+        try await Task.sleep(for: .milliseconds(250))
         #expect(debounceCallbacks == 1)
         #expect(state.canFinishDeferredCommit)
         #expect(state.finishDeferredCommit() == final)

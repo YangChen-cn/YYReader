@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ReaderContentView: View {
     let store: LibraryStore
+    let keyboardNavigationEnabled: Bool
 
     @AppStorage(ReaderPreferenceKeys.fontFamily) private var fontFamily = ReaderFontFamily.serif.rawValue
     @AppStorage(ReaderPreferenceKeys.fontSize) private var fontSize = 20.0
@@ -11,11 +12,9 @@ struct ReaderContentView: View {
     @AppStorage(ReaderPreferenceKeys.theme) private var themeName = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.paragraphIndent) private var paragraphIndent = true
     @AppStorage(ReaderPreferenceKeys.continuousReading) private var continuousReading = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var scrollPosition = ScrollPosition(idType: ReaderScrollTarget.self)
     @State private var scrollState = ReaderScrollState()
     @State private var hasAppliedInitialScroll = false
-    @FocusState private var isReaderFocused: Bool
 
     var body: some View {
         let family = ReaderFontFamily(rawValue: fontFamily) ?? .serif
@@ -103,24 +102,10 @@ struct ReaderContentView: View {
             }
             .contentMargins(.vertical, 0, for: .scrollContent)
             .textSelection(.enabled)
-            .focusable()
-            .focusEffectDisabled()
-            .focused($isReaderFocused)
-            .onKeyPress(.upArrow, phases: [.down, .repeat]) { press in
-                moveVertically(distance: -ReaderPageScroll.smallStep, isKeyRepeat: press.phase == .repeat)
-                return .handled
-            }
-            .onKeyPress(.downArrow, phases: [.down, .repeat]) { press in
-                moveVertically(distance: ReaderPageScroll.smallStep, isKeyRepeat: press.phase == .repeat)
-                return .handled
-            }
-            .onKeyPress(.leftArrow, phases: [.down, .repeat]) { press in
-                moveByPage(direction: -1, isKeyRepeat: press.phase == .repeat)
-                return .handled
-            }
-            .onKeyPress(.rightArrow, phases: [.down, .repeat]) { press in
-                moveByPage(direction: 1, isKeyRepeat: press.phase == .repeat)
-                return .handled
+            .background {
+                if keyboardNavigationEnabled {
+                    ReaderKeyboardEventBridge(handle: handleKeyboardCommand)
+                }
             }
         }
         .background(theme.background)
@@ -144,7 +129,6 @@ struct ReaderContentView: View {
     private func prepareContinuousReading() async {
         store.configureContinuousReading(continuousReading)
         store.prepareContinuousReading()
-        isReaderFocused = true
         await applyPendingScrollRequest()
     }
 
@@ -228,15 +212,28 @@ struct ReaderContentView: View {
         commitVisibleTarget(target)
     }
 
-    private func moveVertically(distance: Double, isKeyRepeat: Bool) {
-        scroll(to: scrollState.destinationY(distance: distance), isKeyRepeat: isKeyRepeat)
+    private func handleKeyboardCommand(_ command: ReaderKeyboardCommand) {
+        switch command {
+        case .moveUp:
+            moveVertically(distance: -ReaderPageScroll.smallStep)
+        case .moveDown:
+            moveVertically(distance: ReaderPageScroll.smallStep)
+        case .pageBackward:
+            moveByPage(direction: -1)
+        case .pageForward:
+            moveByPage(direction: 1)
+        }
     }
 
-    private func moveByPage(direction: Double, isKeyRepeat: Bool) {
-        scroll(to: scrollState.pageDestinationY(direction: direction), isKeyRepeat: isKeyRepeat)
+    private func moveVertically(distance: Double) {
+        scroll(to: scrollState.destinationY(distance: distance))
     }
 
-    private func scroll(to destinationY: Double, isKeyRepeat: Bool) {
+    private func moveByPage(direction: Double) {
+        scroll(to: scrollState.pageDestinationY(direction: direction))
+    }
+
+    private func scroll(to destinationY: Double) {
         scrollState.requestDeferredCommit()
         if scrollState.beginScrollTransactionIfNeeded() {
             store.beginReaderScrollTransaction()
@@ -245,14 +242,7 @@ struct ReaderContentView: View {
             finishDeferredKeyboardCommitIfReady()
         }
 
-        let destination = ScrollPosition(idType: ReaderScrollTarget.self, y: destinationY)
-        if ReaderPageScroll.shouldAnimate(reduceMotion: reduceMotion, isKeyRepeat: isKeyRepeat) {
-            withAnimation(.easeOut(duration: ReaderPageScroll.animationDuration)) {
-                scrollPosition = destination
-            }
-        } else {
-            scrollPosition = destination
-        }
+        scrollPosition = ScrollPosition(idType: ReaderScrollTarget.self, y: destinationY)
     }
 
     private func finishDeferredKeyboardCommitIfReady() {

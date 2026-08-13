@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ReaderView: View {
     @Bindable var store: LibraryStore
+    let keyboardNavigationEnabled: Bool
     @AppStorage(ReaderPreferenceKeys.theme) private var themeName = ReaderTheme.system.rawValue
 
     var body: some View {
@@ -13,7 +14,10 @@ struct ReaderView: View {
 
             Group {
                 if let chapter = store.selectedChapter, chapter.isCached {
-                    ReaderContentView(store: store)
+                    ReaderContentView(
+                        store: store,
+                        keyboardNavigationEnabled: keyboardNavigationEnabled
+                    )
                 } else if store.selectedChapter != nil {
                     ProgressView("正在准备章节…")
                         .task(id: store.selectedChapterID) {
