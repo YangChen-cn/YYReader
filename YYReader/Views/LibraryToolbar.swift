@@ -44,10 +44,6 @@ struct LibraryToolbar: ToolbarContent {
 
         ToolbarItem(placement: .primaryAction) {
             ControlGroup {
-                Button("刷新目录", systemImage: "arrow.clockwise", action: refreshCatalog)
-                    .disabled(!canRefreshCatalog || isLoading)
-                    .help("获取当前小说的完整章节目录")
-
                 Menu("下载到本地", systemImage: "arrow.down.circle") {
                     Button("下载当前章节", action: downloadCurrentChapter)
                         .disabled(isDownloading)
@@ -74,6 +70,10 @@ struct LibraryToolbar: ToolbarContent {
                 }
                 .disabled(!canContinueReading || isLoading)
                 .help("下载当前小说到本地")
+
+                Button("刷新目录", systemImage: "arrow.clockwise", action: refreshCatalog)
+                    .disabled(!canRefreshCatalog || isLoading)
+                    .help("获取当前小说的完整章节目录")
 
                 if hasDownloadStatus {
                     Button(
