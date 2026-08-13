@@ -125,6 +125,48 @@ struct GenericNovelAdapterTests {
     }
 
     @Test
+    func bookLandingContinuesToCompleteCatalogAndRecognizesPreface() throws {
+        let landingURL = try #require(URL(string: "https://reader.example/book/155532/"))
+        let landing = LoadedHTML(
+            requestedURL: landingURL,
+            finalURL: landingURL,
+            html: """
+            <meta name="author" content="测试作者"><h1>完整目录测试</h1>
+            <div class="chapter-list">
+              <a href="766.html"><h4>后记</h4><small>VIP</small></a>
+              <a href="765.html"><h4>第766章 终章之后</h4><small>免费</small></a>
+            </div>
+            <div class="chapter-more"><a href="list/">全部章节</a></div>
+            """,
+            retrievalKind: .urlSession
+        )
+
+        let landingCatalog = try GenericNovelAdapter().parseCatalogPage(landing)
+
+        #expect(landingCatalog.chapters.map(\.title) == ["后记", "第766章 终章之后"])
+        #expect(landingCatalog.nextPageURL?.absoluteString == "https://reader.example/book/155532/list/")
+
+        let listURL = try #require(landingCatalog.nextPageURL)
+        let completeList = LoadedHTML(
+            requestedURL: listURL,
+            finalURL: listURL,
+            html: """
+            <meta name="author" content="测试作者"><h1>完整目录测试</h1>
+            <div class="chapter-list">
+              <a href="preface.html"><h4>序言</h4><small>免费</small></a>
+              <a href="1.html"><h4>第1章 开始</h4><small>免费</small></a>
+              <a href="765.html"><h4>第766章 终章之后</h4><small>免费</small></a>
+              <a href="766.html"><h4>后记</h4><small>VIP</small></a>
+            </div>
+            """,
+            retrievalKind: .urlSession
+        )
+
+        let completeCatalog = try GenericNovelAdapter().parseCatalogPage(completeList)
+        #expect(completeCatalog.chapters.map(\.title) == ["序言", "第1章 开始", "第766章 终章之后", "后记"])
+    }
+
+    @Test
     func extractsBookLandingMetadataAndExcludesReaderControls() throws {
         let catalogURL = try #require(URL(string: "https://example.com/series/volume/"))
         let catalogDocument = LoadedHTML(

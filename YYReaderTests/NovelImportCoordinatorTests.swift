@@ -277,6 +277,37 @@ struct NovelImportCoordinatorTests {
     }
 
     @Test
+    func completeCatalogReplacesReverseOrderedLatestChapterPreview() async throws {
+        let landing = try #require(URL(string: "https://example.com/book/preview/"))
+        let complete = try #require(URL(string: "https://example.com/book/preview/list/"))
+        let loader = MockHTMLLoader(documents: [
+            landing: """
+                <h1>目录替换测试</h1><p>作者：测试作者</p>
+                <div class="chapter-list">
+                    <a href="/book/preview/4.html">后记</a>
+                    <a href="/book/preview/3.html">第2章 结束</a>
+                </div>
+                <a href="list/">全部章节</a>
+                """,
+            complete: """
+                <h1>目录替换测试</h1><p>作者：测试作者</p>
+                <div class="chapter-list">
+                    <a href="/book/preview/0.html">序言</a>
+                    <a href="/book/preview/1.html">第1章 开始</a>
+                    <a href="/book/preview/3.html">第2章 结束</a>
+                    <a href="/book/preview/4.html">后记</a>
+                </div>
+                """
+        ])
+
+        let catalog = try await NovelImportCoordinator(loader: loader).refreshCatalog(from: landing)
+
+        #expect(loader.requestedURLs == [landing, complete])
+        #expect(catalog.chapters.map(\.title) == ["序言", "第1章 开始", "第2章 结束", "后记"])
+        #expect(catalog.chapters.map(\.sortIndex) == [1, 2, 3, 4])
+    }
+
+    @Test
     func rejectsPaginationLoop() async throws {
         let chapter = try #require(URL(string: "https://www.qidiy.com/book/100/1.html"))
         let loopingHTML = """

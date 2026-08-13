@@ -69,7 +69,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
             chapters: seeds,
             nextPageURL: try navigationURL(
                 in: document,
-                labels: ["下一页", "下页"],
+                labels: ["下一页", "下页", "全部章节", "完整目录", "查看全部章节"],
                 baseURL: loaded.finalURL
             )
         )
@@ -124,7 +124,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
 
     private func likelyChapterAnchorCount(in document: Document) throws -> Int {
         try document.select("a").array().reduce(into: 0) { count, anchor in
-            if isLikelyChapterTitle(try anchor.text().trimmingCharacters(in: .whitespacesAndNewlines)) {
+            if isLikelyChapterTitle(try chapterTitle(from: anchor)) {
                 count += 1
             }
         }
@@ -182,6 +182,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
             try? document.select("#author").first()?.text(),
             linkedAuthor(in: document),
             scopedAuthor(in: document),
+            HTMLParsingSupport.firstCapture("由作者\\s*([^，,。\\s]+)\\s*创作", in: description),
             HTMLParsingSupport.firstCapture("提供(?:了)?([^，,。\\s]+)创作", in: description),
             HTMLParsingSupport.firstCapture("作者\\s*([^，,。\\s]+)", in: description),
             HTMLParsingSupport.firstCapture("lastread\\.set\\([^;]+,'([^']+)'\\s*,\\s*'[^']*'\\s*\\)", in: (try? document.html()) ?? ""),
@@ -381,7 +382,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         var seen = Set<String>()
         var seeds: [ChapterSeed] = []
         for anchor in anchors {
-            let chapterTitle = try anchor.text().trimmingCharacters(in: .whitespacesAndNewlines)
+            let chapterTitle = try chapterTitle(from: anchor)
             guard isLikelyChapterTitle(chapterTitle),
                   let url = HTMLParsingSupport.absoluteURL(for: anchor, relativeTo: baseURL),
                   HTMLParsingSupport.isSameOrigin(url, as: baseURL),
@@ -394,11 +395,19 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         return seeds
     }
 
+    private func chapterTitle(from anchor: Element) throws -> String {
+        if let heading = try anchor.select("h1, h2, h3, h4, h5, h6").first() {
+            let text = try heading.text().trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty { return text }
+        }
+        return try anchor.text().trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private func isLikelyChapterTitle(_ title: String) -> Bool {
         if title.range(of: "第.+[章回节]", options: .regularExpression) != nil {
             return true
         }
-        return ["序章", "楔子", "引子", "尾声", "后记", "番外"].contains { title.contains($0) }
+        return ["序章", "序言", "楔子", "引子", "尾声", "后记", "番外"].contains { title.contains($0) }
     }
 
     private func jsonLDValue(named key: String, in document: Document) -> String? {

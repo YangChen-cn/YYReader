@@ -188,6 +188,17 @@ final class NovelImportCoordinator {
             let page = try await parseCatalogPage(document)
             if bookTitle.isEmpty { bookTitle = page.title }
             if author == "未知作者" { author = page.author }
+            let pageChapterURLs = Set(page.chapters.map { $0.url.absoluteString })
+            if page.chapters.count > allChapters.count,
+               !seenChapterURLs.isEmpty,
+               seenChapterURLs.isSubset(of: pageChapterURLs) {
+                // Some book landing pages expose a short, reverse-ordered
+                // "latest chapters" preview, then link to the complete catalog.
+                // The complete catalog replaces that preview instead of being
+                // appended after it, preserving the site's canonical DOM order.
+                allChapters.removeAll(keepingCapacity: true)
+                seenChapterURLs.removeAll(keepingCapacity: true)
+            }
             for seed in page.chapters where seenChapterURLs.insert(seed.url.absoluteString).inserted {
                 allChapters.append(seed)
             }

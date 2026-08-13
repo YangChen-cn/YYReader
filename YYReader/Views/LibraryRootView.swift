@@ -47,12 +47,25 @@ struct LibraryRootView: View {
                 )
             } else {
                 LibraryToolbar(
+                    showingDownloadProgress: $showingDownloadProgress,
                     canContinueReading: store.selectedChapter != nil,
+                    canRefreshCatalog: store.canRefreshSelectedCatalog,
                     canDeleteBook: store.selectedBook != nil,
+                    canDownloadEntireBook: store.canDownloadEntireBook,
                     isLoading: store.isLoading || bookshelfTransfer.isWorking,
+                    isDownloading: store.offlineDownloads.isDownloading,
+                    hasDownloadStatus: store.offlineDownloads.isDownloading
+                        || store.offlineDownloads.failureMessage != nil,
+                    downloads: store.offlineDownloads,
                     toggleBookSidebar: toggleBookSidebar,
                     addURL: showAddURL,
                     continueReading: continueReading,
+                    refreshCatalog: refreshCatalog,
+                    downloadCurrentChapter: store.downloadCurrentChapter,
+                    downloadFollowingChapters: store.downloadFollowingChapters,
+                    downloadEntireBook: store.downloadEntireBook,
+                    cancelDownload: store.cancelOfflineDownload,
+                    deleteOfflineCache: store.deleteOfflineCache,
                     deleteBook: confirmDelete,
                     importBookshelf: importBookshelf,
                     importBookshelfFromClipboard: importBookshelfFromClipboard,

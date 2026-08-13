@@ -195,7 +195,25 @@ final class LibraryStore {
     }
 
     func downloadEntireBook() {
-        startOfflineDownload(.entireBook)
+        guard !isLoading,
+              !offlineDownloads.isDownloading,
+              let book = selectedBook,
+              let chapter = selectedChapter,
+              book.hasCatalog,
+              let catalogURL = URL(string: book.catalogURL) else {
+            return
+        }
+        catalogRefreshTask = Task { [weak self] in
+            guard let self else { return }
+            await performLoading("正在获取完整目录…") {
+                let catalog = try await coordinator.refreshCatalog(from: catalogURL) { [weak self] pageNumber in
+                    self?.loadingMessage = "正在获取完整目录…（第 \(pageNumber) 页）"
+                }
+                try applyRefreshedCatalog(catalog, to: book)
+                offlineDownloads.start(book: book, currentChapter: chapter, scope: .entireBook)
+            }
+            catalogRefreshTask = nil
+        }
     }
 
     func deleteOfflineCache() {
@@ -406,17 +424,23 @@ final class LibraryStore {
             let catalog = try await coordinator.refreshCatalog(from: url) { [weak self] pageNumber in
                 self?.loadingMessage = "正在刷新目录…（第 \(pageNumber) 页）"
             }
-            upsertCatalog(catalog, into: book)
-            book.title = catalog.title
-            book.author = catalog.author
-            book.catalogFetchedAt = .now
-            book.updatedAt = .now
-            try modelContext.save()
-            refreshBooks()
+            try applyRefreshedCatalog(catalog, to: book)
+        }
+    }
+
+    private func applyRefreshedCatalog(_ catalog: ParsedBookCatalog, to book: Book) throws {
+        upsertCatalog(catalog, into: book)
+        book.title = catalog.title
+        book.author = catalog.author
+        book.catalogFetchedAt = .now
+        book.updatedAt = .now
+        try modelContext.save()
+        refreshBooks()
+        if selectedBookID == book.id {
             rebuildSelectedBookChapters()
             updateChapterNavigationSnapshot()
-            folderSync?.scheduleLocalChange()
         }
+        folderSync?.scheduleLocalChange()
     }
 
     func startRefreshSelectedCatalog() {

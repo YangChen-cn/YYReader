@@ -1,12 +1,24 @@
 import SwiftUI
 
 struct LibraryToolbar: ToolbarContent {
+    @Binding var showingDownloadProgress: Bool
     let canContinueReading: Bool
+    let canRefreshCatalog: Bool
     let canDeleteBook: Bool
+    let canDownloadEntireBook: Bool
     let isLoading: Bool
+    let isDownloading: Bool
+    let hasDownloadStatus: Bool
+    let downloads: OfflineDownloadManager
     let toggleBookSidebar: () -> Void
     let addURL: () -> Void
     let continueReading: () -> Void
+    let refreshCatalog: () -> Void
+    let downloadCurrentChapter: () -> Void
+    let downloadFollowingChapters: () -> Void
+    let downloadEntireBook: () -> Void
+    let cancelDownload: () -> Void
+    let deleteOfflineCache: () -> Void
     let deleteBook: () -> Void
     let importBookshelf: () -> Void
     let importBookshelfFromClipboard: () -> Void
@@ -19,11 +31,63 @@ struct LibraryToolbar: ToolbarContent {
                 .help("显示或隐藏书架")
         }
 
-        ToolbarItemGroup(placement: .primaryAction) {
-            if canContinueReading {
+        if canContinueReading {
+            ToolbarItem(placement: .primaryAction) {
                 Button("继续阅读", systemImage: "book.pages", action: continueReading)
                     .help("打开当前章节")
             }
+        }
+
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button("刷新目录", systemImage: "arrow.clockwise", action: refreshCatalog)
+                .disabled(!canRefreshCatalog || isLoading)
+                .help("获取当前小说的完整章节目录")
+
+            Menu("下载到本地", systemImage: "arrow.down.circle") {
+                Button("下载当前章节", action: downloadCurrentChapter)
+                    .disabled(isDownloading)
+                Button("下载后 20 章", action: downloadFollowingChapters)
+                    .disabled(!canDownloadEntireBook || isDownloading)
+                Button("下载全部章节", action: downloadEntireBook)
+                    .disabled(!canDownloadEntireBook || isDownloading)
+
+                if isDownloading {
+                    Divider()
+                    Button("取消下载", role: .cancel, action: cancelDownload)
+                    Button("显示下载进度") {
+                        showingDownloadProgress = true
+                    }
+                }
+
+                Divider()
+                Button(
+                    "删除离线缓存",
+                    systemImage: "externaldrive.badge.xmark",
+                    action: deleteOfflineCache
+                )
+                .disabled(isDownloading)
+            }
+            .disabled(!canContinueReading || isLoading)
+            .help("下载当前小说到本地")
+
+            if hasDownloadStatus {
+                Button(
+                    "下载进度",
+                    systemImage: isDownloading ? "arrow.down.circle" : "exclamationmark.triangle"
+                ) {
+                    showingDownloadProgress.toggle()
+                }
+                .help("显示或隐藏下载进度")
+                .popover(isPresented: $showingDownloadProgress, arrowEdge: .top) {
+                    OfflineDownloadStatusPopover(
+                        downloads: downloads,
+                        cancel: cancelDownload,
+                        dismiss: { showingDownloadProgress = false },
+                        dismissFailure: downloads.dismissFailure
+                    )
+                }
+            }
+
             Button("添加网页", systemImage: "plus", action: addURL)
                 .disabled(isLoading)
                 .help("添加小说网页")

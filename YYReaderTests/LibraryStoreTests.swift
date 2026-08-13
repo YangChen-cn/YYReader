@@ -831,9 +831,16 @@ struct LibraryStoreTests {
 
     @Test
     func offlineDownloadContinuesAfterSingleChapterFailure() async throws {
+        let catalogURL = try #require(URL(string: "https://example.com/book/offline-batch/"))
         let failedURL = try #require(URL(string: "https://example.com/book/offline-failure/2.html"))
         let succeedingURL = try #require(URL(string: "https://example.com/book/offline-failure/3.html"))
         let loader = MockHTMLLoader(documents: [
+            catalogURL: """
+                <h1>离线批量测试</h1><p>作者：测试作者</p><div class="chapter-list">
+                <a href="\(failedURL.absoluteString)">第2章 失败</a>
+                <a href="\(succeedingURL.absoluteString)">第3章 成功</a>
+                </div>
+                """,
             succeedingURL: genericCataloglessChapter(title: "第3章 成功", body: "失败章节之后仍成功下载")
         ])
         let (store, _, _) = try makeOfflineStore(
@@ -844,7 +851,7 @@ struct LibraryStoreTests {
         store.downloadEntireBook()
         try await waitForOfflineDownload(store)
 
-        #expect(loader.requestedURLs == [failedURL, succeedingURL])
+        #expect(loader.requestedURLs == [catalogURL, failedURL, succeedingURL])
         #expect(store.offlineDownloads.failedCount == 1)
         #expect(store.offlineDownloads.completedCount == store.offlineDownloads.totalCount)
         let downloadedChapter = store.sortedChapters[2]
@@ -853,26 +860,67 @@ struct LibraryStoreTests {
         store.selectChapter(downloadedChapter.id)
         await store.ensureSelectedChapterLoaded()
         #expect(downloadedChapter.isCached)
-        #expect(loader.requestedURLs == [failedURL, succeedingURL])
+        #expect(loader.requestedURLs == [catalogURL, failedURL, succeedingURL])
+    }
+
+    @Test
+    func entireBookDownloadRefreshesCompleteCatalogBeforePlanningDownloads() async throws {
+        let catalogURL = try #require(URL(string: "https://example.com/book/offline-batch/"))
+        let completeURL = try #require(URL(string: "https://example.com/book/offline-batch/list/"))
+        let secondURL = try #require(URL(string: "https://example.com/book/offline-batch/2.html"))
+        let thirdURL = try #require(URL(string: "https://example.com/book/offline-batch/3.html"))
+        let loader = MockHTMLLoader(documents: [
+            catalogURL: """
+                <h1>离线批量测试</h1><p>作者：测试作者</p>
+                <div class="chapter-list"><a href="/book/offline-batch/3.html">第3章 最新预览</a></div>
+                <a href="list/">全部章节</a>
+                """,
+            completeURL: """
+                <h1>离线批量测试</h1><p>作者：测试作者</p><div class="chapter-list">
+                <a href="/book/offline-batch/2.html">第2章 新目录章节</a>
+                <a href="/book/offline-batch/3.html">第3章 最新预览</a>
+                </div>
+                """,
+            secondURL: genericCataloglessChapter(title: "第2章 新目录章节", body: "完整目录新增的第二章"),
+            thirdURL: genericCataloglessChapter(title: "第3章 最新预览", body: "完整目录中的第三章")
+        ])
+        let (store, book, _) = try makeOfflineStore(loader: loader, chapterURLs: [])
+
+        store.downloadEntireBook()
+        try await waitForOfflineDownload(store)
+
+        #expect(loader.requestedURLs == [catalogURL, completeURL, secondURL, thirdURL])
+        #expect(book.chapters.contains { $0.sourceURL == secondURL.absoluteString })
+        #expect(book.chapters.contains { $0.sourceURL == thirdURL.absoluteString })
+        #expect(store.offlineDownloads.totalCount == 3)
     }
 
     @Test
     func offlineDownloadCancellationStopsBeforeRemainingChapters() async throws {
+        let catalogURL = try #require(URL(string: "https://example.com/book/offline-batch/"))
         let urls = try (1...4).map { index in
             try #require(URL(string: "https://example.com/book/offline-cancel/\(index).html"))
         }
-        let documents = Dictionary(uniqueKeysWithValues: urls.map { url in
+        var documents = Dictionary(uniqueKeysWithValues: urls.map { url in
             (url, genericCataloglessChapter(title: "取消测试", body: "用于验证取消传播的正文"))
         })
+        documents[catalogURL] = """
+            <h1>离线批量测试</h1><p>作者：测试作者</p><div class="chapter-list">
+            \(urls.enumerated().map { "<a href=\"\($0.element.absoluteString)\">第\($0.offset + 1)章 取消测试</a>" }.joined())
+            </div>
+            """
         let loader = MockHTMLLoader(documents: documents, delay: .milliseconds(200))
         let (store, _, _) = try makeOfflineStore(loader: loader, chapterURLs: urls)
 
         store.downloadEntireBook()
+        while !store.offlineDownloads.isDownloading {
+            try await Task.sleep(for: .milliseconds(10))
+        }
         try await Task.sleep(for: .milliseconds(30))
         store.cancelOfflineDownload()
         try await waitForOfflineDownload(store)
 
-        #expect(loader.requestedURLs.count == 1)
+        #expect(loader.requestedURLs.count == 2)
         #expect(store.offlineDownloads.completedCount < store.offlineDownloads.totalCount)
     }
 }
@@ -896,8 +944,9 @@ private func waitForCache(of chapter: Chapter) async throws {
 
 @MainActor
 private func waitForOfflineDownload(_ store: LibraryStore) async throws {
+    await Task.yield()
     for _ in 0..<100 {
-        if !store.offlineDownloads.isDownloading { return }
+        if !store.canCancelLoading, !store.isLoading, !store.offlineDownloads.isDownloading { return }
         try await Task.sleep(for: .milliseconds(10))
     }
     Issue.record("等待离线下载超时")
