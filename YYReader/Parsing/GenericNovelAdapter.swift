@@ -85,16 +85,17 @@ struct GenericNovelAdapter: NovelSourceAdapter {
             return candidate
         }
 
-        // Long catalog pages often have an outer id/class containing "read" or
-        // "content". Without a dedicated body container they are not chapters.
-        if try likelyChapterAnchorCount(in: document) >= 8 {
-            return nil
-        }
-
         let semantic = try document.select("article, main").array()
         if let candidate = try semantic.max(by: { try score($0) < score($1) }),
            try score(candidate) >= 60 {
             return candidate
+        }
+
+        // Long catalog pages often have an outer id/class containing "read" or
+        // "content". Only use this guard after reliable dedicated and semantic
+        // body containers have both failed.
+        if try likelyChapterAnchorCount(in: document) >= 8 {
+            return nil
         }
 
         let candidates = try document.select(
@@ -163,6 +164,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
     private func metadata(in document: Document) -> (bookTitle: String?, author: String?) {
         let pageTitle = (try? document.title()) ?? ""
         let ogTitle = metaContent(named: "og:title", in: document)
+        let description = metaContent(named: "description", in: document)
         let author = metaContent(named: "author", in: document)
             ?? metaContent(named: "og:novel:author", in: document)
             ?? jsonLDValue(named: "author", in: document)
@@ -170,6 +172,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         let bookTitle = metaContent(named: "og:novel:book_name", in: document)
             ?? jsonLDValue(named: "isPartOf", in: document)
             ?? visibleBookTitle(in: document)
+            ?? bookTitleFromDecoratedTitle(description, allowUnderscoreFallback: false)
             ?? bookTitleFromDecoratedTitle(ogTitle)
             ?? bookTitleFromDecoratedTitle(pageTitle)
         return (normalizedMetadata(bookTitle), normalizedMetadata(author))
@@ -260,7 +263,10 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         return content
     }
 
-    private func bookTitleFromDecoratedTitle(_ value: String?) -> String? {
+    private func bookTitleFromDecoratedTitle(
+        _ value: String?,
+        allowUnderscoreFallback: Bool = true
+    ) -> String? {
         guard let value else { return nil }
         if let quoted = HTMLParsingSupport.firstCapture("《([^》]+)》", in: value) {
             return quoted
@@ -268,6 +274,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         if let prefix = HTMLParsingSupport.firstCapture("^(.+?)\\s+第\\s*\\d+\\s*[章回节]", in: value) {
             return prefix
         }
+        guard allowUnderscoreFallback else { return nil }
         let pieces = value.split(separator: "_")
         return pieces.count > 1 ? String(pieces[1]) : nil
     }

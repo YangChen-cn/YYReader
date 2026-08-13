@@ -171,7 +171,7 @@ final class NovelImportCoordinator {
         let clock = ContinuousClock()
         let startedAt = clock.now
         var nextURL: URL? = url
-        var visited = Set<URL>()
+        var visited = Set<String>()
         var allChapters: [ChapterSeed] = []
         var seenChapterURLs = Set<String>()
         var bookTitle = ""
@@ -181,7 +181,8 @@ final class NovelImportCoordinator {
             try checkCatalogDeadline(startedAt: startedAt, clock: clock)
             guard visited.count < 200 else { throw NovelParsingError.paginationLimit }
             guard HTMLParsingSupport.isSameOrigin(pageURL, as: url) else { break }
-            guard visited.insert(pageURL).inserted else { throw NovelParsingError.paginationLoop }
+            let pageKey = URLCanonicalizer.canonicalString(pageURL.absoluteString)
+            guard visited.insert(pageKey).inserted else { throw NovelParsingError.paginationLoop }
             onPageStarted?(visited.count)
             let document = try await loader.load(pageURL)
             try checkCatalogDeadline(startedAt: startedAt, clock: clock)
@@ -202,7 +203,13 @@ final class NovelImportCoordinator {
             for seed in page.chapters where seenChapterURLs.insert(seed.url.absoluteString).inserted {
                 allChapters.append(seed)
             }
-            nextURL = page.nextPageURL
+            if let candidate = page.nextPageURL,
+               URLCanonicalizer.canonicalString(candidate.absoluteString)
+                == URLCanonicalizer.canonicalString(document.finalURL.absoluteString) {
+                nextURL = nil
+            } else {
+                nextURL = page.nextPageURL
+            }
         }
 
         let orderedChapters = allChapters.enumerated().map { offset, seed in
@@ -354,7 +361,12 @@ final class NovelImportCoordinator {
     }
 
     private func looksLikeChapterTitle(_ title: String) -> Bool {
-        HTMLParsingSupport.chapterNumber(in: title) != nil
-            || HTMLParsingSupport.firstCapture("^(?:序章|楔子|引子|尾声|后记|番外)", in: title) != nil
+        if HTMLParsingSupport.chapterNumber(in: title) != nil {
+            return true
+        }
+        let normalized = HTMLParsingSupport.normalize(title)
+        return ["序章", "序言", "楔子", "引子", "尾声", "后记", "番外"].contains {
+            normalized.hasPrefix($0)
+        }
     }
 }

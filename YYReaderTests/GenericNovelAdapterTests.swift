@@ -23,6 +23,33 @@ struct GenericNovelAdapterTests {
     }
 
     @Test
+    func semanticArticleWinsOverLargeSidebarCatalog() throws {
+        let url = try #require(URL(string: "https://example.com/book/3.html"))
+        let sidebar = (1...10).map {
+            "<a href='/book/\($0).html'>第\($0)章 侧栏章节</a>"
+        }.joined()
+        let document = LoadedHTML(
+            requestedURL: url,
+            finalURL: url,
+            html: """
+            <h1>第3章 正文优先</h1>
+            <article>
+              <p>这是正常小说正文的第一段，长度足以通过既有正文评分阈值，不应受到页面侧栏目录数量影响。</p>
+              <p>这是正常小说正文的第二段，继续提供稳定可读的虚构内容，并保持现有评分门槛不变。</p>
+            </article>
+            <aside class="chapter-list">\(sidebar)</aside>
+            """,
+            retrievalKind: .urlSession
+        )
+
+        let chapter = try GenericNovelAdapter().parseChapterPage(document)
+
+        #expect(chapter.title == "第3章 正文优先")
+        #expect(chapter.paragraphs.count == 2)
+        #expect(!chapter.paragraphs.joined().contains("侧栏章节"))
+    }
+
+    @Test
     func extractsNovelOpenGraphAndStructuralChapterNavigation() throws {
         let url = try #require(URL(string: "https://reader.example/novel/pagea/story-author_2.html"))
         let document = LoadedHTML(
@@ -92,6 +119,55 @@ struct GenericNovelAdapterTests {
         #expect(result.paragraphs.count == 2)
         #expect(!result.paragraphs.joined().contains("字体 大 中 小"))
         #expect(result.nextPageURL?.absoluteString == "https://example.com/book/75012/3_2.html")
+    }
+
+    @Test
+    func extractsBookTitleFromQuotedOpenGraphAndDescriptionMetadata() throws {
+        let url = try #require(URL(string: "https://example.com/book/3.html"))
+        let openGraphDocument = LoadedHTML(
+            requestedURL: url,
+            finalURL: url,
+            html: """
+            <head>
+              <meta property="og:title" content="《测试小说》第3章">
+            </head>
+            <h1>第3章 测试</h1>
+            <article>这是用于验证元数据提取顺序的虚构正文，内容长度足以通过当前解析阈值，并且不会依赖普通描述文字猜测书名。这里继续补充完全自造的句子，确保正文评分稳定超过六十分。</article>
+            """,
+            retrievalKind: .urlSession
+        )
+        let descriptionDocument = LoadedHTML(
+            requestedURL: url,
+            finalURL: url,
+            html: """
+            <head>
+              <meta name="description" content="小说站提供《测试小说》第3章在线阅读。">
+            </head>
+            <h1>第3章 测试</h1>
+            <article>这是用于验证明确书名括号提取的另一段虚构正文，普通描述句子本身不会被任意猜测成书名。这里继续补充完全自造的句子，确保正文评分稳定超过六十分。</article>
+            """,
+            retrievalKind: .urlSession
+        )
+        let ordinaryDescriptionDocument = LoadedHTML(
+            requestedURL: url,
+            finalURL: url,
+            html: """
+            <head>
+              <meta name="description" content="小说站_今日推荐内容与阅读说明">
+            </head>
+            <h1>第3章 测试</h1>
+            <article>这是用于验证普通描述不会被下划线规则误猜成书名的虚构正文。这里继续补充完全自造的句子，确保正文评分稳定超过六十分，同时不提供其他书名元数据。</article>
+            """,
+            retrievalKind: .urlSession
+        )
+
+        let openGraphChapter = try GenericNovelAdapter().parseChapterPage(openGraphDocument)
+        let descriptionChapter = try GenericNovelAdapter().parseChapterPage(descriptionDocument)
+        let ordinaryDescriptionChapter = try GenericNovelAdapter().parseChapterPage(ordinaryDescriptionDocument)
+
+        #expect(openGraphChapter.bookTitle == "测试小说")
+        #expect(descriptionChapter.bookTitle == "测试小说")
+        #expect(ordinaryDescriptionChapter.bookTitle == nil)
     }
 
     @Test

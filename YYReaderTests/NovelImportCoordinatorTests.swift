@@ -168,6 +168,30 @@ struct NovelImportCoordinatorTests {
     }
 
     @Test
+    func prefaceWithShortBodyAndNavigationIsHighConfidenceChapter() async throws {
+        let chapter = try #require(URL(string: "https://example.com/read/preface.html"))
+        let sidebar = (1...8).map {
+            "<a href='/read/\($0).html'>第\($0)章 侧栏章节</a>"
+        }.joined()
+        let loader = MockHTMLLoader(documents: [
+            chapter: """
+            <h1>序言</h1>
+            <article>这是长度介于六十到一百八十字之间的序言正文。它带有明确的章节导航，应被识别为高可信章节，而不是因为侧栏目录存在多个章节链接就误走目录导入。这里再补充一段完全虚构的说明文字以稳定覆盖长度下限。读者可以从序言继续进入后续章节，侧栏只提供辅助导航。</article>
+            <aside class="chapter-list">\(sidebar)</aside>
+            <a href="previous.html">上一章</a>
+            <a href="next.html">下一章</a>
+            """
+        ])
+
+        let result = try await NovelImportCoordinator(loader: loader).importNovel(from: chapter)
+
+        #expect(!result.hasCatalog)
+        #expect(result.chapterURL == chapter)
+        #expect(result.chapterTitle == "序言")
+        #expect(result.bodyText.contains("高可信章节"))
+    }
+
+    @Test
     func importsFromAGenericCatalogPageAndLoadsItsFirstChapter() async throws {
         let catalog = try #require(URL(string: "https://www.longwangxs.com/book/552/"))
         let chapter = try #require(URL(string: "https://www.longwangxs.com/book/552/prologue.html"))
@@ -305,6 +329,53 @@ struct NovelImportCoordinatorTests {
         #expect(loader.requestedURLs == [landing, complete])
         #expect(catalog.chapters.map(\.title) == ["序言", "第1章 开始", "第2章 结束", "后记"])
         #expect(catalog.chapters.map(\.sortIndex) == [1, 2, 3, 4])
+    }
+
+    @Test
+    func completeCatalogIgnoresSelfReferencingAllChaptersLink() async throws {
+        let catalogURL = try #require(URL(string: "https://example.com/book/123/list/"))
+        let loader = MockHTMLLoader(documents: [
+            catalogURL: """
+                <h1>自引用目录测试</h1><p>作者：测试作者</p>
+                <div class="chapter-list">
+                    <a href="/book/123/1.html">第1章 开始</a>
+                    <a href="/book/123/2.html">第2章 继续</a>
+                </div>
+                <a href="/book/123/list/">全部章节</a>
+                """
+        ])
+
+        let catalog = try await NovelImportCoordinator(loader: loader).refreshCatalog(from: catalogURL)
+
+        #expect(loader.requestedURLs == [catalogURL])
+        #expect(catalog.chapters.map(\.title) == ["第1章 开始", "第2章 继续"])
+    }
+
+    @Test
+    func catalogRefreshRejectsTrueTwoPageLoop() async throws {
+        let first = try #require(URL(string: "https://example.com/book/loop/"))
+        let second = try #require(URL(string: "https://example.com/book/loop/2/"))
+        let loader = MockHTMLLoader(documents: [
+            first: """
+                <h1>循环目录</h1><div class="chapter-list">
+                    <a href="1.html">第1章 开始</a>
+                </div><a href="2/">下一页</a>
+                """,
+            second: """
+                <h1>循环目录</h1><div class="chapter-list">
+                    <a href="2.html">第2章 继续</a>
+                </div><a href="/book/loop/">下一页</a>
+                """
+        ])
+
+        do {
+            _ = try await NovelImportCoordinator(loader: loader).refreshCatalog(from: first)
+            Issue.record("真正的两页目录循环应抛出 paginationLoop")
+        } catch NovelParsingError.paginationLoop {
+            // Expected.
+        } catch {
+            Issue.record("收到非预期错误：\(error)")
+        }
     }
 
     @Test
