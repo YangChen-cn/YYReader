@@ -22,6 +22,8 @@ YYReader 1.2.2 聚焦通用网站兼容、完整目录刷新和 Mac/Windows 无�
 ### macOS 安装与验证
 
 - 安装包：`YYReader-1.2.2-arm64.dmg`，支持 Apple 芯片 Mac 与 macOS 15 或更高版本。
+- macOS 自动化测试：111 项全部通过；Release 为纯 arm64，DMG 完整性、挂载后签名、App Icon 与资源检查均通过。
+- macOS arm64 DMG SHA-256：`124176307b5bb4ff02b0adef3158eabda5cb288af2f2fac9c771b3c8a3e555f7`。
 - Release 使用 ad-hoc 签名且未经过 Apple 公证；首次启动时可能需要在 Finder 中右键 YYReader 并选择“打开”。
 
 ## Windows 1.2.2

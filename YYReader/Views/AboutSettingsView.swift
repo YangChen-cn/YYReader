@@ -83,14 +83,13 @@ struct AboutSettingsView: View {
             Text("最新改进")
                 .font(.headline)
 
-            GroupBox("版本 1.2.1") {
+            GroupBox("版本 1.2.2") {
                 VStack(alignment: .leading, spacing: 10) {
-                    Label("新增跨平台文件夹同步与书架导入导出，只交换元数据和阅读位置。", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
-                    Label("云盘或 NAS 不可用时不阻塞启动，同步失败会保留安全重试机会。", systemImage: "bolt.shield")
-                    Label("目录尾章会轻量检查网站新章节，确认最新或失败重试均有明确状态。", systemImage: "book.pages")
-                    Label("下一章加载完成后仍等待滚动事务结束再挂接，保持正文位置稳定。", systemImage: "scroll")
-                    Label("整书离线下载逐章持久化，支持取消、失败续传并降低正文内存压力。", systemImage: "externaldrive")
-                    Label("本地同步发布缓存章节序号，减少阅读进度保存时的主线程扫描。", systemImage: "memorychip")
+                    Label("增强通用网站的正文、书名作者、章节导航与噪声识别。", systemImage: "text.magnifyingglass")
+                    Label("刷新目录会取得完整分页并保持网站章节顺序，整书下载不再遗漏。", systemImage: "books.vertical")
+                    Label("修复侧栏章节误判、自引用目录循环和章节分页重复。", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
+                    Label("无目录小说与 Windows 使用一致 identity，安全发现目录后恢复刷新能力。", systemImage: "rectangle.2.swap")
+                    Label("书架可直接继续阅读、刷新目录、下载、添加或删除小说。", systemImage: "books.vertical.fill")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
