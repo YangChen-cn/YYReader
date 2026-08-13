@@ -23,6 +23,199 @@ struct GenericNovelAdapterTests {
     }
 
     @Test
+    func extractsNovelOpenGraphAndStructuralChapterNavigation() throws {
+        let url = try #require(URL(string: "https://reader.example/novel/pagea/story-author_2.html"))
+        let document = LoadedHTML(
+            requestedURL: url,
+            finalURL: url,
+            html: """
+            <head>
+              <title>⚡ 《示例小说》 第一幕 开始 - 小说站</title>
+              <meta name="og:title" content="《示例小说》 第一幕 开始 - 小说站">
+            </head>
+            <div class="bread_crumbs">
+              <a href="/novel/chapters/story-author">《示例小说》</a>
+            </div>
+            <div class="prev_page"><a href="story-author_1.html">序幕</a></div>
+            <div class="title"><h1>第一幕 开始</h1></div>
+            <div class="content">
+              <p>这是正文第一段，包含足够多的文字来确认它是小说内容，而不是页面菜单或者站点导航。</p>
+              <p>这是正文第二段，同样只保留适合原生阅读器显示的干净文本内容。</p>
+            </div>
+            <div class="next_page_links">
+              <a href="story-author_3.html" title="第二幕 后续">第二幕 后续</a>
+            </div>
+            """,
+            retrievalKind: .urlSession
+        )
+
+        let result = try GenericNovelAdapter().parseChapterPage(document)
+
+        #expect(result.title == "第一幕 开始")
+        #expect(result.bookTitle == "示例小说")
+        #expect(result.catalogURL?.absoluteString == "https://reader.example/novel/chapters/story-author")
+        #expect(result.previousChapterURL?.absoluteString == "https://reader.example/novel/pagea/story-author_1.html")
+        #expect(result.nextChapterURL?.absoluteString == "https://reader.example/novel/pagea/story-author_3.html")
+    }
+
+    @Test
+    func prefersNarrowBodyAndExtractsMetadataFromDescription() throws {
+        let url = try #require(URL(string: "https://example.com/book/75012/3.html"))
+        let document = LoadedHTML(
+            requestedURL: url,
+            finalURL: url,
+            html: """
+            <head>
+              <title>示例小说 第3章 卡塞尔之门（第1页/共2页）-小说站</title>
+              <meta name="description" content="小说站提供了示例作者创作的《示例小说》第3章在线阅读。">
+            </head>
+            <header><h1><a href="/">小说站</a></h1></header>
+            <div class="reader-main">
+              <div class="reader-fun">字体 大 中 小 背景颜色 护眼模式</div>
+              <h1 class="title">第3章 卡塞尔之门（第1页/共2页）</h1>
+              <a id="index_url" href="/book/75012/">章节目录</a>
+              <a id="next_url" href="3_2.html">下一页</a>
+              <div id="content">
+                <p>路上发生了许多事情，这是正文第一段，长度足够用于通用正文候选判断。</p>
+                <p>人物继续向前，这是正文第二段，页面上的阅读设置不应被混入这里。</p>
+              </div>
+            </div>
+            """,
+            retrievalKind: .urlSession
+        )
+
+        let result = try GenericNovelAdapter().parseChapterPage(document)
+
+        #expect(result.title == "第3章 卡塞尔之门")
+        #expect(result.bookTitle == "示例小说")
+        #expect(result.author == "示例作者")
+        #expect(result.paragraphs.count == 2)
+        #expect(!result.paragraphs.joined().contains("字体 大 中 小"))
+        #expect(result.nextPageURL?.absoluteString == "https://example.com/book/75012/3_2.html")
+    }
+
+    @Test
+    func longCatalogIsNotMistakenForChapterContent() throws {
+        let url = try #require(URL(string: "https://example.com/read/1490/"))
+        let chapters = (1...10).map { "<dd><a href='\($0).html'>第\($0)章 示例章节</a></dd>" }.joined()
+        let document = LoadedHTML(
+            requestedURL: url,
+            finalURL: url,
+            html: """
+            <head>
+              <meta property="og:novel:book_name" content="目录示例小说">
+              <meta property="og:novel:author" content="目录作者">
+            </head>
+            <div id="content-list">
+              <div class="intro">这里是很长的作品简介，不能被当成小说正文。这里是很长的作品简介，不能被当成小说正文。</div>
+              <dl>\(chapters)</dl>
+            </div>
+            """,
+            retrievalKind: .urlSession
+        )
+
+        let catalog = try GenericNovelAdapter().parseCatalogPage(document)
+
+        #expect(catalog.title == "目录示例小说")
+        #expect(catalog.author == "目录作者")
+        #expect(catalog.chapters.count == 10)
+        #expect(throws: NovelParsingError.self) {
+            try GenericNovelAdapter().parseChapterPage(document)
+        }
+    }
+
+    @Test
+    func extractsBookLandingMetadataAndExcludesReaderControls() throws {
+        let catalogURL = try #require(URL(string: "https://example.com/series/volume/"))
+        let catalogDocument = LoadedHTML(
+            requestedURL: catalogURL,
+            finalURL: catalogURL,
+            html: """
+            <header><h1 id="logo">小说站</h1></header>
+            <div class="book-describe">
+              <h1>示例小说 第三部 下</h1>
+              <p>作者：示例作者</p>
+            </div>
+            <div class="book-list">
+              <a href="1.html">楔子</a>
+              <a href="2.html">第一章 开始 · 一</a>
+            </div>
+            """,
+            retrievalKind: .urlSession
+        )
+        let catalog = try GenericNovelAdapter().parseCatalogPage(catalogDocument)
+        #expect(catalog.title == "示例小说 第三部 下")
+        #expect(catalog.author == "示例作者")
+
+        let chapterURL = try #require(URL(string: "https://example.com/series/2.html"))
+        let chapterDocument = LoadedHTML(
+            requestedURL: chapterURL,
+            finalURL: chapterURL,
+            html: """
+            <header><h1 id="logo">小说站</h1></header>
+            <nav class="bcrumb"><a href="volume/" rel="category tag">示例小说 第三部 下</a></nav>
+            <article class="post">
+              <h1 id="nr_title">第一章 开始 · 一</h1>
+              <div class="nr_set">关灯 护眼 小 中 大 繁 直达底部</div>
+              <a href="1.html" rel="prev">上一章</a>
+              <a href="3.html" rel="next">下一章</a>
+              <div id="nr1">
+                <p>正文第一段有足够多的内容，设置选项不应该跟随正文进入原生阅读界面。</p>
+                <p>🍐 落`霞-读`书-l u o x i a d u s h u . c o m-</p>
+                <p>正文第二段继续讲述故事，并保持为一个独立、干净且稳定的段落。<a href="/">落霞</a></p>
+              </div>
+            </article>
+            """,
+            retrievalKind: .urlSession
+        )
+
+        let chapter = try GenericNovelAdapter().parseChapterPage(chapterDocument)
+        #expect(chapter.title == "第一章 开始 · 一")
+        #expect(chapter.bookTitle == "示例小说 第三部 下")
+        #expect(chapter.paragraphs.count == 2)
+        #expect(!chapter.paragraphs.joined().contains("关灯"))
+        #expect(!chapter.paragraphs.joined().contains("落`霞"))
+        #expect(!chapter.paragraphs.joined().hasSuffix("落霞"))
+        #expect(chapter.nextChapterURL?.absoluteString == "https://example.com/series/3.html")
+    }
+
+    @Test
+    func excludesNavigationLinksEmbeddedInsideContentContainer() throws {
+        let url = try #require(URL(string: "https://reader.example/douluodalu2/29797.html"))
+        let document = LoadedHTML(
+            requestedURL: url,
+            finalURL: url,
+            html: """
+            <head><title>第二章 苏醒_斗罗大陆Ⅱ绝世唐门</title></head>
+            <h1>第二章 苏醒</h1>
+            <div id="content">
+              <p>上一章：引子 神界！唐三一家</p>
+              <p>下一章：第一章 灵眸少年（二）</p>
+              <p>如果被/浏/览/器/强/制进入它们的阅/读/模/式了，阅读体/验极/差请退出转/码阅读。</p>
+              <p>清晨的阳光落在窗前，少年缓缓睁开眼睛，回想起昨夜发生的事情。</p>
+              <div class="chapter-nav">
+                <a href="29796.html">上一章</a> | <a href="index.html">章节目录</a> | <a href="29798.html">下一章</a>
+              </div>
+              <p>他起身推开房门，远处的钟声响起，崭新的一天就这样开始了。</p>
+              <p>故事里曾经提到上一章留下的疑问，但这是一句正常正文，不能被误删。</p>
+            </div>
+            """,
+            retrievalKind: .urlSession
+        )
+
+        let chapter = try GenericNovelAdapter().parseChapterPage(document)
+
+        #expect(chapter.paragraphs.count == 3)
+        #expect(!chapter.paragraphs.contains { $0.hasPrefix("上一章：") })
+        #expect(!chapter.paragraphs.contains { $0.hasPrefix("下一章：") })
+        #expect(!chapter.paragraphs.contains { $0.contains("转/码阅读") })
+        #expect(!chapter.paragraphs.contains { $0 == "上一章 | 章节目录 | 下一章" })
+        #expect(chapter.paragraphs.contains { $0.contains("上一章留下的疑问") })
+        #expect(chapter.previousChapterURL?.absoluteString == "https://reader.example/douluodalu2/29796.html")
+        #expect(chapter.nextChapterURL?.absoluteString == "https://reader.example/douluodalu2/29798.html")
+    }
+
+    @Test
     func recognizesCloudflareChallenge() {
         #expect(HTMLChallengeDetector.isChallenge("<title>Just a moment...</title><div class='cf-chl-test'></div>"))
         #expect(!HTMLChallengeDetector.isChallenge("<html><article>普通正文</article></html>"))

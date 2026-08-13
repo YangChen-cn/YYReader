@@ -118,7 +118,7 @@ macOS 快捷键：
 | 网页验证 | WebKit | WebView2 |
 | 正文渲染 | `ScrollView` + `LazyVStack` + `Text` | WinUI 原生文本控件 |
 
-两个客户端共用 URL canonicalization、BookshelfTransfer 和 SyncSnapshot 数据约定。macOS 使用 SwiftSoup 2.13.5 与 XcodeGen；Windows 的详细结构和开发要求见 [Windows README](windows/README.md)。
+两个客户端共用 URL canonicalization、BookshelfTransfer 和 SyncSnapshot 数据约定。通用网页解析的双端对齐规则见 [通用小说解析器说明](shared/generic-parser/README.md)；macOS 使用 SwiftSoup 2.13.5 与 XcodeGen，Windows 的详细结构和开发要求见 [Windows README](windows/README.md)。
 
 <details>
 <summary><strong>从源码构建 macOS</strong></summary>

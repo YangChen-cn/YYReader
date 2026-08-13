@@ -48,10 +48,12 @@ struct LibraryRootView: View {
             } else {
                 LibraryToolbar(
                     canContinueReading: store.selectedChapter != nil,
+                    canDeleteBook: store.selectedBook != nil,
                     isLoading: store.isLoading || bookshelfTransfer.isWorking,
                     toggleBookSidebar: toggleBookSidebar,
                     addURL: showAddURL,
                     continueReading: continueReading,
+                    deleteBook: confirmDelete,
                     importBookshelf: importBookshelf,
                     importBookshelfFromClipboard: importBookshelfFromClipboard,
                     copyBookshelfExport: copyBookshelfExport,

@@ -2,10 +2,12 @@ import SwiftUI
 
 struct LibraryToolbar: ToolbarContent {
     let canContinueReading: Bool
+    let canDeleteBook: Bool
     let isLoading: Bool
     let toggleBookSidebar: () -> Void
     let addURL: () -> Void
     let continueReading: () -> Void
+    let deleteBook: () -> Void
     let importBookshelf: () -> Void
     let importBookshelfFromClipboard: () -> Void
     let copyBookshelfExport: () -> Void
@@ -25,6 +27,10 @@ struct LibraryToolbar: ToolbarContent {
             Button("添加网页", systemImage: "plus", action: addURL)
                 .disabled(isLoading)
                 .help("添加小说网页")
+
+            Button("删除小说", systemImage: "trash", role: .destructive, action: deleteBook)
+                .disabled(!canDeleteBook || isLoading)
+                .help("删除当前选中的小说")
 
             Menu("更多", systemImage: "ellipsis") {
                 Button("导入书架…", systemImage: "square.and.arrow.down", action: importBookshelf)

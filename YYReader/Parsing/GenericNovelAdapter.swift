@@ -10,7 +10,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
             throw NovelParsingError.noReadableContent
         }
         let paragraphs = try HTMLParsingSupport.paragraphs(from: candidate)
-            .filter { $0.count > 1 }
+            .compactMap(cleanedParagraph)
         guard paragraphs.joined().count >= 60 else { throw NovelParsingError.noReadableContent }
 
         let title = try chapterTitle(in: document)
@@ -18,6 +18,12 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         let catalogURL = try navigationURL(
             in: document,
             labels: ["目录", "章节列表", "返回目录", "全部章节"],
+            fallbackSelectors: [
+                "a#index_url",
+                "a#bookname",
+                "a[href*='/novel/chapters/']",
+                ".bcrumb a[rel='category tag']"
+            ],
             baseURL: loaded.finalURL
         )
 
@@ -31,12 +37,14 @@ struct GenericNovelAdapter: NovelSourceAdapter {
                 in: document,
                 labels: ["上一章", "上一章节", "前一章"],
                 rel: "prev",
+                fallbackSelectors: [".prev_page a"],
                 baseURL: loaded.finalURL
             ),
             nextChapterURL: try navigationURL(
                 in: document,
                 labels: ["下一章", "下一章节", "后一章"],
                 rel: "next",
+                fallbackSelectors: [".next_page_links a"],
                 baseURL: loaded.finalURL
             ),
             nextPageURL: try navigationURL(
@@ -50,7 +58,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
     func parseCatalogPage(_ loaded: LoadedHTML) throws -> ParsedBookCatalog {
         let document = try HTMLParsingSupport.document(from: loaded)
         let metadata = metadata(in: document)
-        let headingTitle = try document.select("h1").first()?.text()
+        let headingTitle = try catalogHeading(in: document)
         let title = metadata.bookTitle ?? headingTitle ?? "未命名小说"
         let seeds = try chapterSeeds(in: document, baseURL: loaded.finalURL)
         guard !seeds.isEmpty else { throw NovelParsingError.missingCatalog }
@@ -68,6 +76,27 @@ struct GenericNovelAdapter: NovelSourceAdapter {
     }
 
     private func bestContentCandidate(in document: Document) throws -> Element? {
+        let dedicated = try document.select(
+            "[itemprop=articleBody], #content, #chaptercontent, #chapter-content, "
+                + "#nr1, .chapter-content, .read-content, .post-content, .entry-content, .content"
+        ).array()
+        if let candidate = try dedicated.max(by: { try score($0) < score($1) }),
+           try score(candidate) >= 60 {
+            return candidate
+        }
+
+        // Long catalog pages often have an outer id/class containing "read" or
+        // "content". Without a dedicated body container they are not chapters.
+        if try likelyChapterAnchorCount(in: document) >= 8 {
+            return nil
+        }
+
+        let semantic = try document.select("article, main").array()
+        if let candidate = try semantic.max(by: { try score($0) < score($1) }),
+           try score(candidate) >= 60 {
+            return candidate
+        }
+
         let candidates = try document.select(
             "article, main, [id*=content], [class*=content], [id*=chapter], [class*=chapter], [id*=read], [class*=read]"
         ).array()
@@ -93,6 +122,14 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         }
     }
 
+    private func likelyChapterAnchorCount(in document: Document) throws -> Int {
+        try document.select("a").array().reduce(into: 0) { count, anchor in
+            if isLikelyChapterTitle(try anchor.text().trimmingCharacters(in: .whitespacesAndNewlines)) {
+                count += 1
+            }
+        }
+    }
+
     private func score(_ element: Element) throws -> Int {
         let textLength = try element.text().count
         let linkLength = try element.select("a").text().count
@@ -101,33 +138,211 @@ struct GenericNovelAdapter: NovelSourceAdapter {
     }
 
     private func chapterTitle(in document: Document) throws -> String {
-        if let heading = try document.select("h1").first()?.text(), !heading.isEmpty {
-            return heading
+        let selectors = [
+            "[itemprop=headline]", "h1.title", "#nr_title", ".post-title",
+            ".reader-main > h1", ".kfyd > h2", ".title > h1", "article h1"
+        ]
+        for selector in selectors {
+            if let heading = try document.select(selector).first()?.text(), !heading.isEmpty {
+                return cleanedChapterTitle(heading)
+            }
         }
-        if let title = try document.title().components(separatedBy: CharacterSet(charactersIn: "_｜|-|")).first {
-            return title.trimmingCharacters(in: .whitespacesAndNewlines)
+        for heading in try document.select("h1, h2").array() {
+            let text = try heading.text().trimmingCharacters(in: .whitespacesAndNewlines)
+            if isLikelyChapterTitle(text) {
+                return cleanedChapterTitle(text)
+            }
+        }
+        let pageTitle = try document.title()
+        if let title = pageTitle.components(separatedBy: CharacterSet(charactersIn: "_｜|-|")).first {
+            return cleanedChapterTitle(title)
         }
         return "未命名章节"
     }
 
     private func metadata(in document: Document) -> (bookTitle: String?, author: String?) {
         let pageTitle = (try? document.title()) ?? ""
-        let ogTitle = try? document.select("meta[property=og:title]").first()?.attr("content")
-        let author = (try? document.select("meta[name=author]").first()?.attr("content"))
+        let ogTitle = metaContent(named: "og:title", in: document)
+        let author = metaContent(named: "author", in: document)
+            ?? metaContent(named: "og:novel:author", in: document)
             ?? jsonLDValue(named: "author", in: document)
             ?? visibleAuthor(in: document)
-        let bookTitle = jsonLDValue(named: "isPartOf", in: document)
-            ?? ogTitle.flatMap { value in
-                let pieces = value.split(separator: "_")
-                return pieces.count > 1 ? String(pieces[1]) : nil
-            }
-            ?? pageTitle.split(separator: "_").dropFirst().first.map(String.init)
-        return (bookTitle?.trimmingCharacters(in: .whitespacesAndNewlines), author)
+        let bookTitle = metaContent(named: "og:novel:book_name", in: document)
+            ?? jsonLDValue(named: "isPartOf", in: document)
+            ?? visibleBookTitle(in: document)
+            ?? bookTitleFromDecoratedTitle(ogTitle)
+            ?? bookTitleFromDecoratedTitle(pageTitle)
+        return (normalizedMetadata(bookTitle), normalizedMetadata(author))
     }
 
     private func visibleAuthor(in document: Document) -> String? {
         let text = (try? document.text()) ?? ""
-        return HTMLParsingSupport.firstCapture("作者\\s*[：:]\\s*([^\\s]+)", in: text)
+        let description = metaContent(named: "description", in: document) ?? ""
+        return firstNonempty([
+            try? document.select("#author").first()?.text(),
+            linkedAuthor(in: document),
+            scopedAuthor(in: document),
+            HTMLParsingSupport.firstCapture("提供(?:了)?([^，,。\\s]+)创作", in: description),
+            HTMLParsingSupport.firstCapture("作者\\s*([^，,。\\s]+)", in: description),
+            HTMLParsingSupport.firstCapture("lastread\\.set\\([^;]+,'([^']+)'\\s*,\\s*'[^']*'\\s*\\)", in: (try? document.html()) ?? ""),
+            HTMLParsingSupport.firstCapture("作者\\s*[：:]\\s*([^\\s|，,。]{1,16})(?:\\s|[|，,。])", in: text)
+        ])
+    }
+
+    private func linkedAuthor(in document: Document) -> String? {
+        guard let anchors = try? document.select("a[href*='/author/'], a[href*='/zuojia/']").array() else {
+            return nil
+        }
+        for anchor in anchors {
+            guard let text = try? anchor.text() else { continue }
+            let normalized = HTMLParsingSupport.normalize(text)
+            if !normalized.isEmpty, normalized != "作者", normalized != "作家目录" {
+                return normalized
+            }
+        }
+        return nil
+    }
+
+    private func scopedAuthor(in document: Document) -> String? {
+        guard let elements = try? document.select(
+            ".book-describe p, .bookname, .info p, .border_b, [class*=book-info]"
+        ).array() else {
+            return nil
+        }
+        for element in elements {
+            guard let text = try? element.text(),
+                  let author = HTMLParsingSupport.firstCapture("作者\\s*[：:]\\s*([^|，,。]+)", in: text) else {
+                continue
+            }
+            let normalized = HTMLParsingSupport.normalize(author)
+            if !normalized.isEmpty { return normalized }
+        }
+        return nil
+    }
+
+    private func visibleBookTitle(in document: Document) -> String? {
+        let selectors = [
+            "#bookname", ".book-describe h1", ".bookname h1",
+            ".info .top h1", ".novel_info h1"
+        ]
+        for selector in selectors {
+            guard let element = try? document.select(selector).first() else { continue }
+            let ownText = element.ownText()
+            if !ownText.isEmpty { return ownText }
+            if let text = try? element.text(), !text.isEmpty { return text }
+        }
+        if let breadcrumb = try? document.select(
+            ".breadcrumb a[href*='/book/'], .breadcrumb a[href*='/read/'], "
+                + ".breadcrumb a[href*='/novel/chapters/'], .bcrumb a[rel='category tag']"
+        ).last() {
+            return try? breadcrumb.text()
+        }
+        return nil
+    }
+
+    private func catalogHeading(in document: Document) throws -> String? {
+        if let title = visibleBookTitle(in: document) { return title }
+        return try document.select("h1:not(#logo) > a, h1:not(#logo)").array()
+            .compactMap { element in
+                let ownText = element.ownText()
+                return ownText.isEmpty ? try? element.text() : ownText
+            }
+            .first { !$0.isEmpty }
+    }
+
+    private func metaContent(named name: String, in document: Document) -> String? {
+        guard let element = try? document.select("meta[name='\(name)'], meta[property='\(name)']").first(),
+              let content = try? element.attr("content"),
+              !content.isEmpty else {
+            return nil
+        }
+        return content
+    }
+
+    private func bookTitleFromDecoratedTitle(_ value: String?) -> String? {
+        guard let value else { return nil }
+        if let quoted = HTMLParsingSupport.firstCapture("《([^》]+)》", in: value) {
+            return quoted
+        }
+        if let prefix = HTMLParsingSupport.firstCapture("^(.+?)\\s+第\\s*\\d+\\s*[章回节]", in: value) {
+            return prefix
+        }
+        let pieces = value.split(separator: "_")
+        return pieces.count > 1 ? String(pieces[1]) : nil
+    }
+
+    private func normalizedMetadata(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = HTMLParsingSupport.normalize(value)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "《》"))
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private func firstNonempty(_ values: [String?]) -> String? {
+        values.compactMap(normalizedMetadata).first
+    }
+
+    private func cleanedChapterTitle(_ title: String) -> String {
+        let normalized = HTMLParsingSupport.normalize(title)
+        return HTMLParsingSupport.replacingRegex(
+            "\\s*[（(]第\\s*\\d+\\s*页\\s*/\\s*共\\s*\\d+\\s*页[）)]\\s*$",
+            in: normalized,
+            with: ""
+        )
+    }
+
+    private func cleanedParagraph(_ paragraph: String) -> String? {
+        var text = HTMLParsingSupport.normalize(paragraph)
+        guard text.count > 1 else { return nil }
+        if isChapterNavigationParagraph(text) || isReaderModeNotice(text) { return nil }
+        let noise = [
+            "本站最新网址", "您阅读的小说来自", "小主，这个章节后面还有",
+            "加入书签，方便阅读", "点击下一页继续阅读"
+        ]
+        if noise.contains(where: text.contains) { return nil }
+        if text.count < 80, text.contains("落`霞"), text.contains("读`书") { return nil }
+        if text.count > 20, text.hasSuffix("落霞") {
+            text.removeLast(2)
+            text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return text
+    }
+
+    private func isChapterNavigationParagraph(_ text: String) -> Bool {
+        let compact = text.filter { !$0.isWhitespace }
+        if compact.range(
+            of: "^(?:上一章|下一章|上一章节|下一章节|前一章|后一章)[：:].+$",
+            options: .regularExpression
+        ) != nil {
+            return true
+        }
+
+        let labels = [
+            "上一章节", "下一章节", "返回目录", "章节目录", "全部章节",
+            "上一章", "下一章", "前一章", "后一章",
+            "上一页", "下一页", "上页", "下页", "目录", "书页", "首页"
+        ]
+        var remainder = text
+        for label in labels {
+            remainder = remainder.replacing(label, with: "")
+        }
+        guard remainder.count < text.count else { return false }
+        return remainder.unicodeScalars.allSatisfy {
+            CharacterSet.whitespacesAndNewlines.contains($0)
+                || CharacterSet.punctuationCharacters.contains($0)
+                || CharacterSet.symbols.contains($0)
+        }
+    }
+
+    private func isReaderModeNotice(_ text: String) -> Bool {
+        let compact = text
+            .replacing("/", with: "")
+            .replacing("\\", with: "")
+            .filter { !$0.isWhitespace }
+        return compact.contains("浏览器")
+            && compact.contains("阅读模式")
+            && compact.contains("退出")
+            && compact.contains("转码阅读")
     }
 
     private func chapterSeeds(in document: Document, baseURL: URL) throws -> [ChapterSeed] {
@@ -219,6 +434,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         in document: Document,
         labels: Set<String>,
         rel: String? = nil,
+        fallbackSelectors: [String] = [],
         baseURL: URL
     ) throws -> URL? {
         if let rel,
@@ -226,6 +442,23 @@ struct GenericNovelAdapter: NovelSourceAdapter {
            let url = HTMLParsingSupport.absoluteURL(for: anchor, relativeTo: baseURL) {
             return url
         }
-        return try HTMLParsingSupport.link(in: document, matching: labels, baseURL: baseURL)
+        if let exact = try HTMLParsingSupport.link(in: document, matching: labels, baseURL: baseURL) {
+            return exact
+        }
+        for anchor in try document.select("a").array() {
+            let label = try anchor.text().trimmingCharacters(in: .whitespacesAndNewlines)
+            let compactLabel = label.filter { !$0.isWhitespace }
+            if labels.contains(where: { compactLabel.hasPrefix($0.filter { !$0.isWhitespace }) }),
+               let url = HTMLParsingSupport.absoluteURL(for: anchor, relativeTo: baseURL) {
+                return url
+            }
+        }
+        for selector in fallbackSelectors {
+            if let anchor = try document.select(selector).first(),
+               let url = HTMLParsingSupport.absoluteURL(for: anchor, relativeTo: baseURL) {
+                return url
+            }
+        }
+        return nil
     }
 }
