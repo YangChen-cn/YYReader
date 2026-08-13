@@ -36,81 +36,87 @@ struct LibraryToolbar: ToolbarContent {
                 Button("继续阅读", systemImage: "book.pages", action: continueReading)
                     .help("打开当前章节")
             }
+
+            if #available(macOS 26.0, *) {
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+            }
         }
 
-        ToolbarItemGroup(placement: .primaryAction) {
-            Button("刷新目录", systemImage: "arrow.clockwise", action: refreshCatalog)
-                .disabled(!canRefreshCatalog || isLoading)
-                .help("获取当前小说的完整章节目录")
+        ToolbarItem(placement: .primaryAction) {
+            ControlGroup {
+                Button("刷新目录", systemImage: "arrow.clockwise", action: refreshCatalog)
+                    .disabled(!canRefreshCatalog || isLoading)
+                    .help("获取当前小说的完整章节目录")
 
-            Menu("下载到本地", systemImage: "arrow.down.circle") {
-                Button("下载当前章节", action: downloadCurrentChapter)
-                    .disabled(isDownloading)
-                Button("下载后 20 章", action: downloadFollowingChapters)
-                    .disabled(!canDownloadEntireBook || isDownloading)
-                Button("下载全部章节", action: downloadEntireBook)
-                    .disabled(!canDownloadEntireBook || isDownloading)
+                Menu("下载到本地", systemImage: "arrow.down.circle") {
+                    Button("下载当前章节", action: downloadCurrentChapter)
+                        .disabled(isDownloading)
+                    Button("下载后 20 章", action: downloadFollowingChapters)
+                        .disabled(!canDownloadEntireBook || isDownloading)
+                    Button("下载全部章节", action: downloadEntireBook)
+                        .disabled(!canDownloadEntireBook || isDownloading)
 
-                if isDownloading {
+                    if isDownloading {
+                        Divider()
+                        Button("取消下载", role: .cancel, action: cancelDownload)
+                        Button("显示下载进度") {
+                            showingDownloadProgress = true
+                        }
+                    }
+
                     Divider()
-                    Button("取消下载", role: .cancel, action: cancelDownload)
-                    Button("显示下载进度") {
-                        showingDownloadProgress = true
+                    Button(
+                        "删除离线缓存",
+                        systemImage: "externaldrive.badge.xmark",
+                        action: deleteOfflineCache
+                    )
+                    .disabled(isDownloading)
+                }
+                .disabled(!canContinueReading || isLoading)
+                .help("下载当前小说到本地")
+
+                if hasDownloadStatus {
+                    Button(
+                        "下载进度",
+                        systemImage: isDownloading ? "arrow.down.circle" : "exclamationmark.triangle"
+                    ) {
+                        showingDownloadProgress.toggle()
+                    }
+                    .help("显示或隐藏下载进度")
+                    .popover(isPresented: $showingDownloadProgress, arrowEdge: .top) {
+                        OfflineDownloadStatusPopover(
+                            downloads: downloads,
+                            cancel: cancelDownload,
+                            dismiss: { showingDownloadProgress = false },
+                            dismissFailure: downloads.dismissFailure
+                        )
                     }
                 }
 
-                Divider()
-                Button(
-                    "删除离线缓存",
-                    systemImage: "externaldrive.badge.xmark",
-                    action: deleteOfflineCache
-                )
-                .disabled(isDownloading)
-            }
-            .disabled(!canContinueReading || isLoading)
-            .help("下载当前小说到本地")
+                Button("添加网页", systemImage: "plus", action: addURL)
+                    .disabled(isLoading)
+                    .help("添加小说网页")
 
-            if hasDownloadStatus {
-                Button(
-                    "下载进度",
-                    systemImage: isDownloading ? "arrow.down.circle" : "exclamationmark.triangle"
-                ) {
-                    showingDownloadProgress.toggle()
-                }
-                .help("显示或隐藏下载进度")
-                .popover(isPresented: $showingDownloadProgress, arrowEdge: .top) {
-                    OfflineDownloadStatusPopover(
-                        downloads: downloads,
-                        cancel: cancelDownload,
-                        dismiss: { showingDownloadProgress = false },
-                        dismissFailure: downloads.dismissFailure
+                Button("删除小说", systemImage: "trash", role: .destructive, action: deleteBook)
+                    .disabled(!canDeleteBook || isLoading)
+                    .help("删除当前选中的小说")
+
+                Menu("更多", systemImage: "ellipsis") {
+                    Button("导入书架…", systemImage: "square.and.arrow.down", action: importBookshelf)
+                    Button(
+                        "从剪贴板导入",
+                        systemImage: "clipboard",
+                        action: importBookshelfFromClipboard
                     )
+
+                    Divider()
+
+                    Button("复制书架导出 JSON", systemImage: "doc.on.doc", action: copyBookshelfExport)
+                    Button("导出为 .yyreader 文件…", systemImage: "square.and.arrow.up", action: exportBookshelf)
                 }
-            }
-
-            Button("添加网页", systemImage: "plus", action: addURL)
                 .disabled(isLoading)
-                .help("添加小说网页")
-
-            Button("删除小说", systemImage: "trash", role: .destructive, action: deleteBook)
-                .disabled(!canDeleteBook || isLoading)
-                .help("删除当前选中的小说")
-
-            Menu("更多", systemImage: "ellipsis") {
-                Button("导入书架…", systemImage: "square.and.arrow.down", action: importBookshelf)
-                Button(
-                    "从剪贴板导入",
-                    systemImage: "clipboard",
-                    action: importBookshelfFromClipboard
-                )
-
-                Divider()
-
-                Button("复制书架导出 JSON", systemImage: "doc.on.doc", action: copyBookshelfExport)
-                Button("导出为 .yyreader 文件…", systemImage: "square.and.arrow.up", action: exportBookshelf)
+                .help("导入或导出书架")
             }
-            .disabled(isLoading)
-            .help("导入或导出书架")
         }
     }
 }
