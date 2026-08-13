@@ -145,6 +145,8 @@ Windows 1.2.1 安装包位于 `dist/windows/YYReader-Setup-x64-1.2.1.exe`。
 
 正文始终由 `ScrollView`、`LazyVStack` 和 `Text` 原生渲染。`WKWebView` 仅用于完成必要的网站验证并提取最终 HTML，解析层不依赖具体加载方式。
 
+macOS 与 Windows 通用网页解析器的双端对齐规则见 [通用小说解析器说明](shared/generic-parser/README.md)。
+
 ## 隐私与内容
 
 书架、缓存和阅读进度保存在本机。YYReader 不包含小说正文，也不提交抓取后的网页或 Cloudflare Cookie。请遵守目标网站的服务条款和内容版权要求。

@@ -374,8 +374,14 @@ public sealed partial class LibraryPage : Page
     private async void DownloadAllBook_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as MenuFlyoutItem)?.Tag is not Book book || book.CurrentChapter is not { } chapter) return;
+        if (!await Store.PrepareOfflineDownloadAsync(book, OfflineDownloadScope.AllChapters))
+        {
+            RefreshView();
+            return;
+        }
         await _offlineDownloadManager.DownloadAsync(book, chapter, OfflineDownloadScope.AllChapters);
         await Store.RefreshOfflineMetadataAsync(book.Id);
+        RefreshView();
     }
 
     private async void ClearBookCache_Click(object sender, RoutedEventArgs e)

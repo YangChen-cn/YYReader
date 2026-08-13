@@ -431,9 +431,19 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         return book is not null && await RefreshCatalogAsync(book, cancellationToken).ConfigureAwait(true);
     }
 
-    private async Task<bool> RefreshCatalogAsync(Book book, CancellationToken cancellationToken)
+    public async Task<bool> PrepareOfflineDownloadAsync(
+        Book book,
+        OfflineDownloadScope scope,
+        CancellationToken cancellationToken = default)
     {
-        if (!book.HasCatalog || !Uri.TryCreate(book.CatalogUrl, UriKind.Absolute, out var catalogUrl))
+        return scope != OfflineDownloadScope.AllChapters
+            || await RefreshCatalogAsync(book, cancellationToken).ConfigureAwait(true);
+    }
+
+    public async Task<bool> RefreshCatalogAsync(Book book, CancellationToken cancellationToken = default)
+    {
+        if (!Uri.TryCreate(book.CatalogUrl, UriKind.Absolute, out var catalogUrl)
+            || !UrlCanonicalizer.IsHttp(catalogUrl))
         {
             ErrorMessage = "这本小说没有可刷新的目录地址。";
             return false;
@@ -573,6 +583,21 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         chapter.PreviousUrl = result.PreviousChapterUrl?.AbsoluteUri;
         chapter.NextUrl = result.NextChapterUrl?.AbsoluteUri;
         await _repository.SaveChapterAsync(book.Id, result, chapter.SortIndex, cancellationToken).ConfigureAwait(true);
+        if (result.CatalogUrl is { } discoveredCatalogUrl)
+        {
+            var canonicalCatalogUrl = UrlCanonicalizer.Canonicalize(discoveredCatalogUrl).AbsoluteUri;
+            await _repository.PromoteBookCatalogAsync(
+                book.Id,
+                discoveredCatalogUrl,
+                result.BookTitle,
+                result.Author,
+                cancellationToken).ConfigureAwait(true);
+            book.CatalogUrl = canonicalCatalogUrl;
+            book.HasCatalog = true;
+            if (!string.IsNullOrWhiteSpace(result.BookTitle)) book.Title = result.BookTitle;
+            if (!string.IsNullOrWhiteSpace(result.Author) && result.Author != "未知作者") book.Author = result.Author;
+            BooksChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private void ScheduleNextChapterPrefetch()

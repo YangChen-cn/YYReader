@@ -231,6 +231,19 @@ public sealed class NovelImportCoordinator
             var page = await ParseCatalogPageAsync(document, cancellationToken).ConfigureAwait(false);
             if (title.Length == 0) title = page.Title;
             if (author == "未知作者") author = page.Author;
+            var pageChapterUrls = page.Chapters
+                .Select(seed => UrlCanonicalizer.CanonicalizeChapter(seed.Url).AbsoluteUri)
+                .ToHashSet(StringComparer.Ordinal);
+            if (page.Chapters.Count > chapters.Count
+                && seenChapterUrls.Count > 0
+                && seenChapterUrls.IsSubsetOf(pageChapterUrls))
+            {
+                // A landing page can expose a short, reverse-ordered latest-chapter preview
+                // before linking to the complete catalog. The complete page replaces that
+                // preview so the site's canonical DOM order is preserved.
+                chapters.Clear();
+                seenChapterUrls.Clear();
+            }
             foreach (var seed in page.Chapters)
             {
                 var key = UrlCanonicalizer.CanonicalizeChapter(seed.Url).AbsoluteUri;

@@ -288,6 +288,33 @@ public sealed class SqliteLibraryRepository
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task PromoteBookCatalogAsync(
+        string bookId,
+        Uri catalogUrl,
+        string? title,
+        string? author,
+        CancellationToken cancellationToken = default)
+    {
+        var canonicalCatalogUrl = UrlCanonicalizer.Canonicalize(catalogUrl).AbsoluteUri;
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE Books
+            SET CatalogUrl = $catalog,
+                HasCatalog = 1,
+                Title = CASE WHEN $title IS NULL OR $title = '' THEN Title ELSE $title END,
+                Author = CASE WHEN $author IS NULL OR $author = '' OR $author = '未知作者' THEN Author ELSE $author END,
+                UpdatedAt = $updated
+            WHERE Id = $book;
+            """;
+        command.Parameters.AddWithValue("$catalog", canonicalCatalogUrl);
+        command.Parameters.AddWithValue("$title", DbValue(title));
+        command.Parameters.AddWithValue("$author", DbValue(author));
+        command.Parameters.AddWithValue("$updated", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$book", bookId);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<Book> UpsertCatalogAsync(
         string bookId,
         ParsedBookCatalog catalog,
