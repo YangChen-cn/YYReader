@@ -10,7 +10,7 @@ public sealed partial class AboutDialogContent : UserControl
         InitializeComponent();
         var version = typeof(App).Assembly.GetName().Version;
         VersionText.Text = version is null
-            ? "版本 1.2.1"
+            ? "版本 1.2.2"
             : $"版本 {version.Major}.{version.Minor}.{Math.Max(0, version.Build)}";
     }
 

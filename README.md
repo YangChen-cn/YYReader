@@ -12,11 +12,11 @@ YYReader 是一款以正文为中心的原生小说阅读器，现提供 macOS �
 - 为 `qidiy.com` 提供专用解析；其他小说网站使用通用解析器。
 - 遇到 Cloudflare 或 JavaScript 验证时，macOS 使用 WebKit、Windows 使用 WebView2 获取 rendered DOM，正文仍回到原生阅读器。
 
-## 安装 Windows v1.2.1
+## 安装 Windows v1.2.2
 
 Windows 版本支持 x64 Windows 10 1809 或更高版本，推荐 Windows 11。
 
-1. 从 [YYReader Windows 1.2.1 Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.1) 下载 `YYReader-Setup-x64-1.2.1.exe`。
+1. 从 [YYReader Windows 1.2.2 Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.2) 下载 `YYReader-Setup-x64-1.2.2.exe`。
 2. 运行中文安装向导；默认创建开始菜单入口，可选择创建桌面快捷方式。
 3. 安装包已包含 .NET 8 与 Windows App Runtime，无需另外安装运行库。
 
@@ -44,6 +44,13 @@ YYReader 1.1.2 支持 Apple 芯片 Mac，要求 macOS 15 或更高版本。
 - `⌘[` / `⌘]`：上一章 / 下一章。
 
 Windows 客户端支持目录搜索、连续阅读、离线下载、书架导入导出，以及与 macOS 共用文件夹的 SyncSnapshot v2 同步。详细构建和使用说明见 [Windows README](windows/README.md)。
+
+## 1.2.2 Windows 更新日志
+
+- 通用解析器增强正文容器、书名作者、章节导航和噪声识别，覆盖更多真实网站结构。
+- 支持完整目录入口与倒序最新章节预览替换；整书下载前先刷新完整目录，并保持网站 DOM 章节顺序。
+- 修复无目录章节被错误当作目录的问题，统一 Mac/Windows 的书籍 identity、章节 URL canonicalization 和同步恢复行为。
+- 修复正文旁存在大量章节链接时误判为目录、完整目录自引用循环、`序言` 高置信度识别和分页章节去重边界。
 
 ## 1.2.1 Windows 更新日志
 
@@ -133,7 +140,7 @@ dotnet test .\windows\YYReader.Windows.Tests\YYReader.Windows.Tests.csproj
 .\windows\scripts\package-release.ps1
 ```
 
-Windows 1.2.1 安装包位于 `dist/windows/YYReader-Setup-x64-1.2.1.exe`。
+Windows 1.2.2 安装包位于 `dist/windows/YYReader-Setup-x64-1.2.2.exe`。
 
 ## 技术结构
 

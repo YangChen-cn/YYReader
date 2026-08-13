@@ -1,3 +1,38 @@
+# YYReader Windows 1.2.2
+
+YYReader Windows 1.2.2 聚焦通用网站兼容、完整目录刷新和 Mac/Windows 无目录小说 identity 一致性。
+
+## 通用解析与目录
+
+- 加强 dedicated 与语义正文容器、书名作者 metadata、章节导航、嵌套标题和正文噪声识别。
+- 正文使用可靠 `article/main` 时，即使侧栏存在大量章节链接也不会被误判为目录。
+- 支持“全部章节”“完整目录”等入口，完整目录可以替换首页倒序的最新章节预览，并保持网站 DOM 顺序。
+- 修复完整目录链接指向自身时误报分页循环；真正的跨页 A → B → A 循环仍会停止并报错。
+- 补齐 `序言` 高置信度章节判断和章节正文分页 URL 去重边界。
+
+## 跨端 identity 与离线下载
+
+- 无目录章节的解析结果保持 `CatalogUrl = null`，不再把当前章节 URL 误认为真实目录。
+- 无目录小说使用与 macOS 一致的 derived book identity；书名作者 fallback 同步大小写与重音折叠规则。
+- 后续章节真正发现目录时才升级 `HasCatalog` 并持久化真实目录 URL，不会把同步 identity 改成当前章节。
+- 下载全书前先刷新完整目录，避免只下载首页展示的少量最新章节。
+
+## 验证与安装
+
+- Windows 自动化测试：81 项全部通过。
+- Debug 与 Release 构建要求 0 warning、0 error。
+- 发布产物为自包含 x64 中文安装程序 `YYReader-Setup-x64-1.2.2.exe`，包含 .NET 8 与 Windows App Runtime。
+- 安装包不包含未使用的 AI/ML、ONNX Runtime 或 DirectML 组件。
+- Windows x64 安装包 SHA-256：`40f4478430987ec8935233da4c3b98c845681aa55d96ed0f302e60cefe6bcf5e`。
+
+## 系统要求与已知限制
+
+- x64 Windows 10 1809 或更高版本，推荐 Windows 11。
+- 安装程序尚未使用商业代码签名证书，Windows SmartScreen 可能显示“未知发布者”。
+- 不自动解决 CAPTCHA，不绕过登录、付费墙或网站访问控制；第三方网站结构变化仍可能影响解析。
+
+---
+
 # YYReader Windows 1.2.1
 
 YYReader Windows 1.2.1 是 1.2.0 初版后的稳定性与性能更新，重点完善文件夹同步、连续阅读章末状态、滚动流畅度和正文内存管理。
