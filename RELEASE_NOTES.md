@@ -1,6 +1,6 @@
 # YYReader 1.2.3
 
-YYReader 1.2.3 是连续阅读预取与跨端进度恢复的稳定性更新。本次提供 macOS arm64 DMG；Windows 端对应修复已合入共同源码，Windows 安装包快捷下载暂时继续提供 1.2.2。
+YYReader 1.2.3 是连续阅读预取与跨端进度恢复的稳定性更新。本次同时提供 macOS arm64 DMG 与 Windows x64 完整安装程序。
 
 ## macOS 1.2.3
 
@@ -28,6 +28,29 @@ YYReader 1.2.3 是连续阅读预取与跨端进度恢复的稳定性更新。�
 - macOS 自动化测试：119 项全部通过；Release 为纯 arm64，DMG 完整性、签名、App Icon 与资源检查均通过。
 - macOS arm64 DMG SHA-256：`216d41cdbc2237e188c2606120dc60ebe31fba666e65ad552a9bac7f4b0eb4e7`。
 - Release 使用 ad-hoc 签名且未经过 Apple 公证；首次启动时可能需要在 Finder 中右键 YYReader 并选择“打开”。
+
+## Windows 1.2.3
+
+### 连续阅读与预取
+
+- 空闲预取从下一章扩展为后续最多 3 章，按目录顺序串行执行，跳过已有磁盘缓存并在书籍末尾自然停止。
+- chapter single-flight 使用独立底层加载生命周期；预取与连续阅读请求同一章节时只发起一次网络请求，取消预取不会误杀正在等待的连续阅读。
+- `ViewChanged` 使用约 250ms idle debounce，避免方向键和鼠标滚轮产生的临时 final event 提前 attach 下一章。
+- append 前后保留章节 URL、段落索引和真实段内相对位置，修复网络加载完成附近偶发向前跳页。
+
+### 目录与文件夹同步
+
+- 打开目录时按正文当前可见章节定位，并在布局完成后将对应章节尽量放在列表中部。
+- Windows 原地更新同一个 `windows.json`；云盘离线导致文件暂时消失时暂停发布，避免 iCloud 等服务产生大量编号冲突副本。
+- 云盘探测、同步 watchdog 与恢复重试保持在后台执行，本地书架和正文阅读不受同步目录状态影响。
+
+### Windows 安装与验证
+
+- 安装包：`YYReader-Setup-x64-1.2.3.exe`，支持 x64 Windows 10 1809 或更高版本，推荐 Windows 11。
+- 安装包为自包含版本，包含 .NET 8 与 Windows App Runtime，不需要目标电脑另行安装运行库。
+- Windows 自动化测试：91 项全部通过；Release 构建不包含未使用的 ONNX Runtime、DirectML 或 Windows AI 组件。
+- Windows x64 安装包 SHA-256：`317DB5BF7A8474B1BAE6CA0B967FDC2EAC62F57D25E005DC24A3D19E777456B4`。
+- 安装程序尚未使用商业代码签名证书，Windows SmartScreen 可能显示“未知发布者”。
 
 ---
 

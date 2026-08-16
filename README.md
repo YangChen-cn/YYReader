@@ -18,7 +18,7 @@
 | 平台 | 安装包 | 系统要求 |
 | --- | --- | --- |
 | **macOS** | [下载 YYReader 1.2.3 arm64 DMG](https://github.com/YangChen-cn/YYReader/releases/download/v1.2.3/YYReader-1.2.3-arm64.dmg) | Apple 芯片，macOS 15 或更高版本 |
-| **Windows** | [下载 YYReader 1.2.2 x64 安装程序](https://github.com/YangChen-cn/YYReader/releases/download/v1.2.2/YYReader-Setup-x64-1.2.2.exe) | x64 Windows 10 1809 或更高版本，推荐 Windows 11 |
+| **Windows** | [下载 YYReader 1.2.3 x64 安装程序](https://github.com/YangChen-cn/YYReader/releases/download/v1.2.3/YYReader-Setup-x64-1.2.3.exe) | x64 Windows 10 1809 或更高版本，推荐 Windows 11 |
 
 也可以前往 [YYReader 1.2.3 Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.3) 查看校验信息和完整发布说明。
 
@@ -103,7 +103,8 @@ macOS 快捷键：
 - macOS 空闲预取从下一章扩展为最多 3 章，保持低优先级、严格串行、可取消并跳过已缓存章节。
 - 修复连续阅读切换可见章节时取消重叠窗口在途加载，导致后续预取提前停止的竞态。
 - Windows 的更后阅读位置同步到当前打开书籍时，macOS 会立即切换章节或恢复段落，无需切书刷新。
-- Windows 连续阅读的三章预取、append anchor 恢复与同步文件原地更新修复已合入共同源码。
+- Windows 同步发布 1.2.3 安装包：连续阅读最多预取三章，修复 append 回跳与 single-flight 取消竞态，目录打开时居中定位当前章节。
+- Windows 文件夹同步原地更新同一个 `windows.json`，云盘暂不可用时不会阻塞本地阅读或反复制造冲突副本。
 
 完整内容见 [YYReader 1.2.3 发布说明](RELEASE_NOTES.md)。
 

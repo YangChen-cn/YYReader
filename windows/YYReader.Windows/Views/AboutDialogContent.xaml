@@ -45,7 +45,7 @@
             </Border>
 
             <StackPanel Spacing="12">
-                <TextBlock Text="版本 1.2.2 更新" FontSize="17" FontWeight="SemiBold" />
+                <TextBlock Text="版本 1.2.3 更新" FontSize="17" FontWeight="SemiBold" />
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1" CornerRadius="{StaticResource YYCornerMedium}"
@@ -54,32 +54,32 @@
                         <Grid ColumnDefinitions="24,*" ColumnSpacing="10">
                             <FontIcon Glyph="&#xE774;" FontSize="17" Opacity="0.68" />
                             <StackPanel Grid.Column="1" Spacing="2">
-                                <TextBlock Text="通用网站兼容性" FontWeight="SemiBold" />
-                                <TextBlock Text="增强正文容器、书名作者、章节导航和噪声识别，支持更多目录结构与语义化章节页面。"
+                                <TextBlock Text="连续阅读更稳定" FontWeight="SemiBold" />
+                                <TextBlock Text="空闲时串行预取后续最多三章；预取与连续阅读共享同一章节请求，避免重复下载和取消竞态。"
                                            TextWrapping="Wrap" Style="{StaticResource YYSecondaryTextStyle}" />
                             </StackPanel>
                         </Grid>
                         <Grid ColumnDefinitions="24,*" ColumnSpacing="10">
                             <FontIcon Glyph="&#xE8EF;" FontSize="17" Opacity="0.68" />
                             <StackPanel Grid.Column="1" Spacing="2">
-                                <TextBlock Text="完整目录与离线下载" FontWeight="SemiBold" />
-                                <TextBlock Text="识别网站的完整目录入口，保留原始 DOM 顺序；下载全书前先刷新目录，避免只下载首页展示的最新章节。"
+                                <TextBlock Text="滚动与目录定位" FontWeight="SemiBold" />
+                                <TextBlock Text="追加下一章时保留段落内阅读位置；打开目录会把当前可见章节定位在列表中部。"
                                            TextWrapping="Wrap" Style="{StaticResource YYSecondaryTextStyle}" />
                             </StackPanel>
                         </Grid>
                         <Grid ColumnDefinitions="24,*" ColumnSpacing="10">
                             <FontIcon Glyph="&#xE895;" FontSize="17" Opacity="0.68" />
                             <StackPanel Grid.Column="1" Spacing="2">
-                                <TextBlock Text="跨端书籍身份一致" FontWeight="SemiBold" />
-                                <TextBlock Text="无目录小说不再把当前章节误认为目录；Mac 与 Windows 使用一致的书籍身份和章节 URL 恢复阅读位置。"
+                                <TextBlock Text="文件夹同步恢复" FontWeight="SemiBold" />
+                                <TextBlock Text="云盘离线或暂不可用时不阻塞阅读；Windows 原地更新同一个 windows.json，避免产生冲突副本。"
                                            TextWrapping="Wrap" Style="{StaticResource YYSecondaryTextStyle}" />
                             </StackPanel>
                         </Grid>
                         <Grid ColumnDefinitions="24,*" ColumnSpacing="10">
                             <FontIcon Glyph="&#xE8D2;" FontSize="17" Opacity="0.68" />
                             <StackPanel Grid.Column="1" Spacing="2">
-                                <TextBlock Text="解析稳定性" FontWeight="SemiBold" />
-                                <TextBlock Text="修复正文旁存在大量章节链接时的误判、完整目录自循环，以及序言和分页章节的识别边界。"
+                                <TextBlock Text="Mac 与 Windows 对齐" FontWeight="SemiBold" />
+                                <TextBlock Text="继续使用 SyncSnapshot v2、稳定书籍 identity 和一致的章节恢复规则交换阅读进度。"
                                            TextWrapping="Wrap" Style="{StaticResource YYSecondaryTextStyle}" />
                             </StackPanel>
                         </Grid>
