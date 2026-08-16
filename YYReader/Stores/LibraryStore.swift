@@ -621,6 +621,12 @@ final class LibraryStore {
     func applySyncRecords(_ records: [SyncBookRecord]) throws {
         let previousBookID = selectedBookID
         let previousChapterID = selectedChapterID
+        let previousBookCurrentChapterID = selectedBook?.currentChapterID
+        let previousBookCurrentChapter = previousBookCurrentChapterID.flatMap { chapterID in
+            selectedBook?.chapters.first { $0.id == chapterID }
+        }
+        let previousBookParagraphIndex = previousBookCurrentChapter?.topParagraphIndex
+        let previousBookProgress = previousBookCurrentChapter?.readingProgress
         let canPreserveReaderSession = previousChapterID.map { chapterID in
             readerSession.entries.contains { $0.chapter.id == chapterID }
         } ?? false
@@ -683,10 +689,20 @@ final class LibraryStore {
         refreshBooks()
         selectedBookID = books.contains { $0.id == previousBookID } ? previousBookID : books.first?.id
         rebuildSelectedBookChapters()
-        selectInitialChapter(preferredID: previousChapterID)
+        let synchronizedPositionChanged = selectedBookID == previousBookID
+            && selectedBookReadingPositionChanged(
+                fromChapterID: previousBookCurrentChapterID,
+                paragraphIndex: previousBookParagraphIndex,
+                progress: previousBookProgress
+            )
+        selectInitialChapter(preferredID: synchronizedPositionChanged ? nil : previousChapterID)
         let didPreserveSelection = selectedBookID == previousBookID
             && selectedChapterID == previousChapterID
-        if !didPreserveSelection || !canPreserveReaderSession {
+        if synchronizedPositionChanged {
+            refreshReaderSession()
+            requestReaderScroll(.restore)
+            prefetchNextContinuousChapterIfNeeded()
+        } else if !didPreserveSelection || !canPreserveReaderSession {
             refreshReaderSession()
         }
     }
@@ -1144,6 +1160,22 @@ final class LibraryStore {
 
     private func refreshReaderSession() {
         readerSession.reset(around: selectedChapter)
+    }
+
+    private func selectedBookReadingPositionChanged(
+        fromChapterID previousChapterID: UUID?,
+        paragraphIndex previousParagraphIndex: Int?,
+        progress previousProgress: Double?
+    ) -> Bool {
+        guard let book = selectedBook else { return previousChapterID != nil }
+        let currentChapterID = book.currentChapterID
+        guard currentChapterID == previousChapterID else { return true }
+        guard let currentChapterID,
+              let chapter = chapterByID[currentChapterID] else {
+            return previousParagraphIndex != nil || previousProgress != nil
+        }
+        return chapter.topParagraphIndex != previousParagraphIndex
+            || chapter.readingProgress != previousProgress
     }
 
     private func updateChapterNavigationSnapshot() {

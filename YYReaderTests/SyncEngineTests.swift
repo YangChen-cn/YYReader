@@ -450,7 +450,7 @@ struct SyncEngineTests {
     }
 
     @Test @MainActor
-    func folderSyncDoesNotReplaceActiveContinuousReaderSession() throws {
+    func folderSyncImmediatelyRestoresAdvancedPositionForActiveBook() throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
         let context = container.mainContext
@@ -509,11 +509,70 @@ struct SyncEngineTests {
 
         try store.applySyncRecords([incoming])
 
-        // Persist the newer cross-device position for the next restoration, but
-        // never replace the live SwiftUI scroll hierarchy while the user reads.
+        // A newer cross-device position for the open book must update the live
+        // selection and reader session instead of waiting for a book switch.
         #expect(book.currentChapterID == second.id)
-        #expect(store.selectedChapterID == first.id)
-        #expect(store.readerSession.entries.map(\.chapter.id) == entriesBeforeSync)
+        #expect(store.selectedChapterID == second.id)
+        #expect(store.readerSession.entries.map(\.chapter.id) == [second.id])
+        #expect(store.readerSession.entries.map(\.chapter.id) != entriesBeforeSync)
+        #expect(store.readerScrollRequest?.chapterID == second.id)
+        #expect(store.readerScrollRequest?.intent == .restore)
+        #expect(!context.hasChanges)
+    }
+
+    @Test @MainActor
+    func folderSyncImmediatelyRestoresAdvancedParagraphForActiveChapter() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        context.autosaveEnabled = false
+        let book = Book(
+            title: "正在阅读",
+            author: "作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/book/active-paragraph/",
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+        let chapter = Chapter(
+            sourceURL: "https://example.com/book/active-paragraph/1.html",
+            title: "第1章",
+            sortIndex: 1,
+            bodyText: "第一段\n\n第二段\n\n第三段",
+            cachedAt: Date(timeIntervalSince1970: 100),
+            topParagraphIndex: 0,
+            readingProgress: 0,
+            book: book
+        )
+        book.chapters = [chapter]
+        book.currentChapterID = chapter.id
+        context.insert(book)
+        context.insert(chapter)
+        try context.save()
+        let store = LibraryStore(
+            modelContext: context,
+            coordinator: NovelImportCoordinator(loader: MockHTMLLoader(documents: [:]))
+        )
+        store.restoreSelection(bookID: book.id, chapterID: chapter.id)
+        store.consumeReaderScrollRequest(try #require(store.readerScrollRequest?.id))
+        let incoming = SyncBookRecord(
+            sourceURL: book.sourceBookURL,
+            title: book.title,
+            author: book.author,
+            currentChapterURL: chapter.sourceURL,
+            currentChapterIndex: chapter.sortIndex,
+            paragraphIndex: 2,
+            progress: 1,
+            lastReadAt: Date(timeIntervalSince1970: 200),
+            updatedAt: book.updatedAt
+        )
+
+        try store.applySyncRecords([incoming])
+
+        #expect(store.selectedChapterID == chapter.id)
+        #expect(chapter.topParagraphIndex == 2)
+        #expect(chapter.readingProgress == 1)
+        #expect(store.readerScrollRequest?.chapterID == chapter.id)
+        #expect(store.readerScrollRequest?.intent == .restore)
         #expect(!context.hasChanges)
     }
 
