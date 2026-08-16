@@ -7,6 +7,12 @@ import SwiftData
 final class LibraryStore {
     private static let maximumPrefetchChapterCount = 3
 
+    private struct ContinuousLoad {
+        let id: UUID
+        let task: Task<Void, Never>
+        var prefetchOwnerID: UUID?
+    }
+
     private let modelContext: ModelContext
     private let coordinator: NovelImportCoordinator
     private let folderSync: FolderSyncController?
@@ -17,7 +23,7 @@ final class LibraryStore {
     private var importTask: Task<Void, Never>?
     private var catalogRefreshTask: Task<Void, Never>?
     private var progressSaveTask: Task<Void, Never>?
-    private var continuousLoadTasks: [UUID: Task<Void, Never>] = [:]
+    private var continuousLoadTasks: [UUID: ContinuousLoad] = [:]
     private var continuousLoadFailures: Set<UUID> = []
     private var continuousTailProbeTasks: [UUID: Task<Void, Never>] = [:]
     private var continuousTailProbeStates: [UUID: ContinuousReaderTailProbeState] = [:]
@@ -778,12 +784,13 @@ final class LibraryStore {
     @discardableResult
     private func startContinuousLoad(for chapter: Chapter) -> Task<Void, Never>? {
         guard !chapter.isCached else { return nil }
-        if let task = continuousLoadTasks[chapter.id] { return task }
+        if let load = continuousLoadTasks[chapter.id] { return load.task }
         guard let url = URL(string: chapter.sourceURL) else { return nil }
 
+        let loadID = UUID()
         let task = Task { [weak self] in
             guard let self else { return }
-            defer { continuousLoadTasks[chapter.id] = nil }
+            defer { finishContinuousLoad(chapterID: chapter.id, loadID: loadID) }
             do {
                 if chapter.isAvailableOffline,
                    let bodyText = try await offlineDownloads.loadPersistedBody(chapterID: chapter.id),
@@ -807,8 +814,17 @@ final class LibraryStore {
                 continuousLoadFailures.insert(chapter.id)
             }
         }
-        continuousLoadTasks[chapter.id] = task
+        continuousLoadTasks[chapter.id] = ContinuousLoad(
+            id: loadID,
+            task: task,
+            prefetchOwnerID: nil
+        )
         return task
+    }
+
+    private func finishContinuousLoad(chapterID: UUID, loadID: UUID) {
+        guard continuousLoadTasks[chapterID]?.id == loadID else { return }
+        continuousLoadTasks[chapterID] = nil
     }
 
     private func startContinuousTailProbe(for chapter: Chapter, bypassingTTL: Bool = false) {
@@ -879,14 +895,18 @@ final class LibraryStore {
         respectsPreference: Bool
     ) {
         guard prefetchTask == nil || prefetchOriginChapterID != chapter.id else { return }
-        cancelPrefetch()
         if respectsPreference {
             guard UserDefaults.standard.object(forKey: ReaderPreferenceKeys.prefetchNext) as? Bool ?? true else {
+                cancelPrefetch()
                 return
             }
         }
 
         let requestID = UUID()
+        cancelPrefetch(
+            preservingLoadChapterIDs: prefetchWindowChapterIDs(after: chapter),
+            transferringOwnershipTo: requestID
+        )
         prefetchRequestID = requestID
         prefetchOriginChapterID = chapter.id
         prefetchTask = Task(priority: .utility) { [weak self] in
@@ -903,39 +923,66 @@ final class LibraryStore {
                 finishPrefetch(requestID: requestID)
                 return
             }
-            await prefetchFollowingChapters(after: chapter.id)
+            await prefetchFollowingChapters(after: chapter.id, requestID: requestID)
             finishPrefetch(requestID: requestID)
         }
     }
 
-    private func prefetchFollowingChapters(after chapterID: UUID) async {
+    private func prefetchFollowingChapters(after chapterID: UUID, requestID: UUID) async {
         guard var cursor = chapterByID[chapterID] else { return }
 
         for _ in 0..<Self.maximumPrefetchChapterCount {
-            guard !Task.isCancelled,
+            guard prefetchRequestID == requestID,
+                  !Task.isCancelled,
                   let next = neighbor(of: cursor, offset: 1) else {
                 return
             }
             cursor = next
             if next.isCached { continue }
 
-            let existingTask = continuousLoadTasks[next.id]
+            let existingLoadID = continuousLoadTasks[next.id]?.id
             guard let loadTask = startContinuousLoad(for: next) else { continue }
-            if existingTask == nil {
-                await withTaskCancellationHandler {
-                    await loadTask.value
-                } onCancel: {
-                    loadTask.cancel()
-                }
-            } else {
-                await loadTask.value
+            if var load = continuousLoadTasks[next.id],
+               existingLoadID == nil || load.prefetchOwnerID != nil {
+                load.prefetchOwnerID = requestID
+                continuousLoadTasks[next.id] = load
             }
+            await loadTask.value
 
-            guard next.isCached else { return }
+            guard prefetchRequestID == requestID,
+                  !Task.isCancelled,
+                  next.isCached else { return }
         }
     }
 
-    private func cancelPrefetch() {
+    private func prefetchWindowChapterIDs(after chapter: Chapter) -> Set<UUID> {
+        var result: Set<UUID> = []
+        var cursor = chapter
+        for _ in 0..<Self.maximumPrefetchChapterCount {
+            guard let next = neighbor(of: cursor, offset: 1) else { break }
+            result.insert(next.id)
+            cursor = next
+        }
+        return result
+    }
+
+    private func cancelPrefetch(
+        preservingLoadChapterIDs: Set<UUID> = [],
+        transferringOwnershipTo newRequestID: UUID? = nil
+    ) {
+        if let requestID = prefetchRequestID {
+            let ownedLoads = continuousLoadTasks.filter { $0.value.prefetchOwnerID == requestID }
+            for (chapterID, load) in ownedLoads {
+                if preservingLoadChapterIDs.contains(chapterID), let newRequestID {
+                    var transferredLoad = load
+                    transferredLoad.prefetchOwnerID = newRequestID
+                    continuousLoadTasks[chapterID] = transferredLoad
+                } else {
+                    continuousLoadTasks[chapterID] = nil
+                    load.task.cancel()
+                }
+            }
+        }
         prefetchTask?.cancel()
         prefetchTask = nil
         prefetchRequestID = nil

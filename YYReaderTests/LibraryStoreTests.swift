@@ -780,6 +780,61 @@ struct LibraryStoreTests {
     }
 
     @Test
+    func advancingVisibleChapterKeepsOverlappingPrefetchLoadAlive() async throws {
+        let urls = try (1...5).map { index in
+            try #require(URL(string: "https://example.com/book/prefetch-overlap/\(index).html"))
+        }
+        let loader = MockHTMLLoader(
+            documents: Dictionary(uniqueKeysWithValues: urls.dropFirst().enumerated().map { offset, url in
+                (url, genericCataloglessChapter(title: "第\(offset + 2)章", body: "串行预取竞态测试"))
+            }),
+            delay: .milliseconds(300)
+        )
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        let book = Book(
+            title: "重叠预取窗口测试",
+            author: "测试作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/book/prefetch-overlap/"
+        )
+        let chapters = urls.enumerated().map { offset, url in
+            Chapter(
+                sourceURL: url.absoluteString,
+                title: "第\(offset + 1)章",
+                sortIndex: offset + 1,
+                bodyText: offset == 0 ? "第一章正文" : "",
+                cachedAt: offset == 0 ? .now : nil,
+                book: book
+            )
+        }
+        book.chapters = chapters
+        book.currentChapterID = chapters[0].id
+        context.insert(book)
+        for chapter in chapters { context.insert(chapter) }
+        try context.save()
+
+        let store = LibraryStore(modelContext: context, coordinator: NovelImportCoordinator(loader: loader))
+        store.restoreSelection(bookID: book.id, chapterID: chapters[0].id)
+        store.configureContinuousReading(true)
+        try await waitForCache(of: chapters[1])
+        try await waitForRequestCount(2, in: loader)
+
+        // Chapter 3 is still loading for the old [2, 3, 4] window when the
+        // visible chapter advances. The new [3, 4, 5] window must adopt it.
+        store.prepareContinuousChapterAttachment(after: chapters[0].id)
+        store.beginReaderScrollTransaction()
+        store.updateVisibleReaderPosition(chapterID: chapters[1].id, paragraphIndex: 0, total: 1)
+        try await waitForCache(of: chapters[4])
+
+        #expect(store.selectedChapterID == chapters[1].id)
+        #expect(loader.requestedURLs == Array(urls[1...4]))
+        #expect(chapters[2...4].allSatisfy { $0.isCached })
+        #expect(loader.maximumConcurrentLoadCount == 1)
+    }
+
+    @Test
     func disablingContinuousReadingCancelsSerialPrefetch() async throws {
         let urls = try (2...5).map { index in
             try #require(URL(string: "https://example.com/book/prefetch-cancel/\(index).html"))
@@ -826,6 +881,54 @@ struct LibraryStoreTests {
 
         #expect(loader.requestedURLs == [urls[0]])
         #expect(following.allSatisfy { !$0.isCached })
+    }
+
+    @Test
+    func restartedPrefetchDoesNotReuseCancelledContinuousLoad() async throws {
+        let urls = try (1...4).map { index in
+            try #require(URL(string: "https://example.com/book/prefetch-restart/\(index).html"))
+        }
+        let loader = MockHTMLLoader(
+            documents: Dictionary(uniqueKeysWithValues: urls.dropFirst().map { url in
+                (url, genericCataloglessChapter(title: "重启预取", body: "重启后的加载必须完成"))
+            }),
+            delay: .milliseconds(300)
+        )
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        let book = Book(
+            title: "预取重启测试",
+            author: "测试作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/book/prefetch-restart/"
+        )
+        let chapters = urls.enumerated().map { offset, url in
+            Chapter(
+                sourceURL: url.absoluteString,
+                title: "第\(offset + 1)章",
+                sortIndex: offset + 1,
+                bodyText: offset == 0 ? "第一章正文" : "",
+                cachedAt: offset == 0 ? .now : nil,
+                book: book
+            )
+        }
+        book.chapters = chapters
+        book.currentChapterID = chapters[0].id
+        context.insert(book)
+        for chapter in chapters { context.insert(chapter) }
+        try context.save()
+
+        let store = LibraryStore(modelContext: context, coordinator: NovelImportCoordinator(loader: loader))
+        store.restoreSelection(bookID: book.id, chapterID: chapters[0].id)
+        store.configureContinuousReading(true)
+        try await waitForRequestCount(1, in: loader)
+        store.configureContinuousReading(false)
+        store.configureContinuousReading(true)
+        try await waitForCache(of: chapters[3])
+
+        #expect(loader.requestedURLs == [urls[1], urls[1], urls[2], urls[3]])
+        #expect(chapters.dropFirst().allSatisfy { $0.isCached })
     }
 
     @Test
@@ -1110,7 +1213,7 @@ private func waitForImport(_ store: LibraryStore) async throws {
 
 @MainActor
 private func waitForCache(of chapter: Chapter) async throws {
-    for _ in 0..<100 {
+    for _ in 0..<200 {
         if chapter.isCached { return }
         try await Task.sleep(for: .milliseconds(10))
     }
