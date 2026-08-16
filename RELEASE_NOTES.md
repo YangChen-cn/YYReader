@@ -1,3 +1,36 @@
+# YYReader 1.2.3
+
+YYReader 1.2.3 是连续阅读预取与跨端进度恢复的稳定性更新。本次提供 macOS arm64 DMG；Windows 端对应修复已合入共同源码，Windows 安装包快捷下载暂时继续提供 1.2.2。
+
+## macOS 1.2.3
+
+### 连续阅读与预取
+
+- 空闲预取由下一章扩展为最多 3 章，保持 `.utility` 低优先级、严格串行、可取消，并跳过已缓存章节。
+- 修复可见章节前移时旧 prefetch 取消仍属于新窗口的 `continuousLoadTask`，新 prefetch 又复用已取消任务而提前停止的竞态。
+- 重叠预取窗口会转移在途加载的所有权；真正退出、禁用或切到不重叠窗口时仍会取消。
+- 每次章节加载使用独立 generation，旧任务结束不会清理后来创建的新任务。
+
+### 文件夹同步
+
+- Windows 的更后阅读位置合并到当前打开的书籍后，立即更新所选章节与 Reader session，并按保存段落恢复滚动。
+- 同章更后段落同样即时恢复；较早章节或较早段落仍不会覆盖本地进度。
+- 当前阅读书籍的远端删除仍延迟到退出 Reader 后安全应用。
+
+### 双端源码对齐
+
+- 合入 Windows 连续阅读最多 3 章预取、chapter single-flight 取消语义和 append 后 anchor 恢复修复。
+- Windows 文件夹同步改为原地更新同一个 `windows.json`；云盘离线导致既有文件暂时消失时停止写入并等待恢复。
+
+### 安装与验证
+
+- 安装包：`YYReader-1.2.3-arm64.dmg`，支持 Apple 芯片 Mac 与 macOS 15 或更高版本。
+- macOS 自动化测试：119 项全部通过；Release 为纯 arm64，DMG 完整性、签名、App Icon 与资源检查均通过。
+- macOS arm64 DMG SHA-256：`216d41cdbc2237e188c2606120dc60ebe31fba666e65ad552a9bac7f4b0eb4e7`。
+- Release 使用 ad-hoc 签名且未经过 Apple 公证；首次启动时可能需要在 Finder 中右键 YYReader 并选择“打开”。
+
+---
+
 # YYReader 1.2.2
 
 YYReader 1.2.2 聚焦通用网站兼容、完整目录刷新和 Mac/Windows 无目录小说 identity 一致性。本次同时提供 macOS arm64 DMG 与 Windows x64 安装程序。

@@ -5,7 +5,7 @@
   <p>粘贴章节网页，YYReader 会识别书籍、目录与正文，并以系统原生控件呈现干净的阅读界面。</p>
 
   <p>
-    <a href="https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.2"><img src="https://img.shields.io/badge/release-v1.2.2-2ea44f?style=flat-square" alt="Release v1.2.2"></a>
+    <a href="https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.3"><img src="https://img.shields.io/badge/release-v1.2.3-2ea44f?style=flat-square" alt="Release v1.2.3"></a>
     <img src="https://img.shields.io/badge/macOS-15%2B-111111?style=flat-square&logo=apple" alt="macOS 15+">
     <img src="https://img.shields.io/badge/Windows-10%201809%2B-0078D4?style=flat-square&logo=windows11" alt="Windows 10 1809+">
     <img src="https://img.shields.io/badge/Swift-6-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 6">
@@ -17,10 +17,10 @@
 
 | 平台 | 安装包 | 系统要求 |
 | --- | --- | --- |
-| **macOS** | [下载 YYReader 1.2.2 arm64 DMG](https://github.com/YangChen-cn/YYReader/releases/download/v1.2.2/YYReader-1.2.2-arm64.dmg) | Apple 芯片，macOS 15 或更高版本 |
+| **macOS** | [下载 YYReader 1.2.3 arm64 DMG](https://github.com/YangChen-cn/YYReader/releases/download/v1.2.3/YYReader-1.2.3-arm64.dmg) | Apple 芯片，macOS 15 或更高版本 |
 | **Windows** | [下载 YYReader 1.2.2 x64 安装程序](https://github.com/YangChen-cn/YYReader/releases/download/v1.2.2/YYReader-Setup-x64-1.2.2.exe) | x64 Windows 10 1809 或更高版本，推荐 Windows 11 |
 
-也可以前往 [YYReader 1.2.2 Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.2) 查看校验信息和完整发布说明。
+也可以前往 [YYReader 1.2.3 Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.3) 查看校验信息和完整发布说明。
 
 > macOS 版本使用 ad-hoc 签名且尚未经过 Apple 公证，首次启动时可能需要在 Finder 中右键 YYReader 并选择“打开”。Windows 安装程序尚未使用商业代码签名，SmartScreen 可能提示“未知发布者”。
 
@@ -98,15 +98,14 @@ macOS 快捷键：
 - `⌘[` / `⌘]`：上一章 / 下一章。
 - 方向键：整页或小幅滚动正文。
 
-## 1.2.2 更新摘要
+## 1.2.3 更新摘要
 
-- 双端通用解析器加强正文容器、书名作者、章节导航和噪声清理，适配更多真实网站结构。
-- 完整目录刷新支持多页遍历、首页最新章节预览替换和 DOM 顺序保留；整书下载会先取得完整目录。
-- 修复正文旁大量章节链接造成的目录误判、完整目录自引用循环、`序言` 识别和章节分页 URL 重复。
-- 统一 Mac/Windows 的无目录书籍 identity 与 metadata 规则；真实目录被发现后可在安全条件下恢复目录能力。
-- macOS 在书架直接提供继续阅读、刷新目录、下载、添加和删除操作，减少进入阅读模式前的额外步骤。
+- macOS 空闲预取从下一章扩展为最多 3 章，保持低优先级、严格串行、可取消并跳过已缓存章节。
+- 修复连续阅读切换可见章节时取消重叠窗口在途加载，导致后续预取提前停止的竞态。
+- Windows 的更后阅读位置同步到当前打开书籍时，macOS 会立即切换章节或恢复段落，无需切书刷新。
+- Windows 连续阅读的三章预取、append anchor 恢复与同步文件原地更新修复已合入共同源码。
 
-完整内容见 [YYReader 1.2.2 发布说明](RELEASE_NOTES.md)。
+完整内容见 [YYReader 1.2.3 发布说明](RELEASE_NOTES.md)。
 
 ## 技术架构
 

@@ -83,13 +83,11 @@ struct AboutSettingsView: View {
             Text("最新改进")
                 .font(.headline)
 
-            GroupBox("版本 1.2.2") {
+            GroupBox("版本 1.2.3") {
                 VStack(alignment: .leading, spacing: 10) {
-                    Label("增强通用网站的正文、书名作者、章节导航与噪声识别。", systemImage: "text.magnifyingglass")
-                    Label("刷新目录会取得完整分页并保持网站章节顺序，整书下载不再遗漏。", systemImage: "books.vertical")
-                    Label("修复侧栏章节误判、自引用目录循环和章节分页重复。", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
-                    Label("无目录小说与 Windows 使用一致 identity，安全发现目录后恢复刷新能力。", systemImage: "rectangle.2.swap")
-                    Label("书架可直接继续阅读、刷新目录、下载、添加或删除小说。", systemImage: "books.vertical.fill")
+                    Label("空闲预取扩展为最多 3 章，保持低优先级、串行、可取消并跳过缓存。", systemImage: "arrow.down.circle")
+                    Label("切换可见章节时会接管重叠窗口的在途加载，不再中断后续预取。", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
+                    Label("Windows 的更后阅读位置同步到当前书籍时会立即恢复，无需切换书籍。", systemImage: "rectangle.2.swap")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
