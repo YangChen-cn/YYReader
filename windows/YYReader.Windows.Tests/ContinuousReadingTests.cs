@@ -255,6 +255,37 @@ public sealed class ContinuousReadingTests
     }
 
     [TestMethod]
+    public async Task CancellingPrefetchDoesNotCancelSharedContinuousLoad()
+    {
+        var urls = ChapterUrls(2);
+        var loader = new PrefetchLoader(urls, blockedUrl: urls[1]);
+        var (store, databasePath) = await CreateCatalogStoreAsync(loader, urls);
+
+        try
+        {
+            await loader.BlockedRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var prefetch = store.PrefetchCompletion;
+            var continuous = store.PrepareNextChapterAsync();
+
+            store.ConfigureNextChapterPrefetch(false);
+            await prefetch.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.IsFalse(loader.BlockedRequestCancelled.Task.IsCompleted,
+                "取消 prefetch 只能取消自己的等待，不能取消共享底层请求");
+
+            loader.ReleaseBlockedRequest();
+            var result = await continuous.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.AreEqual(NextChapterPreparationStatus.Ready, result.Status);
+            Assert.AreEqual(1, loader.RequestCount(urls[1]));
+        }
+        finally
+        {
+            await store.DisposeAsync();
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
     public async Task IdlePrefetchVisitsAtMostThreeSuccessorsAndSkipsDiskCache()
     {
         var urls = ChapterUrls(5);
@@ -310,7 +341,9 @@ public sealed class ContinuousReadingTests
             var oldPrefetch = store.PrefetchCompletion;
             store.SelectBook(null);
             await oldPrefetch.WaitAsync(TimeSpan.FromSeconds(5));
-            await loader.BlockedRequestCancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.IsFalse(loader.BlockedRequestCancelled.Task.IsCompleted);
+            loader.ReleaseBlockedRequest();
+            await store.ChapterLoadsCompletion.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.AreEqual(0, loader.RequestCount(urls[2]));
         }
         finally
@@ -335,7 +368,9 @@ public sealed class ContinuousReadingTests
 
             Assert.IsTrue(await store.SelectChapterAsync(target));
             await oldPrefetch.WaitAsync(TimeSpan.FromSeconds(5));
-            await loader.BlockedRequestCancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.IsFalse(loader.BlockedRequestCancelled.Task.IsCompleted);
+            loader.ReleaseBlockedRequest();
+            await store.ChapterLoadsCompletion.WaitAsync(TimeSpan.FromSeconds(5));
         }
         finally
         {
@@ -392,12 +427,16 @@ public sealed class ContinuousReadingTests
         var methodStart = source.IndexOf("private async Task LoadNextContinuousChapterAsync", StringComparison.Ordinal);
         var methodEnd = source.IndexOf("private async void ContinuationRetry_Click", methodStart, StringComparison.Ordinal);
         var method = source[methodStart..methodEnd];
+        var anchorStart = source.IndexOf("private ReaderAnchor? CaptureReaderAnchor", StringComparison.Ordinal);
+        var anchorMethods = source[anchorStart..methodStart];
 
         var capture = method.IndexOf("var anchor = CaptureReaderAnchor()", StringComparison.Ordinal);
         var append = method.IndexOf("Items.AddRange", StringComparison.Ordinal);
         var restore = method.IndexOf("RestoreReaderAnchor(anchor)", StringComparison.Ordinal);
         Assert.IsTrue(capture >= 0 && append > capture && restore > append);
         StringAssert.Contains(method, "_restoringContinuousAnchor");
+        StringAssert.Contains(anchorMethods, "desiredTop");
+        Assert.IsFalse(anchorMethods.Contains("Math.Clamp(top / ReaderScrollViewer.ActualHeight", StringComparison.Ordinal));
         Assert.IsFalse(method.Contains("VerticalOffset", StringComparison.Ordinal));
         Assert.IsFalse(method.Contains("stableOffset", StringComparison.Ordinal));
     }

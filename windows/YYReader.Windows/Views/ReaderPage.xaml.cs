@@ -368,7 +368,7 @@ public sealed partial class ReaderPage : Page
         }
 
         var top = frameworkElement.TransformToVisual(ReaderScrollViewer).TransformPoint(new Point(0, 0)).Y;
-        var relativeOffset = ReaderScrollViewer.ActualHeight <= 0 ? 0 : Math.Clamp(top / ReaderScrollViewer.ActualHeight, 0, 1);
+        var relativeOffset = ReaderScrollViewer.ActualHeight <= 0 ? 0 : top / ReaderScrollViewer.ActualHeight;
         return new ReaderAnchor(visible.ChapterUrl, visible.ParagraphIndex, relativeOffset);
     }
 
@@ -385,11 +385,25 @@ public sealed partial class ReaderPage : Page
                 continue;
             }
 
-            ReaderRepeater.GetOrCreateElement(index).StartBringIntoView(new BringIntoViewOptions
+            var element = ReaderRepeater.GetOrCreateElement(index);
+            var options = new BringIntoViewOptions
             {
                 AnimationDesired = false,
-                VerticalAlignmentRatio = normalized.ViewportRelativeOffset
-            });
+                VerticalAlignmentRatio = Math.Clamp(normalized.ViewportRelativeOffset, 0, 1)
+            };
+            if (normalized.ViewportRelativeOffset < 0 && element is FrameworkElement frameworkElement)
+            {
+                var desiredTop = normalized.ViewportRelativeOffset * ReaderScrollViewer.ActualHeight;
+                var targetOffsetWithinParagraph = Math.Min(
+                    -desiredTop,
+                    Math.Max(0, frameworkElement.ActualHeight - 1));
+                options.TargetRect = new Rect(
+                    0,
+                    targetOffsetWithinParagraph,
+                    Math.Max(1, frameworkElement.ActualWidth),
+                    1);
+            }
+            element.StartBringIntoView(options);
             return;
         }
     }

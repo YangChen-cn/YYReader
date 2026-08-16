@@ -151,6 +151,18 @@ public sealed class ReaderBehaviorTests
     }
 
     [TestMethod]
+    public void ReaderAnchorPreservesNegativeParagraphViewportOffset()
+    {
+        var anchor = new ReaderAnchor("https://example.com/2.html", 8, -0.37);
+
+        var restored = anchor.Normalized(20);
+
+        Assert.AreEqual("https://example.com/2.html", restored.ChapterUrl);
+        Assert.AreEqual(8, restored.ParagraphIndex);
+        Assert.AreEqual(-0.37, restored.ViewportRelativeOffset, 0.0001);
+    }
+
+    [TestMethod]
     public void RangeCollectionRaisesOneNotificationForAnAppendedChapter()
     {
         var collection = new RangeObservableCollection<int>();

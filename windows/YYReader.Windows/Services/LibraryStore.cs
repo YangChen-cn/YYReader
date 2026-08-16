@@ -17,7 +17,8 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
     private readonly TimeSpan _prefetchIdleDelay;
     private readonly int _prefetchChapterLimit;
     private readonly object _chapterLoadSync = new();
-    private readonly Dictionary<string, Task> _chapterLoadTasks = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, SharedChapterLoad> _chapterLoadTasks = new(StringComparer.Ordinal);
+    private readonly CancellationTokenSource _chapterLoadLifetimeCancellation = new();
     private CancellationTokenSource? _progressSaveCancellation;
     private CancellationTokenSource? _prefetchCancellation;
     private CancellationTokenSource? _catalogRefreshCancellation;
@@ -83,6 +84,16 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
     public event EventHandler? ProgressPersisted;
 
     internal Task PrefetchCompletion => _prefetchTask ?? Task.CompletedTask;
+    internal Task ChapterLoadsCompletion
+    {
+        get
+        {
+            lock (_chapterLoadSync)
+            {
+                return Task.WhenAll(_chapterLoadTasks.Values.Select(load => load.Task));
+            }
+        }
+    }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -564,40 +575,42 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         }, cancellationToken).ConfigureAwait(true);
     }
 
-    private Task LoadChapterSingleFlightAsync(
+    private async Task LoadChapterSingleFlightAsync(
         Book book,
         Chapter chapter,
         CancellationToken cancellationToken)
     {
         if (chapter.IsCached)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         var key = $"{book.Id}\n{chapter.SourceUrl}";
-        Task sharedTask;
+        SharedChapterLoad sharedLoad;
         lock (_chapterLoadSync)
         {
-            if (!_chapterLoadTasks.TryGetValue(key, out var existingTask))
+            if (!_chapterLoadTasks.TryGetValue(key, out sharedLoad!))
             {
-                sharedTask = LoadChapterCoreAsync(book, chapter, cancellationToken);
-                _chapterLoadTasks[key] = sharedTask;
-                _ = ObserveChapterLoadCompletionAsync(key, sharedTask);
-            }
-            else
-            {
-                sharedTask = existingTask;
+                var operationCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                    _chapterLoadLifetimeCancellation.Token);
+                sharedLoad = new SharedChapterLoad(
+                    LoadChapterCoreAsync(book, chapter, operationCancellation.Token),
+                    operationCancellation);
+                _chapterLoadTasks[key] = sharedLoad;
+                _ = ObserveChapterLoadCompletionAsync(key, sharedLoad);
             }
         }
 
-        return sharedTask.WaitAsync(cancellationToken);
+        // A caller owns only its wait. The shared I/O operation lives until completion or
+        // store disposal, so cancelling prefetch cannot cancel a continuous-reader waiter.
+        await sharedLoad.Task.WaitAsync(cancellationToken).ConfigureAwait(true);
     }
 
-    private async Task ObserveChapterLoadCompletionAsync(string key, Task task)
+    private async Task ObserveChapterLoadCompletionAsync(string key, SharedChapterLoad sharedLoad)
     {
         try
         {
-            await task.ConfigureAwait(false);
+            await sharedLoad.Task.ConfigureAwait(false);
         }
         catch
         {
@@ -607,11 +620,12 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         {
             lock (_chapterLoadSync)
             {
-                if (_chapterLoadTasks.TryGetValue(key, out var current) && ReferenceEquals(current, task))
+                if (_chapterLoadTasks.TryGetValue(key, out var current) && ReferenceEquals(current, sharedLoad))
                 {
                     _chapterLoadTasks.Remove(key);
                 }
             }
+            sharedLoad.OperationCancellation.Dispose();
         }
     }
 
@@ -856,10 +870,18 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         if (_disposed) return;
         _disposed = true;
         CancelPrefetch();
+        _chapterLoadLifetimeCancellation.Cancel();
         _catalogRefreshCancellation?.Cancel();
         _catalogRefreshCancellation?.Dispose();
         await FlushPendingProgressAsync().ConfigureAwait(true);
         _progressSaveCancellation?.Dispose();
+        _chapterLoadLifetimeCancellation.Dispose();
+    }
+
+    private sealed class SharedChapterLoad(Task task, CancellationTokenSource operationCancellation)
+    {
+        public Task Task { get; } = task;
+        public CancellationTokenSource OperationCancellation { get; } = operationCancellation;
     }
 
     private static NextChapterPreparationResult FailedNextChapter(

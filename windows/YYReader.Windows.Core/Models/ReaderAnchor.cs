@@ -10,6 +10,8 @@ public sealed record ReaderAnchor(
         ParagraphIndex = paragraphCount <= 0
             ? 0
             : Math.Clamp(ParagraphIndex, 0, paragraphCount - 1),
-        ViewportRelativeOffset = Math.Clamp(ViewportRelativeOffset, 0, 1)
+        ViewportRelativeOffset = double.IsFinite(ViewportRelativeOffset)
+            ? ViewportRelativeOffset
+            : 0
     };
 }
