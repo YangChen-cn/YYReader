@@ -38,7 +38,8 @@
                    DisplayMode="Overlay"
                    PanePlacement="Left"
                    OpenPaneLength="340"
-                   CompactPaneLength="0">
+                   CompactPaneLength="0"
+                   PaneOpened="CatalogSplitView_PaneOpened">
             <SplitView.Pane>
                 <Border x:Name="CatalogPane" BorderThickness="0,0,1,0">
                     <Grid Padding="16,14" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">

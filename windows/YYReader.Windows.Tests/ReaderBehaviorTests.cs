@@ -163,6 +163,24 @@ public sealed class ReaderBehaviorTests
     }
 
     [TestMethod]
+    public void OpeningCatalogCentersTheVisibleReadingChapter()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", "..", "windows", "YYReader.Windows", "Views", "ReaderPage.xaml.cs"));
+        var centerStart = source.IndexOf("private void CenterCatalogOnCurrentChapter", StringComparison.Ordinal);
+        var centerEnd = source.IndexOf("private void CenterCatalogItemAfterLayout", centerStart, StringComparison.Ordinal);
+        var centerMethod = source[centerStart..centerEnd];
+        var openStart = source.IndexOf("private void OpenCatalog", StringComparison.Ordinal);
+        var openEnd = source.IndexOf("private void CloseCatalog_Click", openStart, StringComparison.Ordinal);
+        var openMethod = source[openStart..openEnd];
+
+        StringAssert.Contains(centerMethod, "FindVisibleParagraph()?.ChapterUrl");
+        StringAssert.Contains(source, "VerticalAlignmentRatio = 0.5");
+        StringAssert.Contains(openMethod, "CenterCatalogOnCurrentChapter()");
+    }
+
+    [TestMethod]
     public void RangeCollectionRaisesOneNotificationForAnAppendedChapter()
     {
         var collection = new RangeObservableCollection<int>();

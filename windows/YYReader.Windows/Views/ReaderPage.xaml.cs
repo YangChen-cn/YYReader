@@ -712,22 +712,67 @@ public sealed partial class ReaderPage : Page
         }
         _catalogDirty = false;
         ToolbarChapterTitle.Text = Store.SelectedChapter?.Title ?? "";
-        if (CatalogSplitView.IsPaneOpen && CatalogList.SelectedItem is not null)
+        if (CatalogSplitView.IsPaneOpen)
         {
-            var selected = CatalogList.SelectedItem;
-            CatalogList.ScrollIntoView(selected, ScrollIntoViewAlignment.Default);
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-            {
-                if (CatalogList.ContainerFromItem(selected) is ListViewItem container)
-                {
-                    container.StartBringIntoView(new BringIntoViewOptions
-                    {
-                        AnimationDesired = false,
-                        VerticalAlignmentRatio = 0.5
-                    });
-                }
-            });
+            CenterCatalogOnCurrentChapter();
         }
+    }
+
+    private void CenterCatalogOnCurrentChapter()
+    {
+        if (!CatalogSplitView.IsPaneOpen || CatalogList.ItemsSource is not IEnumerable<Chapter> chapters)
+        {
+            return;
+        }
+
+        var currentChapterUrl = FindVisibleParagraph()?.ChapterUrl ?? Store.SelectedChapter?.SourceUrl;
+        var current = chapters.FirstOrDefault(chapter => chapter.SourceUrl == currentChapterUrl);
+        if (current is null)
+        {
+            return;
+        }
+
+        var wasSynchronizing = _synchronizingCatalog;
+        _synchronizingCatalog = true;
+        try
+        {
+            CatalogList.SelectedItem = current;
+        }
+        finally
+        {
+            _synchronizingCatalog = wasSynchronizing;
+        }
+
+        CatalogList.ScrollIntoView(current, ScrollIntoViewAlignment.Leading);
+        CenterCatalogItemAfterLayout(current, retryCount: 2);
+    }
+
+    private void CenterCatalogItemAfterLayout(Chapter chapter, int retryCount)
+    {
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (!CatalogSplitView.IsPaneOpen || CatalogList.SelectedItem != chapter)
+            {
+                return;
+            }
+
+            CatalogList.UpdateLayout();
+            if (CatalogList.ContainerFromItem(chapter) is not ListViewItem container)
+            {
+                if (retryCount > 0)
+                {
+                    CatalogList.ScrollIntoView(chapter, ScrollIntoViewAlignment.Leading);
+                    CenterCatalogItemAfterLayout(chapter, retryCount - 1);
+                }
+                return;
+            }
+
+            container.StartBringIntoView(new BringIntoViewOptions
+            {
+                AnimationDesired = false,
+                VerticalAlignmentRatio = 0.5
+            });
+        });
     }
 
     private void RefreshCatalogListIfVisible()
@@ -811,8 +856,15 @@ public sealed partial class ReaderPage : Page
         {
             RefreshCatalogList();
         }
+        else
+        {
+            CenterCatalogOnCurrentChapter();
+        }
         if (focusSearch) DispatcherQueue.TryEnqueue(() => CatalogSearchBox.Focus(FocusState.Programmatic));
     }
+
+    private void CatalogSplitView_PaneOpened(SplitView sender, object args) =>
+        CenterCatalogOnCurrentChapter();
 
     private void CloseCatalog_Click(object sender, RoutedEventArgs e) => CatalogSplitView.IsPaneOpen = false;
 
