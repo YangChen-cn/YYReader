@@ -5,11 +5,15 @@ import SwiftData
 @MainActor
 @Observable
 final class LibraryStore {
+    private static let maximumPrefetchChapterCount = 3
+
     private let modelContext: ModelContext
     private let coordinator: NovelImportCoordinator
     private let folderSync: FolderSyncController?
     private let progressSaveDelay: Duration
     private var prefetchTask: Task<Void, Never>?
+    private var prefetchRequestID: UUID?
+    private var prefetchOriginChapterID: UUID?
     private var importTask: Task<Void, Never>?
     private var catalogRefreshTask: Task<Void, Never>?
     private var progressSaveTask: Task<Void, Never>?
@@ -138,8 +142,7 @@ final class LibraryStore {
             selectedChapterID = previousID
             return
         }
-        prefetchTask?.cancel()
-        prefetchTask = nil
+        cancelPrefetch()
         cancelContinuousTailProbes()
         selectedChapterID = id
         guard let chapter = selectedChapter else {
@@ -240,6 +243,7 @@ final class LibraryStore {
     func configureContinuousReading(_ isEnabled: Bool) {
         guard continuousReadingEnabled != isEnabled else { return }
         continuousReadingEnabled = isEnabled
+        if !isEnabled { cancelPrefetch() }
         cancelContinuousTailProbes()
         candidateVisibleChapterID = nil
         visibleChapterDebounceTask?.cancel()
@@ -259,12 +263,8 @@ final class LibraryStore {
     }
 
     func prefetchContinuousChapter(after chapterID: UUID) {
-        guard let chapter = chapterByID[chapterID],
-              let next = neighbor(of: chapter, offset: 1) else {
-            return
-        }
-        guard !next.isCached else { return }
-        startContinuousLoad(for: next)
+        guard let chapter = chapterByID[chapterID] else { return }
+        scheduleSerialPrefetch(after: chapter, delay: nil, respectsPreference: false)
     }
 
     func prepareContinuousChapterAttachment(after chapterID: UUID) {
@@ -759,14 +759,13 @@ final class LibraryStore {
         offlineDownloads.start(book: book, currentChapter: chapter, scope: scope)
     }
 
-    private func startContinuousLoad(for chapter: Chapter) {
-        guard !chapter.isCached,
-              continuousLoadTasks[chapter.id] == nil,
-              let url = URL(string: chapter.sourceURL) else {
-            return
-        }
+    @discardableResult
+    private func startContinuousLoad(for chapter: Chapter) -> Task<Void, Never>? {
+        guard !chapter.isCached else { return nil }
+        if let task = continuousLoadTasks[chapter.id] { return task }
+        guard let url = URL(string: chapter.sourceURL) else { return nil }
 
-        continuousLoadTasks[chapter.id] = Task { [weak self] in
+        let task = Task { [weak self] in
             guard let self else { return }
             defer { continuousLoadTasks[chapter.id] = nil }
             do {
@@ -792,6 +791,8 @@ final class LibraryStore {
                 continuousLoadFailures.insert(chapter.id)
             }
         }
+        continuousLoadTasks[chapter.id] = task
+        return task
     }
 
     private func startContinuousTailProbe(for chapter: Chapter, bypassingTTL: Bool = false) {
@@ -853,16 +854,83 @@ final class LibraryStore {
     }
 
     private func schedulePrefetch(after chapter: Chapter) {
+        scheduleSerialPrefetch(after: chapter, delay: .seconds(1), respectsPreference: true)
+    }
+
+    private func scheduleSerialPrefetch(
+        after chapter: Chapter,
+        delay: Duration?,
+        respectsPreference: Bool
+    ) {
+        guard prefetchTask == nil || prefetchOriginChapterID != chapter.id else { return }
+        cancelPrefetch()
+        if respectsPreference {
+            guard UserDefaults.standard.object(forKey: ReaderPreferenceKeys.prefetchNext) as? Bool ?? true else {
+                return
+            }
+        }
+
+        let requestID = UUID()
+        prefetchRequestID = requestID
+        prefetchOriginChapterID = chapter.id
+        prefetchTask = Task(priority: .utility) { [weak self] in
+            guard let self else { return }
+            if let delay {
+                do {
+                    try await Task.sleep(for: delay)
+                } catch {
+                    finishPrefetch(requestID: requestID)
+                    return
+                }
+            }
+            guard !Task.isCancelled else {
+                finishPrefetch(requestID: requestID)
+                return
+            }
+            await prefetchFollowingChapters(after: chapter.id)
+            finishPrefetch(requestID: requestID)
+        }
+    }
+
+    private func prefetchFollowingChapters(after chapterID: UUID) async {
+        guard var cursor = chapterByID[chapterID] else { return }
+
+        for _ in 0..<Self.maximumPrefetchChapterCount {
+            guard !Task.isCancelled,
+                  let next = neighbor(of: cursor, offset: 1) else {
+                return
+            }
+            cursor = next
+            if next.isCached { continue }
+
+            let existingTask = continuousLoadTasks[next.id]
+            guard let loadTask = startContinuousLoad(for: next) else { continue }
+            if existingTask == nil {
+                await withTaskCancellationHandler {
+                    await loadTask.value
+                } onCancel: {
+                    loadTask.cancel()
+                }
+            } else {
+                await loadTask.value
+            }
+
+            guard next.isCached else { return }
+        }
+    }
+
+    private func cancelPrefetch() {
         prefetchTask?.cancel()
-        guard UserDefaults.standard.object(forKey: ReaderPreferenceKeys.prefetchNext) as? Bool ?? true,
-              let next = chapterForURL(chapter.nextURL), !next.isCached else {
-            return
-        }
-        prefetchTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(1))
-            guard !Task.isCancelled, let self else { return }
-            self.startContinuousLoad(for: next)
-        }
+        prefetchTask = nil
+        prefetchRequestID = nil
+        prefetchOriginChapterID = nil
+    }
+
+    private func finishPrefetch(requestID: UUID) {
+        guard prefetchRequestID == requestID else { return }
+        prefetchTask = nil
+        prefetchRequestID = nil
+        prefetchOriginChapterID = nil
     }
 
     private func navigate(to urlString: String?, fallbackOffset: Int) {

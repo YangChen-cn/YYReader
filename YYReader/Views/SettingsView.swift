@@ -14,7 +14,7 @@ struct SettingsView: View {
 
             Tab("网络", systemImage: "network") {
                 Form {
-                    Toggle("空闲时预取下一章", isOn: $prefetchNext)
+                    Toggle("空闲时预取后续章节（最多 3 章）", isOn: $prefetchNext)
                     LabeledContent("网页验证数据") {
                         Button("清除 Cookie 与缓存", action: clearWebsiteData)
                             .disabled(clearingWebsiteData)

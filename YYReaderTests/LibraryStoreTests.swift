@@ -683,13 +683,17 @@ struct LibraryStoreTests {
     }
 
     @Test
-    func continuousPrefetchCachesNextChapterWithoutChangingRenderedEntries() async throws {
+    func continuousPrefetchCachesUpToThreeChaptersSeriallyWithoutChangingRenderedEntries() async throws {
         let nextURL = try #require(URL(string: "https://example.com/book/continuous/2.html"))
         let thirdURL = try #require(URL(string: "https://example.com/book/continuous/3.html"))
+        let fourthURL = try #require(URL(string: "https://example.com/book/continuous/4.html"))
+        let fifthURL = try #require(URL(string: "https://example.com/book/continuous/5.html"))
         let loader = MockHTMLLoader(documents: [
             nextURL: genericCataloglessChapter(title: "第2章 继续", body: "连续阅读的第二章"),
-            thirdURL: genericCataloglessChapter(title: "第3章 后续", body: "连续阅读的第三章")
-        ])
+            thirdURL: genericCataloglessChapter(title: "第3章 后续", body: "连续阅读的第三章"),
+            fourthURL: genericCataloglessChapter(title: "第4章 后续", body: "连续阅读的第四章"),
+            fifthURL: genericCataloglessChapter(title: "第5章 后续", body: "连续阅读的第五章")
+        ], delay: .milliseconds(10))
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
         let context = container.mainContext
@@ -720,12 +724,26 @@ struct LibraryStoreTests {
             sortIndex: 3,
             book: book
         )
-        book.chapters = [first, second, third]
+        let fourth = Chapter(
+            sourceURL: fourthURL.absoluteString,
+            title: "第4章 后续",
+            sortIndex: 4,
+            book: book
+        )
+        let fifth = Chapter(
+            sourceURL: fifthURL.absoluteString,
+            title: "第5章 后续",
+            sortIndex: 5,
+            book: book
+        )
+        book.chapters = [first, second, third, fourth, fifth]
         book.currentChapterID = first.id
         context.insert(book)
         context.insert(first)
         context.insert(second)
         context.insert(third)
+        context.insert(fourth)
+        context.insert(fifth)
         try context.save()
 
         let store = LibraryStore(modelContext: context, coordinator: NovelImportCoordinator(loader: loader))
@@ -733,14 +751,19 @@ struct LibraryStoreTests {
         #expect(!store.continuousReadingEnabled)
         store.configureContinuousReading(true)
         store.prepareContinuousReading()
-        try await waitForCache(of: second)
+        try await waitForCache(of: fourth)
 
-        // Enabling continuous reading starts a one-chapter lookahead without attaching it.
-        #expect(loader.requestedURLs == [nextURL])
+        // Lookahead is bounded to three chapters, remains serial, and does not attach them.
+        #expect(loader.requestedURLs == [nextURL, thirdURL, fourthURL])
+        #expect(loader.maximumConcurrentLoadCount == 1)
+        #expect(loader.requestedPriorities.allSatisfy { $0.rawValue <= TaskPriority.utility.rawValue })
+        #expect(!fifth.isCached)
         #expect(store.readerSession.entries.map(\.chapter.id) == [first.id])
 
-        // Re-prefetching an already cached chapter must remain a cache-only operation.
+        // Re-prefetching the same three cached chapters performs no network work.
         store.prefetchContinuousChapter(after: first.id)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(loader.requestedURLs == [nextURL, thirdURL, fourthURL])
         #expect(store.readerSession.entries.map(\.chapter.id) == [first.id])
 
         store.prepareContinuousChapterAttachment(after: first.id)
@@ -748,12 +771,61 @@ struct LibraryStoreTests {
 
         store.beginReaderScrollTransaction()
         store.updateVisibleReaderPosition(chapterID: second.id, paragraphIndex: 0, total: 1)
-        try await waitForCache(of: third)
+        try await waitForCache(of: fifth)
 
-        // Committing the newly visible chapter advances lookahead, but does not attach it.
+        // Advancing the window skips cached chapters and fetches only the new third lookahead.
         #expect(store.selectedChapterID == second.id)
-        #expect(loader.requestedURLs == [nextURL, thirdURL])
+        #expect(loader.requestedURLs == [nextURL, thirdURL, fourthURL, fifthURL])
         #expect(store.readerSession.entries.map(\.chapter.id) == [first.id, second.id])
+    }
+
+    @Test
+    func disablingContinuousReadingCancelsSerialPrefetch() async throws {
+        let urls = try (2...5).map { index in
+            try #require(URL(string: "https://example.com/book/prefetch-cancel/\(index).html"))
+        }
+        let loader = MockHTMLLoader(
+            documents: Dictionary(uniqueKeysWithValues: urls.map { url in
+                (url, genericCataloglessChapter(title: "取消预取", body: "取消预取测试"))
+            }),
+            delay: .milliseconds(200)
+        )
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        let book = Book(
+            title: "取消预取测试",
+            author: "测试作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/book/prefetch-cancel/"
+        )
+        let first = Chapter(
+            sourceURL: "https://example.com/book/prefetch-cancel/1.html",
+            title: "第1章",
+            sortIndex: 1,
+            bodyText: "已缓存正文",
+            cachedAt: .now,
+            book: book
+        )
+        let following = urls.enumerated().map { offset, url in
+            Chapter(sourceURL: url.absoluteString, title: "后续章节", sortIndex: offset + 2, book: book)
+        }
+        book.chapters = [first] + following
+        book.currentChapterID = first.id
+        context.insert(book)
+        context.insert(first)
+        for chapter in following { context.insert(chapter) }
+        try context.save()
+
+        let store = LibraryStore(modelContext: context, coordinator: NovelImportCoordinator(loader: loader))
+        store.restoreSelection(bookID: book.id, chapterID: first.id)
+        store.configureContinuousReading(true)
+        try await waitForRequestCount(1, in: loader)
+        store.configureContinuousReading(false)
+        try await Task.sleep(for: .milliseconds(250))
+
+        #expect(loader.requestedURLs == [urls[0]])
+        #expect(following.allSatisfy { !$0.isCached })
     }
 
     @Test
