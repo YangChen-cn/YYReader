@@ -7,6 +7,7 @@ public sealed class SyncEngine(
     public const string SyncDirectoryName = "YYReaderSync";
     public const string MacFileName = "mac.json";
     public const string WindowsFileName = "windows.json";
+    private int _windowsSnapshotEstablished;
 
     public async Task<SyncExecutionResult> SynchronizeAsync(string selectedFolderPath, CancellationToken cancellationToken = default)
     {
@@ -52,6 +53,7 @@ public sealed class SyncEngine(
         var shouldWrite = true;
         if (File.Exists(windowsPath))
         {
+            Interlocked.Exchange(ref _windowsSnapshotEstablished, 1);
             try
             {
                 var existing = SyncSnapshotCodec.Decode(await ReadWithRetryAsync(windowsPath, cancellationToken).ConfigureAwait(false));
@@ -66,7 +68,17 @@ public sealed class SyncEngine(
         }
         if (shouldWrite)
         {
-            await WriteAtomicallyAsync(windowsPath, SyncSnapshotCodec.Encode(snapshot), cancellationToken).ConfigureAwait(false);
+            if (!File.Exists(windowsPath)
+                && Volatile.Read(ref _windowsSnapshotEstablished) != 0)
+            {
+                throw new IOException("windows.json 暂时不可用，等待同步文件夹恢复。");
+            }
+
+            await WritePreservingFileIdentityAsync(
+                windowsPath,
+                SyncSnapshotCodec.Encode(snapshot),
+                cancellationToken).ConfigureAwait(false);
+            Interlocked.Exchange(ref _windowsSnapshotEstablished, 1);
         }
         return new SyncExecutionResult(snapshot, SyncApplicationResult.None, shouldWrite);
     }
@@ -97,19 +109,26 @@ public sealed class SyncEngine(
         }
     }
 
-    private static async Task WriteAtomicallyAsync(string path, string contents, CancellationToken cancellationToken)
+    private static async Task WritePreservingFileIdentityAsync(
+        string path,
+        string contents,
+        CancellationToken cancellationToken)
     {
-        var temporaryPath = Path.Combine(Path.GetDirectoryName(path)!, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
-        try
-        {
-            await File.WriteAllTextAsync(temporaryPath, contents, cancellationToken).ConfigureAwait(false);
-            if (File.Exists(path)) File.Replace(temporaryPath, path, null, ignoreMetadataErrors: true);
-            else File.Move(temporaryPath, path);
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
-        }
+        cancellationToken.ThrowIfCancellationRequested();
+        var bytes = System.Text.Encoding.UTF8.GetBytes(contents);
+        await using var stream = new FileStream(
+            path,
+            FileMode.OpenOrCreate,
+            FileAccess.Write,
+            FileShare.Read,
+            bufferSize: 16 * 1024,
+            FileOptions.Asynchronous);
+        stream.Position = 0;
+        // Keep the existing cloud-provider file identity. Replacing it with a new temporary
+        // file makes iCloud for Windows treat every save as a separate conflict copy.
+        await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+        stream.SetLength(bytes.Length);
+        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static bool BooksAreEquivalent(

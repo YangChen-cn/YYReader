@@ -22,6 +22,7 @@ public sealed partial class ReaderPage : Page
     private readonly OfflineDownloadManager _offlineDownloadManager;
     private readonly ReaderPreferencesStore _preferencesStore = new();
     private readonly DispatcherQueueTimer _progressTimer;
+    private readonly DispatcherQueueTimer _continuousIdleTimer;
     private readonly Dictionary<int, UIElement> _realizedElements = new();
     private readonly ReaderContinuousLoadState _continuousLoadState = new();
     private readonly ReaderContinuousAttachmentState _continuousAttachmentState = new();
@@ -36,6 +37,8 @@ public sealed partial class ReaderPage : Page
     private bool _continuationHasStatus;
     private bool _synchronizingAppearance;
     private bool _catalogDirty;
+    private bool _restoringContinuousAnchor;
+    private long _continuousIdleVersion;
 
     public ReaderPage(LibraryStore store, OfflineDownloadManager offlineDownloadManager, Book book, Window window)
     {
@@ -49,6 +52,10 @@ public sealed partial class ReaderPage : Page
         _progressTimer.Interval = TimeSpan.FromMilliseconds(280);
         _progressTimer.IsRepeating = false;
         _progressTimer.Tick += ProgressTimer_Tick;
+        _continuousIdleTimer = DispatcherQueue.CreateTimer();
+        _continuousIdleTimer.Interval = ReaderContinuousAttachmentState.IdleDebounce;
+        _continuousIdleTimer.IsRepeating = false;
+        _continuousIdleTimer.Tick += ContinuousIdleTimer_Tick;
         Loaded += ReaderPage_Loaded;
         Unloaded += ReaderPage_Unloaded;
         ActualThemeChanged += ReaderPage_ActualThemeChanged;
@@ -86,6 +93,7 @@ public sealed partial class ReaderPage : Page
         Store.CancelCatalogRefresh();
         if (_window is MainWindow mainWindow) mainWindow.ClearPageTitleBar(ReaderToolbar);
         _progressTimer.Stop();
+        _continuousIdleTimer.Stop();
         _offlineDownloadManager.StateChanged -= OfflineDownloadManager_StateChanged;
         CommitVisiblePosition();
         await FlushPreferencesAsync();
@@ -197,16 +205,39 @@ public sealed partial class ReaderPage : Page
     {
         _progressTimer.Stop();
         _progressTimer.Start();
-        _continuousAttachmentState.SetScrolling(e.IsIntermediate);
-        if (!e.IsIntermediate)
+        _continuousIdleTimer.Stop();
+        _continuousIdleVersion = _continuousAttachmentState.ObserveViewChanged();
+        _continuousIdleTimer.Start();
+        if (!_restoringContinuousAnchor)
         {
-            TryAttachPendingContinuousChapter();
+            ScheduleContinuousLoadFromViewport();
         }
-        ScheduleContinuousLoadFromViewport();
+    }
+
+    private void ContinuousIdleTimer_Tick(DispatcherQueueTimer sender, object args)
+    {
+        if (!_continuousAttachmentState.MarkIdle(_continuousIdleVersion))
+        {
+            return;
+        }
+
+        if (_restoringContinuousAnchor)
+        {
+            _restoringContinuousAnchor = false;
+            ScheduleContinuousLoadFromViewport();
+            return;
+        }
+
+        TryAttachPendingContinuousChapter();
     }
 
     private void ProgressTimer_Tick(DispatcherQueueTimer sender, object args)
     {
+        if (_restoringContinuousAnchor)
+        {
+            _progressTimer.Start();
+            return;
+        }
         CommitVisiblePosition();
     }
 
@@ -337,7 +368,7 @@ public sealed partial class ReaderPage : Page
         }
 
         var top = frameworkElement.TransformToVisual(ReaderScrollViewer).TransformPoint(new Point(0, 0)).Y;
-        var relativeOffset = ReaderScrollViewer.ActualHeight <= 0 ? 0 : Math.Clamp(top / ReaderScrollViewer.ActualHeight, 0, 1);
+        var relativeOffset = ReaderScrollViewer.ActualHeight <= 0 ? 0 : top / ReaderScrollViewer.ActualHeight;
         return new ReaderAnchor(visible.ChapterUrl, visible.ParagraphIndex, relativeOffset);
     }
 
@@ -354,11 +385,25 @@ public sealed partial class ReaderPage : Page
                 continue;
             }
 
-            ReaderRepeater.GetOrCreateElement(index).StartBringIntoView(new BringIntoViewOptions
+            var element = ReaderRepeater.GetOrCreateElement(index);
+            var options = new BringIntoViewOptions
             {
                 AnimationDesired = false,
-                VerticalAlignmentRatio = normalized.ViewportRelativeOffset
-            });
+                VerticalAlignmentRatio = Math.Clamp(normalized.ViewportRelativeOffset, 0, 1)
+            };
+            if (normalized.ViewportRelativeOffset < 0 && element is FrameworkElement frameworkElement)
+            {
+                var desiredTop = normalized.ViewportRelativeOffset * ReaderScrollViewer.ActualHeight;
+                var targetOffsetWithinParagraph = Math.Min(
+                    -desiredTop,
+                    Math.Max(0, frameworkElement.ActualHeight - 1));
+                options.TargetRect = new Rect(
+                    0,
+                    targetOffsetWithinParagraph,
+                    Math.Max(1, frameworkElement.ActualWidth),
+                    1);
+            }
+            element.StartBringIntoView(options);
             return;
         }
     }
@@ -428,12 +473,20 @@ public sealed partial class ReaderPage : Page
     private void ResetContinuousReadingState()
     {
         CancelContinuousLoad();
+        _continuousIdleTimer.Stop();
+        _restoringContinuousAnchor = false;
         _continuousAttachmentState.Reset();
         _continuousLoadState.Reset();
     }
 
     private void TryAttachPendingContinuousChapter()
     {
+        if (!_continuousAttachmentState.HasPending)
+        {
+            return;
+        }
+
+        var anchor = CaptureReaderAnchor();
         if (!_continuousAttachmentState.TryTake(out var chapter, out var expectedTailUrl)
             || chapter is null
             || expectedTailUrl is null)
@@ -446,6 +499,7 @@ public sealed partial class ReaderPage : Page
             return;
         }
 
+        _restoringContinuousAnchor = anchor is not null;
         Items.AddRange(ReaderItemBuilder.BuildEntry(Store.ReaderSession.Entries[^1]));
         RefreshCatalogListIfVisible();
         _continuousLoadState.MarkAttached();
@@ -454,7 +508,17 @@ public sealed partial class ReaderPage : Page
         {
             ReaderRepeater.UpdateLayout();
             ReaderScrollViewer.UpdateLayout();
-            ScheduleContinuousLoadFromViewport();
+            if (anchor is not null)
+            {
+                _continuousIdleTimer.Stop();
+                _continuousIdleVersion = _continuousAttachmentState.ObserveViewChanged();
+                RestoreReaderAnchor(anchor);
+                _continuousIdleTimer.Start();
+            }
+            else
+            {
+                ScheduleContinuousLoadFromViewport();
+            }
         });
     }
 
@@ -648,22 +712,67 @@ public sealed partial class ReaderPage : Page
         }
         _catalogDirty = false;
         ToolbarChapterTitle.Text = Store.SelectedChapter?.Title ?? "";
-        if (CatalogSplitView.IsPaneOpen && CatalogList.SelectedItem is not null)
+        if (CatalogSplitView.IsPaneOpen)
         {
-            var selected = CatalogList.SelectedItem;
-            CatalogList.ScrollIntoView(selected, ScrollIntoViewAlignment.Default);
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-            {
-                if (CatalogList.ContainerFromItem(selected) is ListViewItem container)
-                {
-                    container.StartBringIntoView(new BringIntoViewOptions
-                    {
-                        AnimationDesired = false,
-                        VerticalAlignmentRatio = 0.5
-                    });
-                }
-            });
+            CenterCatalogOnCurrentChapter();
         }
+    }
+
+    private void CenterCatalogOnCurrentChapter()
+    {
+        if (!CatalogSplitView.IsPaneOpen || CatalogList.ItemsSource is not IEnumerable<Chapter> chapters)
+        {
+            return;
+        }
+
+        var currentChapterUrl = FindVisibleParagraph()?.ChapterUrl ?? Store.SelectedChapter?.SourceUrl;
+        var current = chapters.FirstOrDefault(chapter => chapter.SourceUrl == currentChapterUrl);
+        if (current is null)
+        {
+            return;
+        }
+
+        var wasSynchronizing = _synchronizingCatalog;
+        _synchronizingCatalog = true;
+        try
+        {
+            CatalogList.SelectedItem = current;
+        }
+        finally
+        {
+            _synchronizingCatalog = wasSynchronizing;
+        }
+
+        CatalogList.ScrollIntoView(current, ScrollIntoViewAlignment.Leading);
+        CenterCatalogItemAfterLayout(current, retryCount: 2);
+    }
+
+    private void CenterCatalogItemAfterLayout(Chapter chapter, int retryCount)
+    {
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (!CatalogSplitView.IsPaneOpen || CatalogList.SelectedItem != chapter)
+            {
+                return;
+            }
+
+            CatalogList.UpdateLayout();
+            if (CatalogList.ContainerFromItem(chapter) is not ListViewItem container)
+            {
+                if (retryCount > 0)
+                {
+                    CatalogList.ScrollIntoView(chapter, ScrollIntoViewAlignment.Leading);
+                    CenterCatalogItemAfterLayout(chapter, retryCount - 1);
+                }
+                return;
+            }
+
+            container.StartBringIntoView(new BringIntoViewOptions
+            {
+                AnimationDesired = false,
+                VerticalAlignmentRatio = 0.5
+            });
+        });
     }
 
     private void RefreshCatalogListIfVisible()
@@ -747,8 +856,15 @@ public sealed partial class ReaderPage : Page
         {
             RefreshCatalogList();
         }
+        else
+        {
+            CenterCatalogOnCurrentChapter();
+        }
         if (focusSearch) DispatcherQueue.TryEnqueue(() => CatalogSearchBox.Focus(FocusState.Programmatic));
     }
+
+    private void CatalogSplitView_PaneOpened(SplitView sender, object args) =>
+        CenterCatalogOnCurrentChapter();
 
     private void CloseCatalog_Click(object sender, RoutedEventArgs e) => CatalogSplitView.IsPaneOpen = false;
 

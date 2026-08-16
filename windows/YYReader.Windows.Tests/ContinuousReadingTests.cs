@@ -206,12 +206,15 @@ public sealed class ContinuousReadingTests
         var chapter = new Chapter(
             "https://example.com/101.html", "第101章", 101, "正文", cachedAt: DateTimeOffset.UtcNow);
 
-        state.SetScrolling(true);
+        var firstViewChange = state.ObserveViewChanged();
         Assert.IsTrue(state.Queue(chapter, "https://example.com/100.html", state.Generation));
         Assert.IsFalse(state.Queue(chapter, "https://example.com/100.html", state.Generation));
         Assert.IsFalse(state.TryTake(out _, out _), "滚动期间不能 attach");
 
-        state.SetScrolling(false);
+        var secondViewChange = state.ObserveViewChanged();
+        Assert.IsFalse(state.MarkIdle(firstViewChange), "较早的 final event 不能提前结束 debounce");
+        Assert.IsFalse(state.TryTake(out _, out _));
+        Assert.IsTrue(state.MarkIdle(secondViewChange));
         Assert.IsTrue(state.TryTake(out var ready, out var tail));
         Assert.AreSame(chapter, ready);
         Assert.AreEqual("https://example.com/100.html", tail);
@@ -222,6 +225,158 @@ public sealed class ContinuousReadingTests
         state.Reset();
         Assert.IsFalse(state.TryTake(out _, out _), "navigation 后旧 pending 必须失效");
         Assert.IsFalse(state.Queue(chapter, tail!, oldGeneration));
+        Assert.AreEqual(TimeSpan.FromMilliseconds(250), ReaderContinuousAttachmentState.IdleDebounce);
+    }
+
+    [TestMethod]
+    public async Task PrefetchAndContinuousPrepareShareOneChapterLoad()
+    {
+        var urls = ChapterUrls(2);
+        var loader = new PrefetchLoader(urls, blockedUrl: urls[1]);
+        var (store, databasePath) = await CreateCatalogStoreAsync(loader, urls);
+
+        try
+        {
+            await loader.BlockedRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var preparationTask = store.PrepareNextChapterAsync();
+            loader.ReleaseBlockedRequest();
+
+            var preparation = await preparationTask;
+            await store.PrefetchCompletion;
+
+            Assert.AreEqual(NextChapterPreparationStatus.Ready, preparation.Status);
+            Assert.AreEqual(1, loader.RequestCount(urls[1]));
+        }
+        finally
+        {
+            await store.DisposeAsync();
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
+    public async Task CancellingPrefetchDoesNotCancelSharedContinuousLoad()
+    {
+        var urls = ChapterUrls(2);
+        var loader = new PrefetchLoader(urls, blockedUrl: urls[1]);
+        var (store, databasePath) = await CreateCatalogStoreAsync(loader, urls);
+
+        try
+        {
+            await loader.BlockedRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var prefetch = store.PrefetchCompletion;
+            var continuous = store.PrepareNextChapterAsync();
+
+            store.ConfigureNextChapterPrefetch(false);
+            await prefetch.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.IsFalse(loader.BlockedRequestCancelled.Task.IsCompleted,
+                "取消 prefetch 只能取消自己的等待，不能取消共享底层请求");
+
+            loader.ReleaseBlockedRequest();
+            var result = await continuous.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.AreEqual(NextChapterPreparationStatus.Ready, result.Status);
+            Assert.AreEqual(1, loader.RequestCount(urls[1]));
+        }
+        finally
+        {
+            await store.DisposeAsync();
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
+    public async Task IdlePrefetchVisitsAtMostThreeSuccessorsAndSkipsDiskCache()
+    {
+        var urls = ChapterUrls(5);
+        var loader = new PrefetchLoader(urls);
+        var (store, databasePath) = await CreateCatalogStoreAsync(loader, urls, diskCachedIndexes: [1]);
+
+        try
+        {
+            await store.PrefetchCompletion;
+
+            Assert.AreEqual(0, loader.RequestCount(urls[1]), "磁盘已有正文不得重复下载");
+            Assert.AreEqual(1, loader.RequestCount(urls[2]));
+            Assert.AreEqual(1, loader.RequestCount(urls[3]));
+            Assert.AreEqual(0, loader.RequestCount(urls[4]), "一次空闲预取最多检查后续三章");
+        }
+        finally
+        {
+            await store.DisposeAsync();
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
+    public async Task IdlePrefetchStopsAtBookEnd()
+    {
+        var urls = ChapterUrls(2);
+        var loader = new PrefetchLoader(urls);
+        var (store, databasePath) = await CreateCatalogStoreAsync(loader, urls);
+
+        try
+        {
+            await store.PrefetchCompletion;
+            Assert.AreEqual(1, loader.TotalRequests);
+            Assert.AreEqual(1, loader.RequestCount(urls[1]));
+        }
+        finally
+        {
+            await store.DisposeAsync();
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
+    public async Task ChangingBookCancelsOldPrefetch()
+    {
+        var urls = ChapterUrls(3);
+        var loader = new PrefetchLoader(urls, blockedUrl: urls[1]);
+        var (store, databasePath) = await CreateCatalogStoreAsync(loader, urls);
+
+        try
+        {
+            await loader.BlockedRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var oldPrefetch = store.PrefetchCompletion;
+            store.SelectBook(null);
+            await oldPrefetch.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.IsFalse(loader.BlockedRequestCancelled.Task.IsCompleted);
+            loader.ReleaseBlockedRequest();
+            await store.ChapterLoadsCompletion.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.AreEqual(0, loader.RequestCount(urls[2]));
+        }
+        finally
+        {
+            await store.DisposeAsync();
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
+    public async Task ChangingChapterCancelsOldPrefetchChain()
+    {
+        var urls = ChapterUrls(4);
+        var loader = new PrefetchLoader(urls, blockedUrl: urls[1]);
+        var (store, databasePath) = await CreateCatalogStoreAsync(loader, urls, diskCachedIndexes: [2]);
+
+        try
+        {
+            await loader.BlockedRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var oldPrefetch = store.PrefetchCompletion;
+            var target = store.SelectedBook!.Chapters.Single(chapter => chapter.SourceUrl == urls[2].AbsoluteUri);
+
+            Assert.IsTrue(await store.SelectChapterAsync(target));
+            await oldPrefetch.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.IsFalse(loader.BlockedRequestCancelled.Task.IsCompleted);
+            loader.ReleaseBlockedRequest();
+            await store.ChapterLoadsCompletion.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await store.DisposeAsync();
+            DeleteDatabase(databasePath);
+        }
     }
 
     [TestMethod]
@@ -264,7 +419,7 @@ public sealed class ContinuousReadingTests
     }
 
     [TestMethod]
-    public void AppendingNextChapterDoesNotRestoreVerticalOffset()
+    public void AppendingNextChapterRestoresLogicalAnchorWithoutVerticalOffset()
     {
         var source = File.ReadAllText(Path.Combine(
             AppContext.BaseDirectory,
@@ -272,9 +427,69 @@ public sealed class ContinuousReadingTests
         var methodStart = source.IndexOf("private async Task LoadNextContinuousChapterAsync", StringComparison.Ordinal);
         var methodEnd = source.IndexOf("private async void ContinuationRetry_Click", methodStart, StringComparison.Ordinal);
         var method = source[methodStart..methodEnd];
+        var anchorStart = source.IndexOf("private ReaderAnchor? CaptureReaderAnchor", StringComparison.Ordinal);
+        var anchorMethods = source[anchorStart..methodStart];
 
-        Assert.IsFalse(method.Contains("ChangeView", StringComparison.Ordinal));
+        var capture = method.IndexOf("var anchor = CaptureReaderAnchor()", StringComparison.Ordinal);
+        var append = method.IndexOf("Items.AddRange", StringComparison.Ordinal);
+        var restore = method.IndexOf("RestoreReaderAnchor(anchor)", StringComparison.Ordinal);
+        Assert.IsTrue(capture >= 0 && append > capture && restore > append);
+        StringAssert.Contains(method, "_restoringContinuousAnchor");
+        StringAssert.Contains(anchorMethods, "desiredTop");
+        Assert.IsFalse(anchorMethods.Contains("Math.Clamp(top / ReaderScrollViewer.ActualHeight", StringComparison.Ordinal));
+        Assert.IsFalse(method.Contains("VerticalOffset", StringComparison.Ordinal));
         Assert.IsFalse(method.Contains("stableOffset", StringComparison.Ordinal));
+    }
+
+    private static Uri[] ChapterUrls(int count) => Enumerable.Range(1, count)
+        .Select(index => new Uri($"https://example.com/book/{index}.html"))
+        .ToArray();
+
+    private static async Task<(LibraryStore Store, string DatabasePath)> CreateCatalogStoreAsync(
+        IHtmlDocumentLoader loader,
+        IReadOnlyList<Uri> chapterUrls,
+        IReadOnlyCollection<int>? diskCachedIndexes = null)
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"yyreader-prefetch-{Guid.NewGuid():N}.db");
+        var repository = new SqliteLibraryRepository(databasePath);
+        await repository.InitializeAsync();
+        var catalogUrl = new Uri("https://example.com/book/");
+        var seeds = chapterUrls.Select((url, index) => new ChapterSeed($"第{index + 1}章", url, index)).ToArray();
+        var book = await repository.UpsertImportAsync(new NovelImportResult(
+            "预取测试小说",
+            "测试作者",
+            catalogUrl,
+            catalogUrl,
+            true,
+            seeds,
+            true,
+            "第1章",
+            chapterUrls[0],
+            "第一章已经缓存在本地，用于启动阅读会话。",
+            null,
+            chapterUrls.Count > 1 ? chapterUrls[1] : null));
+
+        foreach (var index in diskCachedIndexes ?? [])
+        {
+            await repository.SaveChapterAsync(book.Id, new ChapterLoadResult(
+                $"第{index + 1}章",
+                "预取测试小说",
+                "测试作者",
+                catalogUrl,
+                chapterUrls[index],
+                $"第{index + 1}章磁盘缓存正文。",
+                index > 0 ? chapterUrls[index - 1] : null,
+                index + 1 < chapterUrls.Count ? chapterUrls[index + 1] : null), index);
+        }
+
+        var store = new LibraryStore(
+            repository,
+            new NovelImportCoordinator(loader),
+            prefetchIdleDelay: TimeSpan.Zero);
+        await store.InitializeAsync();
+        store.SelectBook(store.Books.Single());
+        Assert.IsTrue(await store.EnsureSelectedChapterLoadedAsync());
+        return (store, databasePath);
     }
 
     private static async Task<(LibraryStore Store, string DatabasePath)> CreateStoreAsync(
@@ -390,6 +605,83 @@ public sealed class ContinuousReadingTests
                       {{nextLink}}
                     </body></html>
                     """;
+        }
+    }
+
+    private sealed class PrefetchLoader(IReadOnlyList<Uri> chapterUrls, Uri? blockedUrl = null) : IHtmlDocumentLoader
+    {
+        private readonly object _sync = new();
+        private readonly Dictionary<string, int> _requests = new(StringComparer.Ordinal);
+        private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource BlockedRequestStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource BlockedRequestCancelled { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int TotalRequests
+        {
+            get
+            {
+                lock (_sync) return _requests.Values.Sum();
+            }
+        }
+
+        public void BeginOperation()
+        {
+        }
+
+        public int RequestCount(Uri url)
+        {
+            lock (_sync) return _requests.GetValueOrDefault(url.AbsoluteUri);
+        }
+
+        public void ReleaseBlockedRequest() => _release.TrySetResult();
+
+        public async Task<LoadedHtml> LoadAsync(Uri url, CancellationToken cancellationToken = default)
+        {
+            lock (_sync)
+            {
+                _requests[url.AbsoluteUri] = _requests.GetValueOrDefault(url.AbsoluteUri) + 1;
+            }
+
+            if (url == blockedUrl)
+            {
+                BlockedRequestStarted.TrySetResult();
+                try
+                {
+                    await _release.Task.WaitAsync(cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    BlockedRequestCancelled.TrySetResult();
+                    throw;
+                }
+            }
+
+            var index = chapterUrls.ToList().FindIndex(candidate => candidate == url);
+            if (index < 0)
+            {
+                throw new HtmlLoadException(HtmlLoadErrorKind.HttpStatus, statusCode: 404);
+            }
+
+            var previous = index > 0
+                ? $"<a rel='prev' href='{chapterUrls[index - 1].AbsoluteUri}'>上一章</a>"
+                : "";
+            var next = index + 1 < chapterUrls.Count
+                ? $"<a rel='next' href='{chapterUrls[index + 1].AbsoluteUri}'>下一章</a>"
+                : "";
+            var html = $$"""
+                <html><head><title>第{{index + 1}}章</title></head><body>
+                  <h1>第{{index + 1}}章</h1>
+                  <article>
+                    <p>这是串行预取测试使用的自造章节正文，长度足够让通用解析器稳定识别正文内容。</p>
+                    <p>第二段用于确认每个章节只会发出一次网络请求，并且不会越过书籍目录末尾。</p>
+                  </article>
+                  {{previous}}{{next}}
+                </body></html>
+                """;
+            return new LoadedHtml(url, url, html, HtmlRetrievalKind.UrlSession);
         }
     }
 

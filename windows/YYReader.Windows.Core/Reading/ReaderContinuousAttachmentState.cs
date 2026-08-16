@@ -5,12 +5,29 @@ namespace YYReader.Windows.Core.Reading;
 public sealed class ReaderContinuousAttachmentState
 {
     private PendingAttachment? _pending;
+    private long _viewChangeVersion;
 
+    public static TimeSpan IdleDebounce { get; } = TimeSpan.FromMilliseconds(250);
     public bool IsScrolling { get; private set; }
     public bool HasPending => _pending is not null;
     public int Generation { get; private set; }
 
-    public void SetScrolling(bool isScrolling) => IsScrolling = isScrolling;
+    public long ObserveViewChanged()
+    {
+        IsScrolling = true;
+        return ++_viewChangeVersion;
+    }
+
+    public bool MarkIdle(long observedVersion)
+    {
+        if (observedVersion != _viewChangeVersion)
+        {
+            return false;
+        }
+
+        IsScrolling = false;
+        return true;
+    }
 
     public bool Queue(Chapter chapter, string expectedTailUrl, int generation)
     {
@@ -42,6 +59,7 @@ public sealed class ReaderContinuousAttachmentState
     {
         _pending = null;
         IsScrolling = false;
+        _viewChangeVersion++;
         return ++Generation;
     }
 
