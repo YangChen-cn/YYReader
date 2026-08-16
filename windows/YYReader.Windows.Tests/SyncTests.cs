@@ -71,7 +71,7 @@ public sealed class SyncTests
     }
 
     [TestMethod]
-    public async Task EngineReadsOnlyMacAndAtomicallyWritesWindowsSnapshot()
+    public async Task EngineReadsOnlyMacAndWritesOnlyWindowsSnapshot()
     {
         var root = Path.Combine(Path.GetTempPath(), $"yyreader-sync-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -91,6 +91,77 @@ public sealed class SyncTests
             Assert.AreEqual("mac", received!.Device);
             Assert.IsTrue(File.Exists(Path.Combine(syncDirectory, SyncEngine.WindowsFileName)));
             Assert.AreEqual(0, Directory.GetFiles(syncDirectory, "*.tmp").Length);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task UpdatingWindowsSnapshotPreservesExistingFileIdentity()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"yyreader-sync-identity-{Guid.NewGuid():N}");
+        var directory = SyncEngine.ResolveSyncDirectory(root);
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, SyncEngine.WindowsFileName);
+            await File.WriteAllTextAsync(path, SyncSnapshotCodec.Encode(new SyncSnapshot
+            {
+                Device = "windows",
+                UpdatedAt = DateTimeOffset.UnixEpoch
+            }));
+            var engine = new SyncEngine(
+                _ => Task.FromResult(new SyncSnapshot
+                {
+                    Device = "windows",
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                    Books = [Book("https://example.com/book/", "新书", "https://example.com/book/1.html", 1, 0.1, "2026-01-02", "2026-01-02")]
+                }),
+                (_, _) => Task.FromResult(SyncApplicationResult.None));
+
+            await using var existingHandle = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            var result = await engine.PublishLocalAsync(root);
+
+            Assert.IsTrue(result.WindowsFileWritten);
+            Assert.AreEqual(1, Directory.GetFiles(directory, "*.json").Length,
+                "目录中不应产生带编号的 Windows 快照");
+            existingHandle.Position = 0;
+            using var reader = new StreamReader(existingHandle, leaveOpen: true);
+            var updated = SyncSnapshotCodec.Decode(await reader.ReadToEndAsync());
+            Assert.AreEqual("新书", updated.Books.Single().Title);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task EstablishedWindowsSnapshotIsNotRecreatedWhileCloudFileIsMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"yyreader-sync-missing-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var call = 0;
+            var engine = new SyncEngine(
+                _ => Task.FromResult(new SyncSnapshot
+                {
+                    Device = "windows",
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                    Books = [Book("https://example.com/book/", $"书{++call}", "https://example.com/book/1.html", 1, 0.1, "2026-01-02", "2026-01-02")]
+                }),
+                (_, _) => Task.FromResult(SyncApplicationResult.None));
+            await engine.PublishLocalAsync(root);
+            var directory = SyncEngine.ResolveSyncDirectory(root);
+            File.Delete(Path.Combine(directory, SyncEngine.WindowsFileName));
+
+            var exception = await Assert.ThrowsExceptionAsync<IOException>(() => engine.PublishLocalAsync(root));
+
+            StringAssert.Contains(exception.Message, "暂时不可用");
+            Assert.AreEqual(0, Directory.GetFiles(directory, "windows*.json").Length);
         }
         finally
         {
