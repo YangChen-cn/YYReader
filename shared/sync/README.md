@@ -1,6 +1,6 @@
 # SyncSnapshot v2
 
-`SyncSnapshot v2` 是 YYReader macOS 与 Windows 客户端通过用户自选共享文件夹交换书架元数据和阅读位置的本地 JSON 格式。它不绑定任何云服务，也不包含正文缓存、Cookie、登录状态或 WebView 数据。macOS 仍可读取 v1，v2 新增可选的 `currentChapterIndex`。
+`SyncSnapshot v2` 是 YYReader macOS 与 Windows 客户端通过用户自选共享文件夹交换书架元数据和阅读位置的本地 JSON 格式。它不绑定任何云服务，也不包含正文缓存、Cookie、登录状态或 WebView 数据。macOS 仍可读取 v1，v2 支持可选的 `currentChapterIndex` 与 `capabilities`。
 
 共享目录固定为：
 
@@ -16,3 +16,5 @@ macOS 只写 `mac.json`、读取 `windows.json`；Windows 只写 `windows.json`�
 
 监听器只在 `windows.json` 的文件签名变化后触发读取和合并；低频轮询仅作为丢失文件系统事件时的兜底。合并结果未变时不重写 `mac.json`。
 本地书架或阅读进度变化走独立 `publishLocal()` 路径：只构建完整 Mac 快照并导出 `mac.json`，不读取或解析 `windows.json`，也不将导出结果反向应用到正在阅读的 SwiftUI 会话。启动、回到前台、手动同步或检测到 `windows.json` 文件签名变化时才执行完整合并。对端 signature 仅在读取、合并和落库全部成功后确认；失败时 watcher 和轮询必须可再次触发。当前阅读书的远端 tombstone 延迟到退出 Reader 后再刷新界面。
+
+支持本地 TXT 的客户端声明 `local-txt-v1`。只有成功读到对端同一能力后，才将本地 TXT 元数据、进度和 tombstone 写入自己的快照；正文始终只保存在导入设备。书籍身份严格为 `yyreader-local://txt/<64位 SHA-256>`，章节身份为其后的 `/chapter/<六位序号>`。

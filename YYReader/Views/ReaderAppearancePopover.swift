@@ -8,6 +8,8 @@ struct ReaderAppearancePopover: View {
     @AppStorage(ReaderPreferenceKeys.theme) private var theme = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.paragraphIndent) private var paragraphIndent = true
     @AppStorage(ReaderPreferenceKeys.continuousReading) private var continuousReading = false
+    @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentationMode = ReaderPresentationMode.normal.rawValue
+    @AppStorage(ReaderPreferenceKeys.academicColumnMode) private var academicColumnMode = AcademicColumnMode.double.rawValue
 
     let showAdvancedSettings: () -> Void
 
@@ -86,6 +88,21 @@ struct ReaderAppearancePopover: View {
 
             Toggle("段首缩进 2 字符", isOn: $paragraphIndent)
             Toggle("连续阅读", isOn: $continuousReading)
+
+            if presentationMode == ReaderPresentationMode.academicPaper.rawValue {
+                preferenceSection("论文排版", systemImage: "rectangle.split.2x1") {
+                    Picker("论文排版", selection: $academicColumnMode) {
+                        ForEach(AcademicColumnMode.allCases) { mode in
+                            Text(mode.title).tag(mode.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    Text("窗口较窄时会自动使用单栏。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
 
             Divider()
 

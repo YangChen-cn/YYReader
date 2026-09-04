@@ -40,6 +40,10 @@ struct ReaderContinuationBoundary: View {
                     .buttonStyle(.borderless)
                     .foregroundStyle(secondaryForeground)
                     .frame(maxWidth: .infinity, alignment: .trailing)
+            case .endOfBook:
+                Text("已到本书末尾")
+                    .foregroundStyle(secondaryForeground)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             case .ready, .attached, .unavailable:
                 EmptyView()
             }

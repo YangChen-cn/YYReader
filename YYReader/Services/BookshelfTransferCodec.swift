@@ -45,7 +45,7 @@ enum BookshelfTransferCodec {
 
     static func validationError(for book: BookshelfTransferBook) -> String? {
         guard URLCanonicalizer.isValidBookSource(book.sourceURL) else {
-            return "sourceURL 必须是 HTTP、HTTPS 或 YYReader 无目录书籍身份 URL。"
+            return "sourceURL 必须是 HTTP、HTTPS 或受支持的 YYReader 书籍身份 URL。"
         }
         if let paragraphIndex = book.paragraphIndex, paragraphIndex < 0 {
             return "paragraphIndex 不能为负数。"
@@ -56,7 +56,12 @@ enum BookshelfTransferCodec {
         }
         if let chapterURL = book.currentChapterURL,
            !URLCanonicalizer.isValidChapterSource(chapterURL) {
-            return "currentChapterURL 必须是 HTTP 或 HTTPS URL。"
+            return "currentChapterURL 必须是 HTTP、HTTPS 或本地 TXT 章节 URL。"
+        }
+        if BookSourceKind.resolve(book.sourceURL) == .localText,
+           let chapterURL = book.currentChapterURL,
+           !chapterURL.hasPrefix(book.sourceURL + "/chapter/") {
+            return "本地 TXT 章节 URL 与书籍身份不匹配。"
         }
         return nil
     }

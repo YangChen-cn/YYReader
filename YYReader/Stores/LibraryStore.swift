@@ -78,12 +78,22 @@ final class LibraryStore {
     }
 
     var canCancelLoading: Bool { importTask != nil || catalogRefreshTask != nil }
-    var canRefreshSelectedCatalog: Bool { selectedBook?.hasCatalog == true }
-    var canDownloadEntireBook: Bool { selectedBook?.hasCatalog == true }
+    var canRefreshSelectedCatalog: Bool {
+        selectedBook?.hasCatalog == true && selectedBook?.sourceKind == .web
+    }
+    var canDownloadEntireBook: Bool {
+        selectedBook?.hasCatalog == true && selectedBook?.sourceKind == .web
+    }
+    var canDownloadCurrentChapter: Bool { selectedBook?.sourceKind == .web }
+    var canDeleteOfflineCache: Bool { selectedBook?.sourceKind == .web }
     var readerProgressText: String {
         let position = chapterNavigationSnapshot.positionText
         let percentage = Int((selectedChapter?.readingProgress ?? 0) * 100)
         return "\(position)　\(percentage)%"
+    }
+    var academicFooterText: String {
+        let page = max((selectedChapter?.topParagraphIndex ?? 0) / 12 + 1, 1)
+        return "JATS · PAGE \(page) · \(chapterNavigationSnapshot.positionText)"
     }
 
     func restoreSelection(bookID: UUID?, chapterID: UUID?) {
@@ -226,7 +236,7 @@ final class LibraryStore {
     }
 
     func deleteOfflineCache() {
-        guard let book = selectedBook else { return }
+        guard let book = selectedBook, book.sourceKind == .web else { return }
         let retainedChapterID = selectedChapterID
         let chapters = book.chapters.filter { $0.id != retainedChapterID }
         let chapterIDs = chapters.map(\.id)
@@ -306,6 +316,7 @@ final class LibraryStore {
             return .unavailable
         }
         guard let next = existingNeighbor(of: chapter, offset: 1) else {
+            if chapter.book?.isLocalText == true { return .endOfBook }
             // A catalog-less chapter may only expose nextURL. The boundary's
             // onAppear action will create and prefetch that chapter outside the
             // SwiftUI body evaluation; this status query must remain read-only.
@@ -420,8 +431,119 @@ final class LibraryStore {
         }
     }
 
+    @discardableResult
+    func importLocalText(
+        _ draft: LocalTextImportDraft,
+        title: String,
+        author: String,
+        importedAt: Date = .now
+    ) throws -> Book {
+        guard flushPendingProgress() else {
+            throw LocalTextImportError.persistenceFailed
+        }
+        let identity = URLCanonicalizer.canonicalString(draft.sourceBookURL)
+        let descriptor = FetchDescriptor<Book>(predicate: #Predicate { $0.catalogURL == identity })
+        let book = try modelContext.fetch(descriptor).first ?? Book(
+            title: title,
+            author: author,
+            sourceHost: "本地 TXT",
+            catalogURL: identity,
+            createdAt: importedAt,
+            updatedAt: importedAt,
+            hasCatalog: true
+        )
+        if book.modelContext == nil { modelContext.insert(book) }
+
+        let previousCurrentChapter = book.currentChapterID.flatMap { id in
+            book.chapters.first { $0.id == id }
+        }
+        let existingByURL = Dictionary(uniqueKeysWithValues: book.chapters.map {
+            (URLCanonicalizer.canonicalChapterString($0.sourceURL), $0)
+        })
+        let existingByIndex = Dictionary(grouping: book.chapters, by: \.sortIndex)
+        var importedChapters: [Chapter] = []
+
+        for chapterDraft in draft.chapters {
+            let key = URLCanonicalizer.canonicalChapterString(chapterDraft.sourceURL)
+            let chapter = existingByURL[key]
+                ?? existingByIndex[chapterDraft.sortIndex]?.first
+                ?? Chapter(
+                    sourceURL: key,
+                    title: chapterDraft.title,
+                    sortIndex: chapterDraft.sortIndex,
+                    book: nil
+                )
+            if chapter.modelContext == nil {
+                modelContext.insert(chapter)
+                book.chapters.append(chapter)
+                chapter.book = book
+            }
+            chapter.sourceURL = key
+            chapter.title = chapterDraft.title
+            chapter.sortIndex = chapterDraft.sortIndex
+            chapter.replaceBodyText(chapterDraft.bodyText)
+            chapter.previousURL = chapterDraft.previousURL
+            chapter.nextURL = chapterDraft.nextURL
+            chapter.cachedAt = importedAt
+            if chapter.topParagraphIndex >= chapter.paragraphs.count {
+                chapter.topParagraphIndex = max(chapter.paragraphs.count - 1, 0)
+                chapter.readingProgress = chapter.paragraphs.count > 1
+                    ? Double(chapter.topParagraphIndex) / Double(chapter.paragraphs.count - 1)
+                    : 0
+            }
+            importedChapters.append(chapter)
+        }
+
+        let importedIDs = Set(importedChapters.map(\.id))
+        for obsolete in book.chapters where obsolete.isLocalText && !importedIDs.contains(obsolete.id) {
+            modelContext.delete(obsolete)
+        }
+        book.chapters = importedChapters
+        let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedAuthor = author.trimmingCharacters(in: .whitespacesAndNewlines)
+        book.title = normalizedTitle.isEmpty ? draft.suggestedTitle : normalizedTitle
+        book.author = normalizedAuthor.isEmpty ? "未知作者" : normalizedAuthor
+        book.sourceHost = "本地 TXT"
+        book.hasCatalog = true
+        book.catalogFetchedAt = importedAt
+        book.updatedAt = importedAt
+        let restoredCurrent = previousCurrentChapter.flatMap { old in
+            importedChapters.first { $0.sortIndex == old.sortIndex }
+        }
+        book.currentChapterID = (restoredCurrent ?? importedChapters.first)?.id
+
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            throw LocalTextImportError.persistenceFailed
+        }
+        folderSync?.clearDeletion(sourceURL: identity)
+        refreshBooks()
+        selectedBookID = book.id
+        rebuildSelectedBookChapters()
+        selectInitialChapter(preferredID: book.currentChapterID)
+        refreshReaderSession()
+        requestReaderScroll(.restore)
+        folderSync?.scheduleLocalChange()
+        return book
+    }
+
+    func updateSelectedBookMetadata(title: String, author: String) {
+        guard let book = selectedBook else { return }
+        let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedAuthor = author.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedTitle.isEmpty else { return }
+        book.title = normalizedTitle
+        book.author = normalizedAuthor.isEmpty ? "未知作者" : normalizedAuthor
+        book.updatedAt = .now
+        saveChanges(failureMessage: "保存书籍信息失败")
+        refreshBooks()
+    }
+
     func refreshSelectedCatalog() async {
         guard let book = selectedBook,
+              book.sourceKind == .web,
               book.hasCatalog,
               let url = URL(string: book.catalogURL) else {
             return
@@ -762,6 +884,10 @@ final class LibraryStore {
             refreshReaderSession()
             return
         }
+        guard chapter.book?.sourceKind == .web else {
+            presentedError = PresentedError(message: "这本本地 TXT 尚未在此设备保存正文，请重新导入同一 TXT 文件。")
+            return
+        }
         guard let url = URL(string: chapter.sourceURL) else { return }
         await performLoading("正在加载章节…") {
             let result = try await coordinator.loadChapterContent(from: url)
@@ -774,7 +900,9 @@ final class LibraryStore {
     }
 
     private func startOfflineDownload(_ scope: OfflineDownloadScope) {
-        guard let book = selectedBook, let chapter = selectedChapter else { return }
+        guard let book = selectedBook,
+              book.sourceKind == .web,
+              let chapter = selectedChapter else { return }
         if !book.hasCatalog {
             guard case .currentChapter = scope else { return }
         }
@@ -785,6 +913,10 @@ final class LibraryStore {
     private func startContinuousLoad(for chapter: Chapter) -> Task<Void, Never>? {
         guard !chapter.isCached else { return nil }
         if let load = continuousLoadTasks[chapter.id] { return load.task }
+        guard chapter.book?.sourceKind == .web else {
+            continuousLoadFailures.insert(chapter.id)
+            return nil
+        }
         guard let url = URL(string: chapter.sourceURL) else { return nil }
 
         let loadID = UUID()
@@ -829,6 +961,7 @@ final class LibraryStore {
 
     private func startContinuousTailProbe(for chapter: Chapter, bypassingTTL: Bool = false) {
         guard continuousReadingEnabled,
+              chapter.book?.sourceKind == .web,
               chapter.id == selectedChapterID,
               isLocalCatalogTail(chapter),
               chapter.nextURL == nil,

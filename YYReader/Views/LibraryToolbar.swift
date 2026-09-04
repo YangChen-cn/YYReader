@@ -6,12 +6,15 @@ struct LibraryToolbar: ToolbarContent {
     let canRefreshCatalog: Bool
     let canDeleteBook: Bool
     let canDownloadEntireBook: Bool
+    let canDownloadCurrentChapter: Bool
+    let canDeleteOfflineCache: Bool
     let isLoading: Bool
     let isDownloading: Bool
     let hasDownloadStatus: Bool
     let downloads: OfflineDownloadManager
     let toggleBookSidebar: () -> Void
     let addURL: () -> Void
+    let importLocalText: () -> Void
     let continueReading: () -> Void
     let refreshCatalog: () -> Void
     let downloadCurrentChapter: () -> Void
@@ -24,6 +27,7 @@ struct LibraryToolbar: ToolbarContent {
     let importBookshelfFromClipboard: () -> Void
     let copyBookshelfExport: () -> Void
     let exportBookshelf: () -> Void
+    let editBookMetadata: () -> Void
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
@@ -46,7 +50,7 @@ struct LibraryToolbar: ToolbarContent {
             ControlGroup {
                 Menu("下载到本地", systemImage: "arrow.down.circle") {
                     Button("下载当前章节", action: downloadCurrentChapter)
-                        .disabled(isDownloading)
+                        .disabled(!canDownloadCurrentChapter || isDownloading)
                     Button("下载后 20 章", action: downloadFollowingChapters)
                         .disabled(!canDownloadEntireBook || isDownloading)
                     Button("下载全部章节", action: downloadEntireBook)
@@ -66,9 +70,9 @@ struct LibraryToolbar: ToolbarContent {
                         systemImage: "externaldrive.badge.xmark",
                         action: deleteOfflineCache
                     )
-                    .disabled(isDownloading)
+                    .disabled(!canDeleteOfflineCache || isDownloading)
                 }
-                .disabled(!canContinueReading || isLoading)
+                .disabled(!canDownloadCurrentChapter || isLoading)
                 .help("下载当前小说到本地")
 
                 Button("刷新目录", systemImage: "arrow.clockwise", action: refreshCatalog)
@@ -102,6 +106,12 @@ struct LibraryToolbar: ToolbarContent {
                     .help("删除当前选中的小说")
 
                 Menu("更多", systemImage: "ellipsis") {
+                    Button("导入本地 TXT…", systemImage: "doc.text", action: importLocalText)
+                    Button("编辑书籍信息…", systemImage: "pencil", action: editBookMetadata)
+                        .disabled(!canDeleteBook)
+
+                    Divider()
+
                     Button("导入书架…", systemImage: "square.and.arrow.down", action: importBookshelf)
                     Button(
                         "从剪贴板导入",

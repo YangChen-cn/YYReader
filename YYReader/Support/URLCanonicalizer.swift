@@ -37,11 +37,27 @@ enum URLCanonicalizer {
 
     static func isValidBookSource(_ value: String) -> Bool {
         guard let url = URL(string: value), let scheme = url.scheme?.lowercased() else { return false }
-        return ["http", "https", "yyreader-book"].contains(scheme)
+        if ["http", "https", "yyreader-book"].contains(scheme) { return true }
+        return isValidLocalTextBookSource(value)
     }
 
     static func isValidChapterSource(_ value: String) -> Bool {
         guard let scheme = URL(string: value)?.scheme?.lowercased() else { return false }
-        return scheme == "http" || scheme == "https"
+        if scheme == "http" || scheme == "https" { return true }
+        return isValidLocalTextChapterSource(value)
+    }
+
+    static func isValidLocalTextBookSource(_ value: String) -> Bool {
+        value.range(
+            of: "^yyreader-local://txt/[0-9a-f]{64}$",
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
+    static func isValidLocalTextChapterSource(_ value: String) -> Bool {
+        value.range(
+            of: "^yyreader-local://txt/[0-9a-f]{64}/chapter/[0-9]{6}$",
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
     }
 }

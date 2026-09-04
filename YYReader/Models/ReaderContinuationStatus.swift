@@ -7,6 +7,7 @@ enum ReaderContinuationStatus: Equatable {
     case ready
     case attached
     case confirmedLatest
+    case endOfBook
     case failed
     case unavailable
 }

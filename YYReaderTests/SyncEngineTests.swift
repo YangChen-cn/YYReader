@@ -288,6 +288,7 @@ struct SyncEngineTests {
         let publishedAt = try await engine.publishLocal(
             selectedFolder: selectedFolder,
             localBooks: [local],
+            includeLocalText: false,
             now: Date(timeIntervalSince1970: 200)
         )
 
@@ -296,6 +297,76 @@ struct SyncEngineTests {
         let macURL = syncDirectory.appendingPathComponent(SyncEngine.macFileName)
         let snapshot = try SyncSnapshotCodec.decode(Data(contentsOf: macURL), expectedDevice: .mac)
         #expect(snapshot.books == [local])
+        #expect(snapshot.capabilities == [SyncEngine.localTextCapability])
+    }
+
+    @Test
+    func localTextSyncWaitsForRemoteCapability() async throws {
+        let selectedFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("YYReaderLocalCapabilityTests-\(UUID().uuidString)", isDirectory: true)
+        let syncDirectory = selectedFolder.appendingPathComponent(SyncEngine.directoryName, isDirectory: true)
+        try FileManager.default.createDirectory(at: syncDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: selectedFolder) }
+        let windowsURL = syncDirectory.appendingPathComponent(SyncEngine.windowsFileName)
+        let localIdentity = "yyreader-local://txt/" + String(repeating: "a", count: 64)
+        let local = SyncBookRecord(
+            sourceURL: localIdentity,
+            title: "本地书",
+            author: "作者",
+            currentChapterURL: localIdentity + "/chapter/000001",
+            currentChapterIndex: 1,
+            paragraphIndex: 2,
+            progress: 0.5,
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+        let engine = SyncEngine()
+
+        try SyncSnapshotCodec.encode(SyncSnapshot(device: .windows, books: []))
+            .write(to: windowsURL)
+        let withoutCapability = try await engine.synchronize(
+            selectedFolder: selectedFolder,
+            localBooks: [local]
+        )
+        #expect(withoutCapability.books.isEmpty)
+
+        try SyncSnapshotCodec.encode(SyncSnapshot(
+            device: .windows,
+            capabilities: [SyncEngine.localTextCapability],
+            books: []
+        )).write(to: windowsURL)
+        let withCapability = try await engine.synchronize(
+            selectedFolder: selectedFolder,
+            localBooks: [local]
+        )
+        #expect(withCapability.books == [local])
+        #expect(withCapability.remoteCapabilities == [SyncEngine.localTextCapability])
+    }
+
+    @Test
+    func localTextSnapshotRequiresStrictMatchingIdentity() throws {
+        let identity = "yyreader-local://txt/" + String(repeating: "b", count: 64)
+        let valid = SyncBookRecord(
+            sourceURL: identity,
+            title: "本地书",
+            author: "作者",
+            currentChapterURL: identity + "/chapter/000002",
+            currentChapterIndex: 2,
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+        let decoded = try SyncSnapshotCodec.decode(
+            SyncSnapshotCodec.encode(SyncSnapshot(device: .mac, books: [valid])),
+            expectedDevice: .mac
+        )
+        #expect(decoded.books == [valid])
+
+        var invalid = valid
+        invalid.currentChapterURL = "yyreader-local://txt/" + String(repeating: "c", count: 64) + "/chapter/000002"
+        #expect(throws: SyncError.self) {
+            try SyncSnapshotCodec.decode(
+                SyncSnapshotCodec.encode(SyncSnapshot(device: .mac, books: [invalid])),
+                expectedDevice: .mac
+            )
+        }
     }
 
     @Test

@@ -12,9 +12,13 @@ struct ReaderContentView: View {
     @AppStorage(ReaderPreferenceKeys.theme) private var themeName = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.paragraphIndent) private var paragraphIndent = true
     @AppStorage(ReaderPreferenceKeys.continuousReading) private var continuousReading = false
+    @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentationModeName = ReaderPresentationMode.normal.rawValue
+    @AppStorage(ReaderPreferenceKeys.academicColumnMode) private var academicColumnModeName = AcademicColumnMode.double.rawValue
     @State private var scrollPosition = ScrollPosition(idType: ReaderScrollTarget.self)
     @State private var scrollState = ReaderScrollState()
     @State private var hasAppliedInitialScroll = false
+    @State private var academicPlanCache = AcademicPaperPlanCache()
+    @State private var isRestoringPresentation = false
 
     var body: some View {
         let family = ReaderFontFamily(rawValue: fontFamily) ?? .serif
@@ -22,6 +26,7 @@ struct ReaderContentView: View {
         let entries = store.readerSession.entries
         let firstEntryID = entries.first?.id
         let lastEntryID = entries.last?.id
+        let presentationMode = ReaderPresentationMode(rawValue: presentationModeName) ?? .normal
 
         GeometryReader { geometry in
             let effectiveWidth = ReaderViewportLayout.effectiveContentWidth(
@@ -29,30 +34,53 @@ struct ReaderContentView: View {
                 fontSize: fontSize,
                 viewportWidth: geometry.size.width
             )
+            let usesDoubleColumns = presentationMode == .academicPaper
+                && (AcademicColumnMode(rawValue: academicColumnModeName) ?? .double) == .double
+                && geometry.size.width >= 760
+            let displayedWidth = presentationMode == .academicPaper
+                ? min(max(geometry.size.width - 56, 520), 1080)
+                : effectiveWidth
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: paragraphSpacing * fontSize) {
                     ForEach(entries) { entry in
                         let paragraphs = entry.paragraphs
-
-                        ReaderChapterHeader(
-                            chapter: entry.chapter,
-                            accent: theme.accent,
-                            target: .chapterHeader(entry.chapter.id),
-                            style: entry.id == firstEntryID ? .prominent : .compact,
-                            usesOrnament: theme.usesBookishChapterOrnament,
-                            separator: theme.separator
-                        )
-
-                        ForEach(paragraphs.indices, id: \.self) { index in
-                            ReaderParagraphView(
-                                paragraph: paragraphs[index],
-                                fontFamily: family,
-                                fontSize: fontSize,
-                                lineSpacing: lineSpacing * fontSize,
-                                usesFirstLineIndent: paragraphIndent
+                        if presentationMode == .academicPaper, let book = entry.chapter.book {
+                            let plan = academicPlanCache.plan(
+                                book: book,
+                                chapter: entry.chapter,
+                                position: store.chapterIndexByID[entry.chapter.id] ?? 0,
+                                paragraphs: paragraphs
                             )
-                            .id(ReaderScrollTarget.paragraph(chapterID: entry.chapter.id, index: index))
+                            AcademicPaperChapterView(
+                                plan: plan,
+                                chapterID: entry.chapter.id,
+                                showsPaperFrontMatter: entry.id == firstEntryID,
+                                usesDoubleColumns: usesDoubleColumns
+                            )
+                            .padding(.horizontal, 34)
+                            .padding(.vertical, entry.id == firstEntryID ? 28 : 8)
+                            .background(Color.white)
+                        } else {
+                            ReaderChapterHeader(
+                                chapter: entry.chapter,
+                                accent: theme.accent,
+                                target: .chapterHeader(entry.chapter.id),
+                                style: entry.id == firstEntryID ? .prominent : .compact,
+                                usesOrnament: theme.usesBookishChapterOrnament,
+                                separator: theme.separator
+                            )
+
+                            ForEach(paragraphs.indices, id: \.self) { index in
+                                ReaderParagraphView(
+                                    paragraph: paragraphs[index],
+                                    fontFamily: family,
+                                    fontSize: fontSize,
+                                    lineSpacing: lineSpacing * fontSize,
+                                    usesFirstLineIndent: paragraphIndent
+                                )
+                                .id(ReaderScrollTarget.paragraph(chapterID: entry.chapter.id, index: index))
+                            }
                         }
 
                         if continuousReading {
@@ -85,7 +113,7 @@ struct ReaderContentView: View {
                     )
                 }
                 .scrollTargetLayout()
-                .frame(width: effectiveWidth, alignment: .leading)
+                .frame(width: displayedWidth, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
             .scrollPosition($scrollPosition)
@@ -113,8 +141,8 @@ struct ReaderContentView: View {
                 }
             }
         }
-        .background(theme.background)
-        .foregroundStyle(theme.foreground)
+        .background(presentationMode == .academicPaper ? Color(white: 0.88) : theme.background)
+        .foregroundStyle(presentationMode == .academicPaper ? Color(white: 0.12) : theme.foreground)
         .tint(theme.accent)
         .task {
             await prepareContinuousReading()
@@ -125,8 +153,33 @@ struct ReaderContentView: View {
         .task(id: store.readerScrollRequest?.id) {
             await applyPendingScrollRequest()
         }
+        .task(id: presentationModeName + "|" + academicColumnModeName) {
+            await restoreAfterPresentationChange()
+        }
         .onDisappear {
             cancelDeferredKeyboardCommit()
+        }
+    }
+
+    @MainActor
+    private func restoreAfterPresentationChange() async {
+        guard hasAppliedInitialScroll,
+              let target = scrollState.topVisibleTarget else { return }
+        isRestoringPresentation = true
+        store.beginReaderScrollTransaction()
+        defer {
+            releaseProgrammaticScrollPosition()
+            store.endReaderScrollTransaction(topVisibleChapterID: target.chapterID)
+            isRestoringPresentation = false
+        }
+        await Task.yield()
+        scrollPosition.scrollTo(id: target, anchor: .top)
+        do {
+            try await Task.sleep(for: .milliseconds(60))
+        } catch is CancellationError {
+            return
+        } catch {
+            return
         }
     }
 
@@ -213,6 +266,7 @@ struct ReaderContentView: View {
     }
 
     private func commitVisiblePosition() {
+        guard !isRestoringPresentation else { return }
         guard let target = scrollState.consumeVisibleTargetForCommit() else { return }
         commitVisibleTarget(target)
     }
