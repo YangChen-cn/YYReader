@@ -152,6 +152,26 @@ function Invoke-AppPublish {
 
     Copy-WinUIResources -Destination $Destination
     Assert-NoUnusedAiRuntime -Directory $Destination
+    $executablePath = Join-Path $Destination "YYReader.Windows.exe"
+    $executableVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($executablePath)
+    if ($executableVersion.ProductVersion.Split('+')[0] -ne $Version) {
+        throw "Published app version does not match $Version : $($executableVersion.ProductVersion)"
+    }
+    $binaryReader = [System.IO.BinaryReader]::new([System.IO.File]::OpenRead($executablePath))
+    try {
+        $binaryReader.BaseStream.Position = 0x3c
+        $peOffset = $binaryReader.ReadInt32()
+        $binaryReader.BaseStream.Position = $peOffset
+        if ($binaryReader.ReadUInt32() -ne 0x00004550 -or $binaryReader.ReadUInt16() -ne 0x8664) {
+            throw "Published app is not a Windows x64 PE executable."
+        }
+    } finally {
+        $binaryReader.Dispose()
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $Destination "Assets\AppIcon.ico"))) {
+        throw "Published app icon is missing."
+    }
+    Write-Host "Verified app version $Version, x64 executable, WinUI resources, icon and runtime exclusions."
 }
 
 Push-Location $repositoryRoot

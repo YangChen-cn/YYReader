@@ -5,7 +5,7 @@
   <p>粘贴章节网页，YYReader 会识别书籍、目录与正文，并以系统原生控件呈现干净的阅读界面。</p>
 
   <p>
-    <a href="https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.3"><img src="https://img.shields.io/badge/release-v1.2.3-2ea44f?style=flat-square" alt="Release v1.2.3"></a>
+    <a href="https://github.com/YangChen-cn/YYReader/releases/tag/v1.3.0"><img src="https://img.shields.io/badge/release-v1.3.0-2ea44f?style=flat-square" alt="Release v1.3.0"></a>
     <img src="https://img.shields.io/badge/macOS-15%2B-111111?style=flat-square&logo=apple" alt="macOS 15+">
     <img src="https://img.shields.io/badge/Windows-10%201809%2B-0078D4?style=flat-square&logo=windows11" alt="Windows 10 1809+">
     <img src="https://img.shields.io/badge/Swift-6-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 6">
@@ -15,12 +15,14 @@
 
 ## 快速下载
 
+1.3.0 先提供 Windows x64 安装包；macOS 当前安装包仍为 1.2.3。
+
 | 平台 | 安装包 | 系统要求 |
 | --- | --- | --- |
 | **macOS** | [下载 YYReader 1.2.3 arm64 DMG](https://github.com/YangChen-cn/YYReader/releases/download/v1.2.3/YYReader-1.2.3-arm64.dmg) | Apple 芯片，macOS 15 或更高版本 |
-| **Windows** | [下载 YYReader 1.2.3 x64 安装程序](https://github.com/YangChen-cn/YYReader/releases/download/v1.2.3/YYReader-Setup-x64-1.2.3.exe) | x64 Windows 10 1809 或更高版本，推荐 Windows 11 |
+| **Windows** | [下载 YYReader 1.3.0 x64 安装程序](https://github.com/YangChen-cn/YYReader/releases/download/v1.3.0/YYReader-Setup-x64-1.3.0.exe) | x64 Windows 10 1809 或更高版本，推荐 Windows 11 |
 
-也可以前往 [YYReader 1.2.3 Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.2.3) 查看校验信息和完整发布说明。
+也可以前往 [YYReader 1.3.0 Windows Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.3.0) 查看校验信息和完整发布说明。
 
 > macOS 版本使用 ad-hoc 签名且尚未经过 Apple 公证，首次启动时可能需要在 Finder 中右键 YYReader 并选择“打开”。Windows 安装程序尚未使用商业代码签名，SmartScreen 可能提示“未知发布者”。
 
@@ -101,15 +103,14 @@ macOS 快捷键：
 - `⌘[` / `⌘]`：上一章 / 下一章。
 - 方向键：整页或小幅滚动正文。
 
-## 1.2.3 更新摘要
+## Windows 1.3.0 更新摘要
 
-- macOS 空闲预取从下一章扩展为最多 3 章，保持低优先级、严格串行、可取消并跳过已缓存章节。
-- 修复连续阅读切换可见章节时取消重叠窗口在途加载，导致后续预取提前停止的竞态。
-- Windows 的更后阅读位置同步到当前打开书籍时，macOS 会立即切换章节或恢复段落，无需切书刷新。
-- Windows 同步发布 1.2.3 安装包：连续阅读最多预取三章，修复 append 回跳与 single-flight 取消竞态，目录打开时居中定位当前章节。
-- Windows 文件夹同步原地更新同一个 `windows.json`，云盘暂不可用时不会阻塞本地阅读或反复制造冲突副本。
+- 本地 TXT 导入：支持 UTF-8/GB18030、自动切章和书籍信息编辑，重复导入保留阅读进度。
+- 论文模式：宋体中文、Times New Roman 英文、原生公式图表、单/双栏和可编辑快捷键。
+- 书房首页：彩色书封、最近阅读卡片、统计、书名作者搜索和 TXT/离线筛选。
+- TXT 跨端进度协商：仅交换元数据和进度，在对端导入同一 TXT 可补全占位书。
 
-完整内容见 [YYReader 1.2.3 发布说明](RELEASE_NOTES.md)。
+完整内容见 [YYReader 1.3.0 Windows 发布说明](RELEASE_NOTES.md)。
 
 ## 技术架构
 

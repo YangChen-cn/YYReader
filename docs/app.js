@@ -60,9 +60,9 @@ function initOsDetection() {
 
   if (isWindows && primaryBtn && primaryLabel && primarySub && primaryIcon) {
     // Customize for Windows
-    primaryBtn.href = 'https://github.com/YangChen-cn/YYReader/releases/download/v1.2.3/YYReader-Setup-x64-1.2.3.exe';
+    primaryBtn.href = 'https://github.com/YangChen-cn/YYReader/releases/download/v1.3.0/YYReader-Setup-x64-1.3.0.exe';
     primaryLabel.textContent = '下载 Windows 版 (x64 安装包)';
-    primarySub.textContent = '64 位 Windows 10/11 • v1.2.3';
+    primarySub.textContent = '64 位 Windows 10/11 • v1.3.0';
 
     // Windows Icon SVG
     primaryIcon.innerHTML = `<path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>`;
