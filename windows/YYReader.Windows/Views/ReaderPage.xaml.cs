@@ -104,7 +104,9 @@ public sealed partial class ReaderPage : Page
     {
         var anchor = position == ReaderRebuildPosition.PreserveAnchor ? CaptureReaderAnchor() : null;
         _presentationRestoring = true;
+        ApplyAcademicPageAppearance();
         Items.ReplaceAll(ReaderItemBuilder.Build(Store.ReaderSession.Entries, AcademicBookIdentity));
+        UpdateReaderChrome();
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
             ReaderRepeater.UpdateLayout();
@@ -128,10 +130,7 @@ public sealed partial class ReaderPage : Page
     private void ReaderRoot_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         if (_preferences.AcademicMode && (e.PreviousSize.Width < 760) != (e.NewSize.Width < 760)) RebuildItems();
-        ReaderContent.Width = ReaderLayout.EffectiveContentWidth(
-            _preferences.ContentWidthEm,
-            _preferences.FontSize,
-            e.NewSize.Width);
+        UpdateReaderContentWidth(e.NewSize.Width);
     }
 
     private void ReaderRepeater_ElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
@@ -288,8 +287,7 @@ public sealed partial class ReaderPage : Page
         var visible = FindVisibleParagraph();
         if (visible is null) return;
         Store.UpdateVisibleReaderPosition(visible.ChapterUrl, visible.ParagraphIndex, visible.ParagraphCount);
-        ProgressText.Text = $"{Store.SelectedChapter?.Progress:P0}　{Store.SelectedChapter?.Title}";
-        ToolbarChapterTitle.Text = Store.SelectedChapter?.Title ?? "";
+        UpdateReaderChrome();
     }
 
     private ReaderItem? FindVisibleParagraph()
@@ -709,7 +707,7 @@ public sealed partial class ReaderPage : Page
             _synchronizingCatalog = false;
         }
         _catalogDirty = false;
-        ToolbarChapterTitle.Text = Store.SelectedChapter?.Title ?? "";
+        UpdateReaderChrome();
         if (CatalogSplitView.IsPaneOpen)
         {
             CenterCatalogOnCurrentChapter();
@@ -1149,7 +1147,7 @@ public sealed partial class ReaderPage : Page
         ReaderToolbar.RequestedTheme = _palette.ElementTheme;
         ReaderRoot.Background = _palette.Background;
         ReaderScrollViewer.Background = _palette.Background;
-        ReaderContent.Width = ReaderLayout.EffectiveContentWidth(_preferences.ContentWidthEm, _preferences.FontSize, ActualWidth);
+        ApplyAcademicPageAppearance();
         ProgressText.Foreground = _palette.SecondaryForeground;
         ContinuationBoundary.Background = _palette.Background;
         ContinuationBoundary.BorderBrush = _palette.Separator;
