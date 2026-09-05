@@ -285,8 +285,10 @@ final class LibraryStore {
 
     func prepareContinuousChapterAttachment(after chapterID: UUID) {
         guard continuousReadingEnabled,
-              chapterID == selectedChapterID,
               let chapter = chapterByID[chapterID] else {
+            return
+        }
+        guard chapterID == selectedChapterID || chapterID == readerSession.entries.last?.id else {
             return
         }
 
@@ -410,6 +412,7 @@ final class LibraryStore {
         updateChapterNavigationSnapshot()
         scheduleProgressSave()
         prefetchNextContinuousChapterIfNeeded()
+        attachPendingContinuousChapterIfSafe()
     }
 
     private func importURL(_ input: String) async {
@@ -1326,9 +1329,8 @@ final class LibraryStore {
         guard continuousReadingEnabled,
               pendingContinuousAttachmentChapterID != nil,
               !isReaderScrolling,
-              !visibilityGate.hasCommittedInCurrentTransaction,
               let pendingChapterID = pendingContinuousAttachmentChapterID,
-              pendingChapterID == selectedChapterID,
+              pendingChapterID == selectedChapterID || pendingChapterID == readerSession.entries.last?.id,
               let pendingChapter = chapterByID[pendingChapterID],
               let next = neighbor(of: pendingChapter, offset: 1),
               next.isCached else {

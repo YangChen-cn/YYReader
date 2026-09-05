@@ -14,12 +14,16 @@ struct AcademicPaperSupplementView: View {
                 AcademicPaperFigureView(number: supplement.number)
             }
         }
-        .padding(.vertical, 18)
+        .padding(.vertical, 14)
         .overlay(alignment: .top) {
-            Divider()
+            Rectangle()
+                .fill(Color(white: 0.80))
+                .frame(height: 0.5)
         }
         .overlay(alignment: .bottom) {
-            Divider()
+            Rectangle()
+                .fill(Color(white: 0.80))
+                .frame(height: 0.5)
         }
         .accessibilityElement(children: .combine)
     }

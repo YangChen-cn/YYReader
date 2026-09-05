@@ -984,10 +984,10 @@ struct LibraryStoreTests {
 
         store.endReaderScrollTransaction(topVisibleChapterID: chapters[1].id)
         try await Task.sleep(for: .milliseconds(300))
-        #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id, chapters[1].id])
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id, chapters[1].id, chapters[2].id])
         store.beginReaderScrollTransaction()
         store.prepareContinuousChapterAttachment(after: chapters[1].id)
-        #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id, chapters[1].id])
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id, chapters[1].id, chapters[2].id])
         store.endReaderScrollTransaction(topVisibleChapterID: chapters[1].id)
         #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id, chapters[1].id, chapters[2].id])
 

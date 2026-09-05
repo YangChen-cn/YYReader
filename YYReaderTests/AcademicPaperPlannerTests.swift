@@ -56,4 +56,39 @@ struct AcademicPaperPlannerTests {
         }
         #expect(actual == expected)
     }
+
+    @Test
+    func citationLabelDeduplicatesAndFormatsInOrder() {
+        #expect(AcademicPaperPlan.Formatting.citationLabel(for: []) == nil)
+        #expect(AcademicPaperPlan.Formatting.citationLabel(for: [4]) == "4")
+        #expect(AcademicPaperPlan.Formatting.citationLabel(for: [4, 4]) == "4")
+        #expect(AcademicPaperPlan.Formatting.citationLabel(for: [17, 15, 10, 15]) == "10, 15, 17")
+    }
+
+    @Test
+    func romanNumeralProducesStandardAcademicNumerals() {
+        #expect(AcademicPaperPlan.Formatting.romanNumeral(for: 1) == "I")
+        #expect(AcademicPaperPlan.Formatting.romanNumeral(for: 2) == "II")
+        #expect(AcademicPaperPlan.Formatting.romanNumeral(for: 3) == "III")
+        #expect(AcademicPaperPlan.Formatting.romanNumeral(for: 4) == "IV")
+        #expect(AcademicPaperPlan.Formatting.romanNumeral(for: 5) == "V")
+        #expect(AcademicPaperPlan.Formatting.romanNumeral(for: 9) == "IX")
+        #expect(AcademicPaperPlan.Formatting.romanNumeral(for: 10) == "X")
+        #expect(AcademicPaperPlan.Formatting.romanNumeral(for: 14) == "XIV")
+    }
+
+    @Test
+    func equationDataCyclesThroughFormulasDeterministically() {
+        let eq1 = AcademicPaperPlan.Formatting.equationData(for: 1)
+        let eq2 = AcademicPaperPlan.Formatting.equationData(for: 2)
+        let eq3 = AcademicPaperPlan.Formatting.equationData(for: 3)
+        let eq4 = AcademicPaperPlan.Formatting.equationData(for: 4)
+        let eq5 = AcademicPaperPlan.Formatting.equationData(for: 5)
+
+        #expect(eq1.formula.contains("Sₜ"))
+        #expect(eq2.formula.contains("Attn"))
+        #expect(eq3.formula.contains("ℒ(θ)"))
+        #expect(eq4.formula.contains("P(Sₜ"))
+        #expect(eq1 == eq5)
+    }
 }

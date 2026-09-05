@@ -56,11 +56,20 @@ struct ReaderContentView: View {
                                 plan: plan,
                                 chapterID: entry.chapter.id,
                                 showsPaperFrontMatter: entry.id == firstEntryID,
-                                usesDoubleColumns: usesDoubleColumns
+                                usesDoubleColumns: usesDoubleColumns,
+                                fontSize: fontSize,
+                                lineSpacing: lineSpacing
                             )
-                            .padding(.horizontal, 34)
-                            .padding(.vertical, entry.id == firstEntryID ? 28 : 8)
-                            .background(Color.white)
+                            .padding(.horizontal, 38)
+                            .padding(.top, entry.id == firstEntryID ? 32 : 22)
+                            .padding(.bottom, 26)
+                            .background(
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(Color.white)
+                                    .shadow(color: Color.black.opacity(0.07), radius: 7, x: 0, y: 2.5)
+                            )
+                            .padding(.vertical, 10)
+                            .id(ReaderScrollTarget.chapterHeader(entry.chapter.id))
                         } else {
                             ReaderChapterHeader(
                                 chapter: entry.chapter,
@@ -124,6 +133,9 @@ struct ReaderContentView: View {
             }
             .onScrollTargetVisibilityChange(idType: ReaderScrollTarget.self, threshold: 0.01) { targets in
                 scrollState.update(visibleTargets: targets, chapterIndexByID: store.chapterIndexByID)
+                if continuousReading {
+                    checkContinuousAttachment(for: targets)
+                }
             }
             .onScrollPhaseChange { oldPhase, newPhase, context in
                 handleScrollPhaseChange(oldPhase: oldPhase, newPhase: newPhase, context: context)
@@ -155,6 +167,11 @@ struct ReaderContentView: View {
         }
         .task(id: presentationModeName + "|" + academicColumnModeName) {
             await restoreAfterPresentationChange()
+        }
+        .onChange(of: store.selectedChapterID) { oldID, newID in
+            if oldID != newID && !continuousReading {
+                scrollPosition = ScrollPosition(idType: ReaderScrollTarget.self, y: 0)
+            }
         }
         .onDisappear {
             cancelDeferredKeyboardCommit()
@@ -197,6 +214,7 @@ struct ReaderContentView: View {
         if let request = store.readerScrollRequest, request.chapterID == chapter.id {
             switch request.intent {
             case .chapterTop:
+                scrollPosition = ScrollPosition(idType: ReaderScrollTarget.self, y: 0)
                 scrollPosition.scrollTo(id: ReaderScrollTarget.chapterHeader(chapter.id), anchor: .top)
             case .restore:
                 scrollPosition.scrollTo(id: restoredParagraphTarget(for: chapter), anchor: .top)
@@ -232,6 +250,22 @@ struct ReaderContentView: View {
         case let .chapterFooter(chapterID):
             if continuousReading {
                 store.prepareContinuousChapterAttachment(after: chapterID)
+            }
+        }
+    }
+
+    private func checkContinuousAttachment(for targets: [ReaderScrollTarget]) {
+        for target in targets {
+            switch target {
+            case let .paragraph(chapterID, index):
+                guard let entry = store.readerSession.entries.first(where: { $0.chapter.id == chapterID }) else { continue }
+                if index >= max(entry.paragraphs.count - 4, 0) {
+                    store.prepareContinuousChapterAttachment(after: chapterID)
+                }
+            case let .chapterFooter(chapterID):
+                store.prepareContinuousChapterAttachment(after: chapterID)
+            case .chapterHeader:
+                break
             }
         }
     }
