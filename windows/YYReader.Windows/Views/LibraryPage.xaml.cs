@@ -18,6 +18,7 @@ public sealed partial class LibraryPage : Page
     private readonly FolderSyncService _folderSyncService;
     private CancellationTokenSource? _downloadNoticeCancellation;
     private bool _isSubscribed;
+    private bool _refreshingBookRows;
 
     public LibraryPage(
         LibraryStore store,
@@ -32,6 +33,7 @@ public sealed partial class LibraryPage : Page
         InitializeComponent();
         Loaded += LibraryPage_Loaded;
         Unloaded += LibraryPage_Unloaded;
+        ActualThemeChanged += (_, _) => { RefreshBookRows(); RefreshView(); };
     }
 
     public LibraryStore Store { get; }
@@ -41,13 +43,17 @@ public sealed partial class LibraryPage : Page
     public void RefreshView()
     {
         if (BookListView is null) return;
-        EmptyState.Visibility = Store.Books.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateLibrarySummary();
         var featured = Store.Books.OrderByDescending(book => book.LastReadAt ?? book.UpdatedAt).FirstOrDefault();
         FeaturedBookPanel.Visibility = featured is null ? Visibility.Collapsed : Visibility.Visible;
         FeaturedTitle.Text = featured?.Title ?? "";
         FeaturedMonogram.Text = featured?.Monogram ?? "阅";
+        FeaturedAuthor.Text = featured is null ? "" : BookSubtitle(featured.Author, featured.IsLocalText);
+        if (featured is not null) FeaturedCover.Background = BookCoverBrush(featured.SourceBookUrl);
+        FeaturedProgressBar.Value = featured?.CurrentProgress ?? 0;
+        FeaturedProgressLabel.Text = ChapterProgress(featured?.CurrentProgress ?? 0);
         FeaturedChapter.Text = featured?.CurrentChapterTitle ?? "";
-        FeaturedProgress.Text = featured is null ? "" : $"{featured.ProgressDisplay} · {featured.LastReadDisplay}";
+        FeaturedProgress.Text = featured is null ? "" : $"上次阅读 · {featured.LastReadDisplay}";
         FeaturedOpenButton.Tag = featured;
         StatusInfoBar.IsOpen = Store.IsBusy || !string.IsNullOrWhiteSpace(Store.ErrorMessage) || !string.IsNullOrWhiteSpace(Store.StatusMessage);
         StatusInfoBar.Message = Store.ErrorMessage ?? Store.StatusMessage ?? "";
@@ -93,8 +99,26 @@ public sealed partial class LibraryPage : Page
 
     private void RefreshBookRows()
     {
-        BookListView.ItemsSource = null;
-        BookListView.ItemsSource = Store.Books;
+        if (BookListView is null || BookSearchBox is null || BookFilter is null || EmptyState is null) return;
+        var selectedId = (BookListView.SelectedItem as Book)?.Id;
+        var query = BookSearchBox.Text.Trim();
+        var books = Store.Books.Where(book =>
+            (query.Length == 0 || book.Title.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+                || book.Author.Contains(query, StringComparison.CurrentCultureIgnoreCase))
+            && (BookFilter.SelectedIndex != 1 || book.IsLocalText)
+            && (BookFilter.SelectedIndex != 2 || book.Chapters.Any(chapter => chapter.IsAvailableOffline)))
+            .OrderByDescending(book => book.LastReadAt ?? book.UpdatedAt).ToArray();
+        _refreshingBookRows = true;
+        try
+        {
+            BookListView.ItemsSource = books;
+            BookListView.SelectedItem = books.FirstOrDefault(book => book.Id == selectedId);
+        }
+        finally { _refreshingBookRows = false; }
+        BookCountText.Text = $"{books.Length} 本";
+        EmptyState.Visibility = books.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        EmptyTitle.Text = Store.Books.Count == 0 ? "你的下一段故事，从这里开始" : "没有找到匹配的小说";
+        EmptyDescription.Text = Store.Books.Count == 0 ? "添加网页小说，或导入一本本地 TXT。" : "试试其他书名、作者，或切换筛选条件。";
     }
 
     private async void ImportLocalText_Click(object sender, RoutedEventArgs e)
@@ -259,6 +283,7 @@ public sealed partial class LibraryPage : Page
     {
         DispatcherQueue.TryEnqueue(() =>
         {
+            UpdateSyncSummary(state);
             if (!state.ShouldNotify) return;
             if (state.IsSyncing)
             {
@@ -272,11 +297,11 @@ public sealed partial class LibraryPage : Page
                 StatusInfoBar.Severity = InfoBarSeverity.Warning;
                 StatusInfoBar.IsOpen = true;
             }
-            else if (state.LastSyncAt is { } syncedAt)
+            else if (state.LastSyncAt is not null)
             {
-                StatusInfoBar.Message = $"文件夹同步完成 · {syncedAt.ToLocalTime():HH:mm:ss}";
-                StatusInfoBar.Severity = InfoBarSeverity.Success;
-                StatusInfoBar.IsOpen = true;
+                // Successful sync stays in the compact footer; errors still use the InfoBar.
+                if (StatusInfoBar.Message?.StartsWith("文件夹同步", StringComparison.Ordinal) == true
+                    || StatusInfoBar.Message == "正在同步书架与阅读位置…") StatusInfoBar.IsOpen = false;
             }
         });
     }
@@ -347,7 +372,7 @@ public sealed partial class LibraryPage : Page
 
     private void BookListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        Store.SelectBook(BookListView.SelectedItem as Book);
+        if (!_refreshingBookRows && BookListView.SelectedItem is Book book) Store.SelectBook(book);
     }
 
     private async void OpenBook_Click(object sender, RoutedEventArgs e)
@@ -431,6 +456,7 @@ public sealed partial class LibraryPage : Page
         }
         await _offlineDownloadManager.DownloadAsync(book, chapter, OfflineDownloadScope.AllChapters);
         await Store.RefreshOfflineMetadataAsync(book.Id);
+        RefreshBookRows();
         RefreshView();
     }
 
@@ -439,6 +465,7 @@ public sealed partial class LibraryPage : Page
         if ((sender as MenuFlyoutItem)?.Tag is not Book book) return;
         await _offlineDownloadManager.ClearOfflineCacheAsync(book);
         await Store.RefreshOfflineMetadataAsync(book.Id);
+        RefreshBookRows();
         StatusInfoBar.Message = "离线正文已删除，书籍和阅读进度已保留。";
         StatusInfoBar.Severity = InfoBarSeverity.Success;
         StatusInfoBar.IsOpen = true;
@@ -498,6 +525,14 @@ public sealed partial class LibraryPage : Page
 
     private void LibraryPage_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (e.Key == global::Windows.System.VirtualKey.F
+            && Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(global::Windows.System.VirtualKey.Control)
+                .HasFlag(global::Windows.UI.Core.CoreVirtualKeyStates.Down))
+        {
+            BookSearchBox.Focus(FocusState.Keyboard);
+            e.Handled = true;
+            return;
+        }
         if ((e.Key == global::Windows.System.VirtualKey.O || e.Key == global::Windows.System.VirtualKey.L)
             && (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(global::Windows.System.VirtualKey.Control)
                 & global::Windows.UI.Core.CoreVirtualKeyStates.Down) != 0)

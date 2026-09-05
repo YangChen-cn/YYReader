@@ -2,6 +2,10 @@
 
 这是 YYReader 的原生 Windows 客户端，使用 C#、.NET 8、WinUI 3 和 Windows App SDK。macOS 工程保持在仓库原位置，不依赖 Windows 端的 SQLite 数据库结构。
 
+## 书房首页
+
+首页显示最近阅读卡片、彩色书封和藏书统计。支持按书名/作者搜索（`Ctrl+F`）、筛选本地 TXT 或有离线正文的书籍；列表中的百分比为当前章节进度。同步状态显示在底部入口，点击可打开同步设置，异常仍显示提示。
+
 ## 本地 TXT 与论文模式
 
 已适配 Mac 提交 `6ecc6db` 的[交接协议](../docs/WINDOWS_LOCAL_TXT_ACADEMIC_HANDOFF.md)。
