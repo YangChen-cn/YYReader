@@ -28,7 +28,7 @@ final class OfflineDownloadManager {
     }
 
     func start(book: Book, currentChapter: Chapter, scope: OfflineDownloadScope) {
-        guard task == nil else { return }
+        guard task == nil, book.sourceKind == .web else { return }
         let items = plannedItems(book: book, currentChapter: currentChapter, scope: scope)
         guard !items.isEmpty else { return }
         completedCount = 0

@@ -20,6 +20,8 @@ final class Book {
     /// `catalogURL` is also the persisted book identity for catalog-less sources.
     /// `hasCatalog` distinguishes an actual catalog URL from a derived source-book URL.
     var sourceBookURL: String { catalogURL }
+    var sourceKind: BookSourceKind { BookSourceKind.resolve(sourceBookURL) }
+    var isLocalText: Bool { sourceKind == .localText }
 
     init(
         id: UUID = UUID(),

@@ -7,12 +7,14 @@ struct ReaderCommandActions {
     let canNavigateNextChapter: Bool
     let canToggleCatalog: Bool
     let canChangeAppearance: Bool
+    let canToggleAcademicMode: Bool
     let addURL: @MainActor () -> Void
     let refreshCatalog: @MainActor () -> Void
     let previousChapter: @MainActor () -> Void
     let nextChapter: @MainActor () -> Void
     let toggleCatalog: @MainActor () -> Void
     let toggleAppearance: @MainActor () -> Void
+    let toggleAcademicMode: @MainActor () -> Void
 }
 
 extension FocusedValues {

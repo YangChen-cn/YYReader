@@ -12,4 +12,7 @@ enum ReaderPreferenceKeys {
     static let prefetchNext = "reader.prefetchNext"
     static let lastReadingBookID = "reader.lastReadingBookID"
     static let lastReadingChapterID = "reader.lastReadingChapterID"
+    static let presentationMode = "reader.presentationMode"
+    static let academicColumnMode = "reader.academicColumnMode"
+    static let academicModeShortcut = "reader.academicModeShortcut"
 }

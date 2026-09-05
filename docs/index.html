@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YYReader - 原生、安静、适合长时间阅读的跨平台小说阅读器</title>
+  <meta name="description" content="YYReader 是一款专为 macOS 与 Windows 设计的原生网络小说阅读器。粘贴章节链接，自动提取正文与目录，纯原生渲染，本地优先，支持去中心化文件夹双向同步。">
+  <meta name="keywords" content="YYReader, 小说阅读器, 原生阅读器, macOS阅读器, Windows阅读器, SwiftUI, WinUI 3, 跨平台同步, 纯净阅读">
+  <meta name="author" content="YangChen">
+
+  <!-- Open Graph / Social Meta -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="YYReader - 原生跨平台小说阅读器">
+  <meta property="og:description" content="原生、安静、适合长时间阅读。粘贴网页链接自动识别书籍正文与目录，拒绝 WebView 卡顿，支持文件夹无感跨端同步。">
+  <meta property="og:image" content="images/app-icon.png">
+  <meta property="og:url" content="https://github.com/YangChen-cn/YYReader">
+
+  <link rel="icon" type="image/png" href="images/favicon.png">
+  <link rel="apple-touch-icon" href="images/app-icon.png">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "YYReader",
+    "operatingSystem": "macOS 15+, Windows 10+",
+    "applicationCategory": "BooksApplication",
+    "softwareVersion": "1.2.3",
+    "description": "原生、安静、适合长时间阅读的跨平台网络小说阅读器。",
+    "author": {
+      "@type": "Person",
+      "name": "YangChen"
+    }
+  }
+  </script>
+</head>
+<body data-theme="light">
+  <!-- Top Navigation -->
+  <header class="site-header" id="topNav">
+    <div class="container header-inner">
+      <a href="#" class="brand">
+        <img src="images/app-icon.png" alt="YYReader Logo" class="brand-logo" width="36" height="36">
+        <span class="brand-name">YYReader</span>
+        <span class="version-tag">v1.2.3</span>
+      </a>
+
+      <nav class="nav-links" id="navLinks">
+        <a href="#features" class="nav-link">核心特性</a>
+        <a href="#showcase" class="nav-link">界面预览</a>
+        <a href="#interactive-demo" class="nav-link">排版试读</a>
+        <a href="#folder-sync" class="nav-link">跨端同步</a>
+        <a href="#shortcuts" class="nav-link">快捷操作</a>
+        <a href="#faq" class="nav-link">常见问题</a>
+      </nav>
+
+      <div class="header-actions">
+        <button id="themeToggleBtn" class="btn-icon" aria-label="切换网站主题" title="切换深色/浅色主题">
+          <svg class="icon-sun" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+
+        <a href="https://github.com/YangChen-cn/YYReader" target="_blank" rel="noopener noreferrer" class="btn-icon" aria-label="GitHub 仓库" title="查看 GitHub 源码">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
+        </a>
+
+        <a href="#download" class="btn btn-primary header-download-btn">
+          <span>立即下载</span>
+        </a>
+
+        <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="展开导航菜单">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Hero Section -->
+    <section class="hero-section">
+      <div class="container hero-container">
+        <div class="hero-badge-wrap">
+          <span class="hero-badge">
+            <span class="badge-dot"></span>
+            原生架构・本地优先・无广告・跨端同步
+          </span>
+        </div>
+
+        <h1 class="hero-title">
+          原生、安静、适合长时间阅读的<br>
+          <span class="hero-title-highlight">跨平台网络小说阅读器</span>
+        </h1>
+
+        <p class="hero-subtitle">
+          只需粘贴章节网页，YYReader 会智能识别书籍、目录与正文。<br>
+          正文由 <strong>macOS (SwiftUI)</strong> 与 <strong>Windows (WinUI 3)</strong> 原生排版引擎渲染，告别网页弹窗与卡顿。
+        </p>
+
+        <!-- Dynamic OS Download Area -->
+        <div class="hero-cta-area">
+          <div class="smart-download-card" id="smartDownloadCard">
+            <div class="download-btn-group">
+              <a href="https://github.com/YangChen-cn/YYReader/releases/download/v1.2.3/YYReader-1.2.3-arm64.dmg" class="btn btn-hero btn-download-primary" id="primaryDownloadBtn">
+                <svg class="btn-os-icon" id="primaryOsIcon" viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                  <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 3.5c.62-.75 1.04-1.8 0.92-2.85-.9.04-2 .6-2.65 1.35-.58.66-1.08 1.73-.95 2.76.99.08 2.05-.51 2.68-1.26z"/>
+                </svg>
+                <div class="btn-text-wrap">
+                  <span class="btn-label" id="primaryDownloadLabel">下载 macOS 版 (arm64 DMG)</span>
+                  <span class="btn-sub" id="primaryDownloadSub">Apple 芯片 • macOS 15+ • v1.2.3</span>
+                </div>
+              </a>
+
+              <a href="#download" class="btn btn-secondary btn-more-platforms">
+                查看全平台下载
+              </a>
+            </div>
+
+            <div class="platform-micro-badges">
+              <span class="micro-badge">
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+                Swift 6 严格并发
+              </span>
+              <span class="micro-badge">
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+                .NET 8 / WinUI 3
+              </span>
+              <span class="micro-badge">
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+                单机离线可用
+              </span>
+              <span class="micro-badge">
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+                零隐私收集
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hero Showcase Frame -->
+        <div class="hero-media-wrapper">
+          <div class="native-window-frame">
+            <div class="window-titlebar">
+              <div class="window-controls">
+                <span class="ctrl close"></span>
+                <span class="ctrl min"></span>
+                <span class="ctrl max"></span>
+              </div>
+              <div class="window-title" id="windowFrameTitle">YYReader - macOS 三栏书架与阅读界面</div>
+              <div class="window-dummy-action"></div>
+            </div>
+            <div class="window-content">
+              <img src="images/yyreader-macos-library.png" alt="YYReader macOS 客户端主界面展示" class="window-img" id="heroDisplayImage">
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="section features-section" id="features">
+      <div class="container">
+        <div class="section-header text-center">
+          <h2 class="section-title">专为阅读而生的四大基石</h2>
+          <p class="section-desc">抛弃沉重的 Electron 和充满广告的 Web 套壳，重回安静、纯粹、丝滑的沉浸阅读体验。</p>
+        </div>
+
+        <div class="features-grid">
+          <!-- Card 1 -->
+          <div class="feature-card">
+            <div class="feature-icon-box">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+              </svg>
+            </div>
+            <h3 class="feature-title">全原生排版渲染</h3>
+            <p class="feature-text">
+              macOS 基于 SwiftUI 原生 <code>ScrollView</code> + <code>LazyVStack</code> + <code>Text</code>，Windows 基于 WinUI 3 原生文本控件。正文绝对不由 WebView 渲染，内存占用极低，滚动无阻尼滞涩。
+            </p>
+          </div>
+
+          <!-- Card 2 -->
+          <div class="feature-card">
+            <div class="feature-icon-box">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="16 18 22 12 16 6"></polyline>
+                <polyline points="8 6 2 12 8 18"></polyline>
+              </svg>
+            </div>
+            <h3 class="feature-title">智能正文提取与降噪</h3>
+            <p class="feature-text">
+              内置专用与通用小说解析器，基于语义化标签、JSON-LD 与文本密度评分，自动剔除网页脚本、分页广告、上下章提示；自动合并网站切割的章节分页。
+            </p>
+          </div>
+
+          <!-- Card 3 -->
+          <div class="feature-card">
+            <div class="feature-icon-box">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+              </svg>
+            </div>
+            <h3 class="feature-title">连续阅读与 3 章预取</h3>
+            <p class="feature-text">
+              支持段落锚点记忆与平滑跨章无缝阅读。后台以低优先级串行预取后续最多 3 章，具备 Single-Flight 防重防打扰机制，翻页零等待，无需时刻忍受网络缓冲。
+            </p>
+          </div>
+
+          <!-- Card 4 -->
+          <div class="feature-card">
+            <div class="feature-icon-box">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+                <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+                <line x1="6" y1="6" x2="6.01" y2="6"></line>
+                <line x1="6" y1="18" x2="6.01" y2="18"></line>
+              </svg>
+            </div>
+            <h3 class="feature-title">本地优先与离线缓存</h3>
+            <p class="feature-text">
+              书籍元数据、目录与已读正文完全持久化在本地（SwiftData / SQLite），支持按需单章或整本批量下载。断网也能随时打开阅读，数据完全归你所有。
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Platform Showcase Section -->
+    <section class="section showcase-section" id="showcase">
+      <div class="container">
+        <div class="section-header text-center">
+          <h2 class="section-title">为 macOS 与 Windows 量身定制</h2>
+          <p class="section-desc">保留各自操作系统的设计精髓与交互习惯，没有跨平台框架的异样感。</p>
+
+          <!-- Showcase Platform Tabs -->
+          <div class="showcase-tabs" role="tablist">
+            <button class="showcase-tab active" data-target="macos-lib" role="tab" aria-selected="true">
+              <span class="tab-icon">🍎</span> macOS 书架与目录
+            </button>
+            <button class="showcase-tab" data-target="macos-read" role="tab" aria-selected="false">
+              <span class="tab-icon">📖</span> macOS 沉浸阅读与设置
+            </button>
+            <button class="showcase-tab" data-target="win-lib" role="tab" aria-selected="false">
+              <span class="tab-icon">🪟</span> Windows 现代目录
+            </button>
+            <button class="showcase-tab" data-target="win-read" role="tab" aria-selected="false">
+              <span class="tab-icon">⚙️</span> Windows 排版与排版调节
+            </button>
+          </div>
+        </div>
+
+        <div class="showcase-display-card">
+          <div class="showcase-content-grid">
+            <div class="showcase-image-box">
+              <img src="images/yyreader-macos-library.png" alt="macOS 书架展示" class="showcase-active-img" id="showcaseImage">
+            </div>
+            <div class="showcase-info-box">
+              <div class="showcase-badge" id="showcaseBadge">macOS 15+ 原生界面</div>
+              <h3 class="showcase-title" id="showcaseTitle">三栏式书架与目录结构</h3>
+              <p class="showcase-description" id="showcaseDesc">
+                经典 macOS 原生 NavigationSplitView 三栏布局，左侧书架列表一目了然，中间完整章节目录支持即时搜索与过滤，右侧纯净原生正文预览。
+              </p>
+
+              <div class="showcase-highlights" id="showcaseHighlights">
+                <div class="highlight-item">
+                  <span class="item-check">✓</span>
+                  <span>支持 <code>⌘L</code> 快速添加章节 URL</span>
+                </div>
+                <div class="highlight-item">
+                  <span class="item-check">✓</span>
+                  <span>目录按网站实际出现顺序索引，章节去重</span>
+                </div>
+                <div class="highlight-item">
+                  <span class="item-check">✓</span>
+                  <span>支持单章与全本目录离线下载进度指示</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Interactive Reader Sandbox Demo -->
+    <section class="section demo-section" id="interactive-demo">
+      <div class="container">
+        <div class="section-header text-center">
+          <h2 class="section-title">在线体验 YYReader 排版引擎</h2>
+          <p class="section-desc">试着调节下方的主题、字体、字号与正文宽度，感受舒适且不累眼的排版细节。</p>
+        </div>
+
+        <div class="reader-sandbox-wrapper">
+          <!-- Sandbox Controls Toolbar -->
+          <div class="sandbox-toolbar">
+            <div class="control-group">
+              <span class="control-label">阅读主题：</span>
+              <div class="theme-chips">
+                <button class="theme-chip active" data-reader-theme="paper" title="温润羊皮纸">
+                  <span class="chip-color chip-paper"></span>
+                  <span>羊皮纸</span>
+                </button>
+                <button class="theme-chip" data-reader-theme="light" title="经典纯白">
+                  <span class="chip-color chip-light"></span>
+                  <span>纯白</span>
+                </button>
+                <button class="theme-chip" data-reader-theme="mint" title="护眼青黛">
+                  <span class="chip-color chip-mint"></span>
+                  <span>青黛</span>
+                </button>
+                <button class="theme-chip" data-reader-theme="dark" title="沉浸暗夜">
+                  <span class="chip-color chip-dark"></span>
+                  <span>暗夜</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <span class="control-label">字体风格：</span>
+              <div class="font-toggle-group">
+                <button class="btn-toggle active" data-font="serif">宋体/衬线 (典雅)</button>
+                <button class="btn-toggle" data-font="sans">黑体/无衬线 (现代)</button>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <span class="control-label">字号大小：</span>
+              <div class="size-stepper">
+                <button class="stepper-btn" id="fontDecBtn" aria-label="减小字号">A-</button>
+                <span class="size-val" id="fontSizeVal">18px</span>
+                <button class="stepper-btn" id="fontIncBtn" aria-label="增大字号">A+</button>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <span class="control-label">正文宽度：</span>
+              <div class="size-stepper">
+                <button class="stepper-btn" id="widthNarrowBtn">紧凑</button>
+                <button class="stepper-btn active" id="widthNormalBtn">适中</button>
+                <button class="stepper-btn" id="widthWideBtn">宽屏</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Reader Preview Screen -->
+          <div class="reader-viewport theme-paper" id="readerViewport">
+            <div class="reader-paper-sheet width-normal font-serif" id="readerPaperSheet">
+              <div class="reader-book-header">
+                <span class="reader-meta-tag">第1章 • 世界大变</span>
+                <span class="reader-meta-title">全职法师 / 乱</span>
+              </div>
+
+              <div class="reader-body">
+                <h1 class="reader-chapter-heading">第1章 世界大变</h1>
+
+                <p class="reader-p">一觉醒来，莫凡发现整个世界都变了。</p>
+                <p class="reader-p">熟悉的校园，熟悉的操场，甚至连教导主任那副严厉的面孔都没有变，但黑板上讲授的不再是数理化，而是——魔法！</p>
+                <p class="reader-p">“同学们，魔法的觉醒是每一个初阶法师踏入真正修行的起点。火系的狂暴、雷系的毁灭、冰系的凝结，每一种属性都代表着对抗荒野妖魔的可能。”</p>
+                <p class="reader-p">莫凡揉了揉眼睛，看着讲台上唾沫横飞的老师，心中掀起了滔天巨浪。他转头望向窗外，天空中隐约掠过带着羽翼的巡逻队，城市高楼的外墙上刻印着若隐若现的防御法阵。</p>
+                <p class="reader-p">在这个崇尚魔法的新世界，科学变成了神话，而曾经被视为传说的魔法，成了人类抵御灾难的唯一依仗……</p>
+              </div>
+
+              <div class="reader-footer-bar">
+                <div class="reader-progress-info">
+                  <span>第 1 章 / 共 3220 章</span>
+                  <div class="reader-progress-bar-mini"><div class="progress-fill" style="width: 15%;"></div></div>
+                  <span>100% (当前章已读完)</span>
+                </div>
+                <div class="reader-next-action">
+                  <span class="next-btn-fake">下拉无缝连读下一章 →</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Folder Sync Visualizer Section -->
+    <section class="section sync-section" id="folder-sync">
+      <div class="container">
+        <div class="sync-grid">
+          <div class="sync-info-column">
+            <div class="section-badge">去中心化同步机制</div>
+            <h2 class="section-title">私密、可靠的<br>文件夹双向同步</h2>
+            <p class="section-desc">
+              不强求专有云服务器，不绑定 iCloud 或商业账号。只需在 Mac 与 Windows 上指定任意共同可访问的文件夹（iCloud Drive、Dropbox、OneDrive、Syncthing 或 NAS），YYReader 就能优雅协作。
+            </p>
+
+            <div class="sync-features-list">
+              <div class="sync-feat-item">
+                <div class="feat-bullet">1</div>
+                <div>
+                  <h4>单向写入，互相合并</h4>
+                  <p>Mac 端仅写入 <code>mac.json</code>，Windows 端仅写入 <code>windows.json</code>。互不覆盖对端文件，从根源消除多端写入冲突。</p>
+                </div>
+              </div>
+              <div class="sync-feat-item">
+                <div class="feat-bullet">2</div>
+                <div>
+                  <h4>阅读位置单向推进</h4>
+                  <p>多端阅读时，仅接受更后章节或更后段落索引，防止因设备时间差导致阅读进度被意外倒退。</p>
+                </div>
+              </div>
+              <div class="sync-feat-item">
+                <div class="feat-bullet">3</div>
+                <div>
+                  <h4>离线韧性与隐私安全</h4>
+                  <p>云盘离线或网络波动时，绝不清空本地书架。同步文件仅包含书名与进度索引，不上传正文与登录凭证。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="sync-diagram-column">
+            <div class="sync-diagram-card">
+              <div class="sync-folder-header">
+                <span class="folder-icon">📁</span>
+                <span class="folder-name">YYReaderSync /</span>
+                <span class="folder-status-pill">双向实时就绪</span>
+              </div>
+
+              <div class="sync-flow-container">
+                <!-- Mac Side -->
+                <div class="sync-device-card mac-card">
+                  <div class="device-header">
+                    <span class="os-icon">🍎</span>
+                    <div class="device-text">
+                      <strong>macOS 客户端</strong>
+                      <small>SwiftData 本地书架</small>
+                    </div>
+                  </div>
+                  <div class="file-action-badge write">
+                    <span>写入 ➔</span>
+                    <code>mac.json</code>
+                  </div>
+                  <div class="file-action-badge read">
+                    <span>读取 ➔</span>
+                    <code>windows.json</code>
+                  </div>
+                </div>
+
+                <!-- Sync Bridge Arrow -->
+                <div class="sync-bridge">
+                  <div class="bridge-arrow-wrap">
+                    <span class="bridge-line"></span>
+                    <span class="bridge-badge">共享目录无锁合并</span>
+                  </div>
+                </div>
+
+                <!-- Windows Side -->
+                <div class="sync-device-card win-card">
+                  <div class="device-header">
+                    <span class="os-icon">🪟</span>
+                    <div class="device-text">
+                      <strong>Windows 客户端</strong>
+                      <small>SQLite 本地书架</small>
+                    </div>
+                  </div>
+                  <div class="file-action-badge write">
+                    <span>写入 ➔</span>
+                    <code>windows.json</code>
+                  </div>
+                  <div class="file-action-badge read">
+                    <span>读取 ➔</span>
+                    <code>mac.json</code>
+                  </div>
+                </div>
+              </div>
+
+              <div class="sync-supported-clouds">
+                <span>支持同步介质：</span>
+                <span class="cloud-pill">iCloud Drive</span>
+                <span class="cloud-pill">OneDrive</span>
+                <span class="cloud-pill">Dropbox</span>
+                <span class="cloud-pill">Syncthing</span>
+                <span class="cloud-pill">NAS / 局域网</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Shortcuts & Operations -->
+    <section class="section shortcuts-section" id="shortcuts">
+      <div class="container">
+        <div class="section-header text-center">
+          <h2 class="section-title">指尖起舞的高效快捷键</h2>
+          <p class="section-desc">脱离鼠标，让双手始终停留在键盘上，享受纯粹连贯的阅读流动。</p>
+        </div>
+
+        <div class="shortcuts-grid">
+          <div class="shortcut-card">
+            <div class="key-combo">
+              <kbd>⌘</kbd> + <kbd>L</kbd>
+            </div>
+            <div class="shortcut-desc">
+              <h4>快速添加小说网页</h4>
+              <p>唤起 URL 输入弹窗，自动从剪贴板预填网址，一键开始解析。</p>
+            </div>
+          </div>
+
+          <div class="shortcut-card">
+            <div class="key-combo">
+              <kbd>⌘</kbd> + <kbd>[</kbd> / <kbd>]</kbd>
+            </div>
+            <div class="shortcut-desc">
+              <h4>上一章 / 下一章</h4>
+              <p>迅速跳跃切换章节，自动平滑重置滚动位置至段落开头。</p>
+            </div>
+          </div>
+
+          <div class="shortcut-card">
+            <div class="key-combo">
+              <kbd>↑</kbd> / <kbd>↓</kbd>
+            </div>
+            <div class="shortcut-desc">
+              <h4>小步平滑微滚</h4>
+              <p>细腻的逐行平滑滚动，保持视线聚焦在当前文字行。</p>
+            </div>
+          </div>
+
+          <div class="shortcut-card">
+            <div class="key-combo">
+              <kbd>Space</kbd> / <kbd>PageDown</kbd>
+            </div>
+            <div class="shortcut-desc">
+              <h4>整页舒适翻屏</h4>
+              <p>按视口高度黄金比例（88% 步长）翻页，自动保留上下文衔接行。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Download & Checksum Section -->
+    <section class="section download-section" id="download">
+      <div class="container">
+        <div class="section-header text-center">
+          <h2 class="section-title">下载 YYReader</h2>
+          <p class="section-desc">当前最新版本 <strong>v1.2.3</strong> • 绿色纯净 • 开箱即用</p>
+        </div>
+
+        <div class="download-cards-grid">
+          <!-- macOS Download Card -->
+          <div class="download-package-card macos-package">
+            <div class="pkg-header">
+              <div class="pkg-icon-wrap">
+                <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor">
+                  <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 3.5c.62-.75 1.04-1.8 0.92-2.85-.9.04-2 .6-2.65 1.35-.58.66-1.08 1.73-.95 2.76.99.08 2.05-.51 2.68-1.26z"/>
+                </svg>
+              </div>
+              <div class="pkg-title-area">
+                <h3>YYReader for macOS</h3>
+                <span class="pkg-badge">Apple 芯片 (arm64)</span>
+              </div>
+            </div>
+
+            <div class="pkg-details">
+              <div class="detail-row">
+                <span class="detail-name">系统要求：</span>
+                <span class="detail-val">macOS 15.0 (Sequoia) 或更高版本</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-name">格式类型：</span>
+                <span class="detail-val">独立便携 DMG 镜像</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-name">文件名称：</span>
+                <span class="detail-val"><code>YYReader-1.2.3-arm64.dmg</code></span>
+              </div>
+            </div>
+
+            <div class="pkg-actions">
+              <a href="https://github.com/YangChen-cn/YYReader/releases/download/v1.2.3/YYReader-1.2.3-arm64.dmg" class="btn btn-primary btn-block">
+                下载 macOS 安装包 (.dmg)
+              </a>
+            </div>
+
+            <div class="checksum-box">
+              <div class="checksum-header">
+                <span>SHA-256 校验码</span>
+                <button class="copy-btn" data-copy="216d41cdbc2237e188c2606120dc60ebe31fba666e65ad552a9bac7f4b0eb4e7">复制</button>
+              </div>
+              <code class="checksum-code">216d41cdbc2237e188c2606120dc60ebe31fba666e65ad552a9bac7f4b0eb4e7</code>
+            </div>
+
+            <div class="pkg-notice">
+              <small>💡 提示：本应用采用 ad-hoc 签名。首次打开时若提示“未经验证的开发者”，请在访达中右键点击应用并选择“打开”即可正常运行。</small>
+            </div>
+          </div>
+
+          <!-- Windows Download Card -->
+          <div class="download-package-card windows-package">
+            <div class="pkg-header">
+              <div class="pkg-icon-wrap">
+                <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor">
+                  <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+                </svg>
+              </div>
+              <div class="pkg-title-area">
+                <h3>YYReader for Windows</h3>
+                <span class="pkg-badge">64 位系统 (x64)</span>
+              </div>
+            </div>
+
+            <div class="pkg-details">
+              <div class="detail-row">
+                <span class="detail-name">系统要求：</span>
+                <span class="detail-val">Windows 10 1809+ / Windows 11</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-name">格式类型：</span>
+                <span class="detail-val">自包含标准安装程序 (无需另装 .NET)</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-name">文件名称：</span>
+                <span class="detail-val"><code>YYReader-Setup-x64-1.2.3.exe</code></span>
+              </div>
+            </div>
+
+            <div class="pkg-actions">
+              <a href="https://github.com/YangChen-cn/YYReader/releases/download/v1.2.3/YYReader-Setup-x64-1.2.3.exe" class="btn btn-primary btn-block">
+                下载 Windows 安装包 (.exe)
+              </a>
+            </div>
+
+            <div class="checksum-box">
+              <div class="checksum-header">
+                <span>SHA-256 校验码</span>
+                <button class="copy-btn" data-copy="317DB5BF7A8474B1BAE6CA0B967FDC2EAC62F57D25E005DC24A3D19E777456B4">复制</button>
+              </div>
+              <code class="checksum-code">317DB5BF7A8474B1BAE6CA0B967FDC2EAC62F57D25E005DC24A3D19E777456B4</code>
+            </div>
+
+            <div class="pkg-notice">
+              <small>💡 提示：安装包为独立单文件安装程序，若 SmartScreen 提示“未知发布者”，点击“更多信息”并选择“仍要运行”即可。</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section class="section faq-section" id="faq">
+      <div class="container">
+        <div class="section-header text-center">
+          <h2 class="section-title">常见问题</h2>
+          <p class="section-desc">关于站点兼容性、验证拦截以及数据安全的相关解答。</p>
+        </div>
+
+        <div class="faq-accordion">
+          <div class="faq-item">
+            <button class="faq-question">
+              <span>YYReader 支持哪些小说网站？</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-answer">
+              <p>YYReader 为 <strong>qidiy.com（启迪小说）</strong> 提供了专用适配器（支持双页分页无缝合并与噪声滤除）；对于其他绝大多数主流小说站点，应用内置了基于 JSON-LD、OpenGraph、正文语义容器优先级和中文标点密度的<strong>通用解析引擎</strong>。只要网页结构包含常规章节正文与前后章导航，均可自动解析。</p>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-question">
+              <span>遇到 Cloudflare 或验证码（CAPTCHA）怎么处理？</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-answer">
+              <p>YYReader 优先采用轻量快速的 <code>URLSession</code> / <code>HttpClient</code> 下载静态页面；若目标站点触发了 Cloudflare 质询或前端 JS 渲染，应用会自动唤起原生 WebKit (macOS) 或 WebView2 (Windows) 浏览器组件供用户完成一次性人机验证，随后将 Cookie 和渲染后的 DOM 传回原生阅读器，<strong>正文绝不会直接嵌入 WebView 浏览</strong>。</p>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-question">
+              <span>文件夹同步是否需要一直保持网络连接？</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-answer">
+              <p>不需要。YYReader 的同步是完全异步且幂等的。当你在离线状态下阅读时，进度会先保存在本地；一旦连接到网络或共享文件夹重新就绪，应用会自动比对 <code>mac.json</code> 与 <code>windows.json</code> 的文件签名，并以单向向后推进的规则安全合并进度，绝不会因网络中断导致数据丢失或覆盖。</p>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-question">
+              <span>YYReader 是否会上传或分发小说正文？</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-answer">
+              <p>绝对不会。YYReader 是一款纯单机本地优先的阅读工具，不架设任何中心服务器，不收集用户阅读记录，也不在应用内分发任何版权正文。所有内容仅由用户自行输入 URL 从源站获取并缓存在用户本机。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Site Footer -->
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-brand-col">
+        <div class="footer-brand">
+          <img src="images/app-icon.png" alt="YYReader" width="28" height="28">
+          <span>YYReader</span>
+        </div>
+        <p class="footer-motto">原生、安静、适合长时间阅读的跨平台小说阅读器。</p>
+        <p class="footer-copy">© 2026 YangChen. 保留所有权利。</p>
+      </div>
+
+      <div class="footer-links-col">
+        <h4>快速导航</h4>
+        <ul>
+          <li><a href="#features">核心特性</a></li>
+          <li><a href="#showcase">界面预览</a></li>
+          <li><a href="#interactive-demo">排版试读</a></li>
+          <li><a href="#download">下载最新版</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-links-col">
+        <h4>资源与链接</h4>
+        <ul>
+          <li><a href="https://github.com/YangChen-cn/YYReader" target="_blank" rel="noopener">GitHub 仓库</a></li>
+          <li><a href="https://github.com/YangChen-cn/YYReader/releases" target="_blank" rel="noopener">所有 Release 说明</a></li>
+          <li><a href="https://github.com/YangChen-cn/YYReader/blob/main/RELEASE_NOTES.md" target="_blank" rel="noopener">v1.2.3 更新日志</a></li>
+        </ul>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast">已复制到剪贴板</div>
+
+  <script src="app.js"></script>
+</body>
+</html>

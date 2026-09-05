@@ -7,6 +7,23 @@ import Testing
 
 struct ReaderPresentationTests {
     @Test
+    func academicModeShortcutRoundTripsAndRejectsInvalidKeys() throws {
+        let shortcut = try #require(ReaderKeyboardShortcut(
+            key: "K",
+            usesControl: true,
+            usesOption: false,
+            usesShift: true,
+            usesCommand: true
+        ))
+
+        #expect(shortcut.storageValue == "k|control,shift,command")
+        #expect(shortcut.displayName == "⌃⇧⌘K")
+        #expect(ReaderKeyboardShortcut(storageValue: shortcut.storageValue) == shortcut)
+        #expect(ReaderKeyboardShortcut(key: "ab", usesControl: true, usesOption: true, usesShift: false, usesCommand: false) == nil)
+        #expect(ReaderKeyboardShortcut(key: "\n", usesControl: true, usesOption: true, usesShift: false, usesCommand: false) == nil)
+    }
+
+    @Test
     func paragraphFormatterAddsTwoCharacterIndentOnlyWhenNeeded() {
         #expect(
             ReaderParagraphFormatter.format("第一段正文。", usesFirstLineIndent: true)

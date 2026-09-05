@@ -24,7 +24,7 @@ struct BookSidebarView: View {
                 ContentUnavailableView(
                     "书架为空",
                     systemImage: "books.vertical",
-                    description: Text("点击工具栏的加号，粘贴小说章节 URL。")
+                    description: Text("添加小说网页，或从“更多”导入本地 TXT。")
                 )
             }
         }

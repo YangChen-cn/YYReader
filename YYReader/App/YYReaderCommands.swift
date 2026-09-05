@@ -2,6 +2,8 @@ import SwiftUI
 
 struct YYReaderCommands: Commands {
     @FocusedValue(\.readerCommandActions) private var actions
+    @AppStorage(ReaderPreferenceKeys.academicModeShortcut)
+    private var academicModeShortcut = ReaderKeyboardShortcut.defaultValue.storageValue
 
     var body: some Commands {
         CommandMenu("阅读") {
@@ -32,7 +34,17 @@ struct YYReaderCommands: Commands {
             Button("阅读外观", action: toggleAppearance)
                 .keyboardShortcut("a", modifiers: [.command, .option])
                 .disabled(actions?.canChangeAppearance != true)
+
+            academicModeButton
         }
+    }
+
+    @ViewBuilder
+    private var academicModeButton: some View {
+        let shortcut = ReaderKeyboardShortcut(storageValue: academicModeShortcut) ?? .defaultValue
+        Button("切换论文伪装模式", action: toggleAcademicMode)
+            .keyboardShortcut(shortcut.keyEquivalent, modifiers: shortcut.eventModifiers)
+            .disabled(actions?.canToggleAcademicMode != true)
     }
 
     private func addURL() { actions?.addURL() }
@@ -41,4 +53,5 @@ struct YYReaderCommands: Commands {
     private func nextChapter() { actions?.nextChapter() }
     private func toggleCatalog() { actions?.toggleCatalog() }
     private func toggleAppearance() { actions?.toggleAppearance() }
+    private func toggleAcademicMode() { actions?.toggleAcademicMode() }
 }

@@ -4,18 +4,24 @@ struct ReaderToolbar: ToolbarContent {
     @Binding var showingAppearancePopover: Bool
     @Binding var showingDownloadProgress: Bool
     let canManageBook: Bool
+    let isAcademicMode: Bool
     let canRefreshCatalog: Bool
+    let canDownloadEntireBook: Bool
+    let canDownloadCurrentChapter: Bool
+    let canDeleteOfflineCache: Bool
     let isLoading: Bool
     let returnToLibrary: () -> Void
     let showAdvancedAppearance: () -> Void
+    let toggleAcademicMode: () -> Void
     let addURL: () -> Void
+    let importLocalText: () -> Void
+    let editBookMetadata: () -> Void
     let refreshCatalog: () -> Void
     let downloadCurrentChapter: () -> Void
     let downloadFollowingChapters: () -> Void
     let downloadEntireBook: () -> Void
     let cancelDownload: () -> Void
     let deleteOfflineCache: () -> Void
-    let canDownloadEntireBook: Bool
     let isDownloading: Bool
     let hasDownloadStatus: Bool
     let downloads: OfflineDownloadManager
@@ -28,6 +34,13 @@ struct ReaderToolbar: ToolbarContent {
         }
 
         ToolbarItemGroup(placement: .primaryAction) {
+            Button(
+                isAcademicMode ? "退出论文伪装" : "论文伪装模式",
+                systemImage: isAcademicMode ? "graduationcap.fill" : "graduationcap",
+                action: toggleAcademicMode
+            )
+            .help(isAcademicMode ? "恢复普通阅读" : "切换为学术论文外观")
+
             Button("阅读外观", systemImage: "textformat.size") {
                 showingAppearancePopover.toggle()
             }
@@ -56,10 +69,14 @@ struct ReaderToolbar: ToolbarContent {
                     .disabled(!canRefreshCatalog || isLoading)
                 Button("添加网页…", systemImage: "plus", action: addURL)
                     .disabled(isLoading)
+                Button("导入本地 TXT…", systemImage: "doc.text", action: importLocalText)
+                    .disabled(isLoading)
+                Button("编辑书籍信息…", systemImage: "pencil", action: editBookMetadata)
+                    .disabled(!canManageBook)
 
                 Menu("下载到本地…", systemImage: "arrow.down.circle") {
                     Button("下载当前章节", action: downloadCurrentChapter)
-                        .disabled(isDownloading)
+                        .disabled(!canDownloadCurrentChapter || isDownloading)
                     Button("下载后 20 章", action: downloadFollowingChapters)
                         .disabled(!canDownloadEntireBook || isDownloading)
                     Button("下载全部章节", action: downloadEntireBook)
@@ -72,10 +89,10 @@ struct ReaderToolbar: ToolbarContent {
                         }
                     }
                 }
-                .disabled(isLoading)
+                .disabled(!canDownloadCurrentChapter || isLoading)
 
                 Button("删除离线缓存", systemImage: "externaldrive.badge.xmark", action: deleteOfflineCache)
-                    .disabled(!canManageBook || isDownloading)
+                    .disabled(!canDeleteOfflineCache || isDownloading)
 
                 Divider()
 

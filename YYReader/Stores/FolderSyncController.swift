@@ -25,6 +25,7 @@ final class FolderSyncController {
     private var folderAccessTimeoutTask: Task<Void, Never>?
     private var folderAccessGeneration = UUID()
     private var lastWindowsFileSignature: SyncFileSignature?
+    private var peerSupportsLocalText = false
     private var syncAgainAfterCurrentRun = false
     private var debounceShouldApplyMergedRecords = false
     private var queuedSyncShouldApplyMergedRecords = false
@@ -132,6 +133,11 @@ final class FolderSyncController {
     func recordDeletion(_ record: SyncBookRecord) {
         let key = record.canonicalSourceURL
         tombstones[key] = record
+        persistTombstones()
+    }
+
+    func clearDeletion(sourceURL: String) {
+        tombstones.removeValue(forKey: URLCanonicalizer.canonicalString(sourceURL))
         persistTombstones()
     }
 
@@ -344,7 +350,8 @@ final class FolderSyncController {
             if !applyMergedRecords {
                 let publishedAt = try await engine.publishLocal(
                     selectedFolder: selectedFolderURL,
-                    localBooks: localBooks
+                    localBooks: localBooks,
+                    includeLocalText: peerSupportsLocalText
                 )
                 guard !Task.isCancelled, isEnabled, syncGeneration == generation else { return }
                 tombstones = Dictionary(
@@ -363,11 +370,15 @@ final class FolderSyncController {
             )
             guard !Task.isCancelled, isEnabled, syncGeneration == generation else { return }
             try store.applySyncRecords(result.books)
-            tombstones = Dictionary(
-                uniqueKeysWithValues: result.books
-                    .filter(\.isDeleted)
-                    .map { ($0.canonicalSourceURL, $0) }
+            let retainedLocalTombstones = tombstones.filter {
+                BookSourceKind.resolve($0.value.sourceURL) == .localText
+                    && !result.remoteCapabilities.contains(SyncEngine.localTextCapability)
+            }
+            tombstones = Dictionary(uniqueKeysWithValues:
+                result.books.filter(\.isDeleted).map { ($0.canonicalSourceURL, $0) }
             )
+            tombstones.merge(retainedLocalTombstones) { synchronized, _ in synchronized }
+            peerSupportsLocalText = result.remoteCapabilities.contains(SyncEngine.localTextCapability)
             lastWindowsFileSignature = result.windowsFileSignature
             finishSuccessfulOperation(at: result.synchronizedAt)
         } catch is CancellationError {

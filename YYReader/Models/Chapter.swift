@@ -66,6 +66,10 @@ final class Chapter {
         cachedAt != nil
     }
 
+    var isLocalText: Bool {
+        BookSourceKind.resolve(sourceURL) == .localText
+    }
+
     private static func normalizedBodyText(_ bodyText: String) -> String {
         bodyText
             .split(separator: "\n", omittingEmptySubsequences: true)

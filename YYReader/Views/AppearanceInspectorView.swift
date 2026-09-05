@@ -8,6 +8,10 @@ struct AppearanceInspectorView: View {
     @AppStorage(ReaderPreferenceKeys.contentWidth) private var contentWidth = ReaderViewportLayout.defaultPreferredWidthEM
     @AppStorage(ReaderPreferenceKeys.theme) private var theme = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.paragraphIndent) private var paragraphIndent = true
+    @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentationMode = ReaderPresentationMode.normal.rawValue
+    @AppStorage(ReaderPreferenceKeys.academicColumnMode) private var academicColumnMode = AcademicColumnMode.double.rawValue
+    @AppStorage(ReaderPreferenceKeys.academicModeShortcut)
+    private var academicModeShortcut = ReaderKeyboardShortcut.defaultValue.storageValue
     var dismiss: (() -> Void)?
 
     var body: some View {
@@ -72,8 +76,40 @@ struct AppearanceInspectorView: View {
 
                     Toggle("段首缩进 2 字符", isOn: $paragraphIndent)
                 }
+
+                if presentationMode == ReaderPresentationMode.academicPaper.rawValue {
+                    Section("论文伪装") {
+                        Picker("栏数", selection: $academicColumnMode) {
+                            ForEach(AcademicColumnMode.allCases) { mode in
+                                Text(mode.title).tag(mode.rawValue)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        Text("窗口内容区小于 760 点时自动使用单栏。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Section("快捷键") {
+                    LabeledContent("切换摸鱼模式") {
+                        HStack {
+                            KeyboardShortcutRecorder(shortcut: $academicModeShortcut)
+                                .frame(width: 150)
+                            Button("恢复默认", action: resetAcademicModeShortcut)
+                                .disabled(academicModeShortcut == ReaderKeyboardShortcut.defaultValue.storageValue)
+                        }
+                    }
+                    Text("点击快捷键后按下新组合。为避免干扰文字输入，需要同时使用至少两个 ⌃、⌥ 或 ⌘ 修饰键。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .formStyle(.grouped)
         }
+    }
+
+    private func resetAcademicModeShortcut() {
+        academicModeShortcut = ReaderKeyboardShortcut.defaultValue.storageValue
     }
 }

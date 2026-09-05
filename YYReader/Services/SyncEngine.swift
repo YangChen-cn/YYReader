@@ -4,6 +4,8 @@ actor SyncEngine {
     static let directoryName = "YYReaderSync"
     static let macFileName = "mac.json"
     static let windowsFileName = "windows.json"
+    static let localTextCapability = "local-txt-v1"
+    private static let localCapabilities = [localTextCapability]
 
     private let fileManager: FileManager
 
@@ -14,6 +16,7 @@ actor SyncEngine {
     func publishLocal(
         selectedFolder: URL,
         localBooks: [SyncBookRecord],
+        includeLocalText: Bool,
         now: Date = .now
     ) throws -> Date {
         let directory = selectedFolder.appendingPathComponent(Self.directoryName, isDirectory: true)
@@ -21,8 +24,16 @@ actor SyncEngine {
 
         let macURL = directory.appendingPathComponent(Self.macFileName)
         let previousMac = try readSnapshotIfPresent(at: macURL, expectedDevice: .mac)
-        let snapshot = SyncSnapshot(device: .mac, updatedAt: now, books: localBooks)
-        if previousMac?.version != SyncSnapshot.currentVersion || previousMac?.books != localBooks {
+        let publishedBooks = filteredBooks(localBooks, includeLocalText: includeLocalText)
+        let snapshot = SyncSnapshot(
+            device: .mac,
+            updatedAt: now,
+            capabilities: Self.localCapabilities,
+            books: publishedBooks
+        )
+        if previousMac?.version != SyncSnapshot.currentVersion
+            || previousMac?.capabilities != snapshot.capabilities
+            || previousMac?.books != publishedBooks {
             try atomicWrite(try SyncSnapshotCodec.encode(snapshot), to: macURL)
         }
         return now
@@ -41,20 +52,39 @@ actor SyncEngine {
         let windowsURL = directory.appendingPathComponent(Self.windowsFileName)
         let previousMac = try readSnapshotIfPresent(at: macURL, expectedDevice: .mac)
         let windows = try readSnapshotIfPresent(at: windowsURL, expectedDevice: .windows)
+        let remoteSupportsLocalText = windows?.capabilities.contains(Self.localTextCapability) == true
         let mergedBooks = SyncMerger.merge(
-            (previousMac?.books ?? []) + localBooks + (windows?.books ?? []),
+            filteredBooks(previousMac?.books ?? [], includeLocalText: remoteSupportsLocalText)
+                + filteredBooks(localBooks, includeLocalText: remoteSupportsLocalText)
+                + (windows?.books ?? []),
             chapterRanksByBook: chapterRanksByBook
         )
-        let snapshot = SyncSnapshot(device: .mac, updatedAt: now, books: mergedBooks)
-        if previousMac?.version != SyncSnapshot.currentVersion || previousMac?.books != mergedBooks {
+        let snapshot = SyncSnapshot(
+            device: .mac,
+            updatedAt: now,
+            capabilities: Self.localCapabilities,
+            books: mergedBooks
+        )
+        if previousMac?.version != SyncSnapshot.currentVersion
+            || previousMac?.capabilities != snapshot.capabilities
+            || previousMac?.books != mergedBooks {
             try atomicWrite(try SyncSnapshotCodec.encode(snapshot), to: macURL)
         }
 
         return SyncResult(
             books: mergedBooks,
             synchronizedAt: now,
-            windowsFileSignature: try fileSignature(at: windowsURL)
+            windowsFileSignature: try fileSignature(at: windowsURL),
+            remoteCapabilities: windows?.capabilities ?? []
         )
+    }
+
+    private func filteredBooks(
+        _ books: [SyncBookRecord],
+        includeLocalText: Bool
+    ) -> [SyncBookRecord] {
+        guard !includeLocalText else { return books }
+        return books.filter { BookSourceKind.resolve($0.sourceURL) != .localText }
     }
 
     func windowsFileSignature(selectedFolder: URL) throws -> SyncFileSignature? {

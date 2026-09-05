@@ -46,11 +46,16 @@ enum SyncSnapshotCodec {
 
     private static func validate(_ book: SyncBookRecord) throws {
         guard URLCanonicalizer.isValidBookSource(book.sourceURL) else {
-            throw SyncError.invalidBook("sourceURL 必须是 HTTP、HTTPS 或 yyreader-book URL。")
+            throw SyncError.invalidBook("sourceURL 必须是 HTTP、HTTPS、yyreader-book 或受支持的本地 TXT URL。")
         }
         if let chapterURL = book.currentChapterURL,
            !URLCanonicalizer.isValidChapterSource(chapterURL) {
-            throw SyncError.invalidBook("currentChapterURL 必须是 HTTP 或 HTTPS URL。")
+            throw SyncError.invalidBook("currentChapterURL 必须是 HTTP、HTTPS 或匹配书籍的本地 TXT 章节 URL。")
+        }
+        if BookSourceKind.resolve(book.sourceURL) == .localText,
+           let chapterURL = book.currentChapterURL,
+           !chapterURL.hasPrefix(book.sourceURL + "/chapter/") {
+            throw SyncError.invalidBook("本地 TXT 章节 URL 与书籍身份不匹配。")
         }
         if let paragraphIndex = book.paragraphIndex, paragraphIndex < 0 {
             throw SyncError.invalidBook("paragraphIndex 不能为负数。")

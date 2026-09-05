@@ -3,6 +3,7 @@ import SwiftUI
 struct LibraryRootView: View {
     @Bindable var store: LibraryStore
     @AppStorage(ReaderPreferenceKeys.theme) private var themeName = ReaderTheme.system.rawValue
+    @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentationModeName = ReaderPresentationMode.normal.rawValue
     @State private var libraryColumnVisibility: NavigationSplitViewVisibility = .all
     @State private var readerColumnVisibility: NavigationSplitViewVisibility = .detailOnly
     @State private var isReading = false
@@ -12,6 +13,8 @@ struct LibraryRootView: View {
     @State private var showingDownloadProgress = false
     @State private var confirmingDelete = false
     @State private var bookshelfTransfer = BookshelfTransferController()
+    @State private var localTextImport = LocalTextImportController()
+    @State private var showingMetadataEditor = false
 
     var body: some View {
         Group {
@@ -28,18 +31,24 @@ struct LibraryRootView: View {
                     showingAppearancePopover: $showingAppearancePopover,
                     showingDownloadProgress: $showingDownloadProgress,
                     canManageBook: store.selectedBook != nil,
+                    isAcademicMode: isAcademicMode,
                     canRefreshCatalog: store.canRefreshSelectedCatalog,
-                    isLoading: store.isLoading,
+                    canDownloadEntireBook: store.canDownloadEntireBook,
+                    canDownloadCurrentChapter: store.canDownloadCurrentChapter,
+                    canDeleteOfflineCache: store.canDeleteOfflineCache,
+                    isLoading: store.isLoading || localTextImport.isWorking,
                     returnToLibrary: showLibrary,
                     showAdvancedAppearance: showAdvancedAppearance,
+                    toggleAcademicMode: toggleAcademicMode,
                     addURL: showAddURL,
+                    importLocalText: localTextImport.chooseFile,
+                    editBookMetadata: { showingMetadataEditor = true },
                     refreshCatalog: refreshCatalog,
                     downloadCurrentChapter: store.downloadCurrentChapter,
                     downloadFollowingChapters: store.downloadFollowingChapters,
                     downloadEntireBook: store.downloadEntireBook,
                     cancelDownload: store.cancelOfflineDownload,
                     deleteOfflineCache: store.deleteOfflineCache,
-                    canDownloadEntireBook: store.canDownloadEntireBook,
                     isDownloading: store.offlineDownloads.isDownloading,
                     hasDownloadStatus: store.offlineDownloads.isDownloading || store.offlineDownloads.failureMessage != nil,
                     downloads: store.offlineDownloads,
@@ -52,13 +61,16 @@ struct LibraryRootView: View {
                     canRefreshCatalog: store.canRefreshSelectedCatalog,
                     canDeleteBook: store.selectedBook != nil,
                     canDownloadEntireBook: store.canDownloadEntireBook,
-                    isLoading: store.isLoading || bookshelfTransfer.isWorking,
+                    canDownloadCurrentChapter: store.canDownloadCurrentChapter,
+                    canDeleteOfflineCache: store.canDeleteOfflineCache,
+                    isLoading: store.isLoading || bookshelfTransfer.isWorking || localTextImport.isWorking,
                     isDownloading: store.offlineDownloads.isDownloading,
                     hasDownloadStatus: store.offlineDownloads.isDownloading
                         || store.offlineDownloads.failureMessage != nil,
                     downloads: store.offlineDownloads,
                     toggleBookSidebar: toggleBookSidebar,
                     addURL: showAddURL,
+                    importLocalText: localTextImport.chooseFile,
                     continueReading: continueReading,
                     refreshCatalog: refreshCatalog,
                     downloadCurrentChapter: store.downloadCurrentChapter,
@@ -70,12 +82,15 @@ struct LibraryRootView: View {
                     importBookshelf: importBookshelf,
                     importBookshelfFromClipboard: importBookshelfFromClipboard,
                     copyBookshelfExport: copyBookshelfExport,
-                    exportBookshelf: exportBookshelf
+                    exportBookshelf: exportBookshelf,
+                    editBookMetadata: { showingMetadataEditor = true }
                 )
             }
         }
         .overlay {
-            if store.isLoading, store.canCancelLoading || !isReading {
+            if localTextImport.isWorking {
+                LoadingOverlay(message: "正在读取并识别 TXT…", onCancel: localTextImport.cancel)
+            } else if store.isLoading, store.canCancelLoading || !isReading {
                 if store.canCancelLoading {
                     LoadingOverlay(message: store.loadingMessage) {
                         store.cancelLoading()
@@ -94,6 +109,27 @@ struct LibraryRootView: View {
                 confirmImport: confirmBookshelfImport
             )
         }
+        .sheet(item: $localTextImport.pendingDraft) { draft in
+            LocalTextImportSheet(
+                draft: draft,
+                confirm: { title, author in
+                    confirmLocalTextImport(draft, title: title, author: author)
+                },
+                cancel: { localTextImport.pendingDraft = nil }
+            )
+        }
+        .sheet(isPresented: $showingMetadataEditor) {
+            if let book = store.selectedBook {
+                BookMetadataEditorSheet(
+                    book: book,
+                    confirm: { title, author in
+                        store.updateSelectedBookMetadata(title: title, author: author)
+                        showingMetadataEditor = false
+                    },
+                    cancel: { showingMetadataEditor = false }
+                )
+            }
+        }
         .alert(item: $store.presentedError) { error in
             Alert(title: Text("操作失败"), message: Text(error.message), dismissButton: .default(Text("好")))
         }
@@ -103,6 +139,14 @@ struct LibraryRootView: View {
                 message: Text(notice.message),
                 dismissButton: .default(Text("好"))
             )
+        }
+        .alert("导入 TXT 失败", isPresented: Binding(
+            get: { localTextImport.errorMessage != nil },
+            set: { if !$0 { localTextImport.errorMessage = nil } }
+        )) {
+            Button("好") { localTextImport.errorMessage = nil }
+        } message: {
+            Text(localTextImport.errorMessage ?? "未知错误")
         }
         .onChange(of: store.offlineDownloads.isDownloading) { _, isDownloading in
             if !isDownloading {
@@ -115,7 +159,7 @@ struct LibraryRootView: View {
         .onChange(of: store.books.isEmpty) { _, isEmpty in
             if isEmpty { showLibrary() }
         }
-        .preferredColorScheme(isReading ? readerTheme.preferredColorScheme : nil)
+        .preferredColorScheme(isReading ? (isAcademicMode ? .light : readerTheme.preferredColorScheme) : nil)
         .focusedSceneValue(\.readerCommandActions, ReaderCommandActions(
             canAddURL: !store.isLoading,
             canRefreshCatalog: store.canRefreshSelectedCatalog && !store.isLoading,
@@ -123,12 +167,14 @@ struct LibraryRootView: View {
             canNavigateNextChapter: isReading && store.chapterNavigationSnapshot.hasNext && !store.isLoading,
             canToggleCatalog: isReading,
             canChangeAppearance: isReading,
+            canToggleAcademicMode: isReading,
             addURL: showAddURL,
             refreshCatalog: refreshCatalog,
             previousChapter: store.goToPreviousChapter,
             nextChapter: store.goToNextChapter,
             toggleCatalog: toggleCatalog,
-            toggleAppearance: toggleAppearance
+            toggleAppearance: toggleAppearance,
+            toggleAcademicMode: toggleAcademicMode
         ))
     }
 
@@ -139,7 +185,24 @@ struct LibraryRootView: View {
     private func confirmBookshelfImport() { bookshelfTransfer.confirmPendingImport(for: store) }
     private func copyBookshelfExport() { bookshelfTransfer.copyExportJSON(from: store) }
     private func exportBookshelf() { bookshelfTransfer.exportToFile(from: store) }
+    private func confirmLocalTextImport(_ draft: LocalTextImportDraft, title: String, author: String) {
+        do {
+            try store.importLocalText(draft, title: title, author: author)
+            localTextImport.pendingDraft = nil
+        } catch {
+            localTextImport.errorMessage = error.localizedDescription
+        }
+    }
     private var readerTheme: ReaderTheme { ReaderTheme(rawValue: themeName) ?? .system }
+    private var isAcademicMode: Bool {
+        presentationModeName == ReaderPresentationMode.academicPaper.rawValue
+    }
+
+    private func toggleAcademicMode() {
+        presentationModeName = isAcademicMode
+            ? ReaderPresentationMode.normal.rawValue
+            : ReaderPresentationMode.academicPaper.rawValue
+    }
 
     private func continueReading() {
         store.requestReaderScroll(.restore)
