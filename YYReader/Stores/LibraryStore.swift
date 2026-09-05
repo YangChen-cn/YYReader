@@ -278,6 +278,19 @@ final class LibraryStore {
         refreshReaderSession()
     }
 
+    func ensureReaderSessionBodiesLoaded() async {
+        for entry in readerSession.entries {
+            await hydrateChapterBodyIfNeeded(entry.chapter)
+        }
+    }
+
+    func hydrateChapterBodyIfNeeded(_ chapter: Chapter) async {
+        guard !chapter.isCached, chapter.isAvailableOffline else { return }
+        if let body = try? await offlineDownloads.loadPersistedBody(chapterID: chapter.id), !body.isEmpty {
+            chapter.replaceBodyText(body)
+        }
+    }
+
     func prefetchContinuousChapter(after chapterID: UUID) {
         guard let chapter = chapterByID[chapterID] else { return }
         scheduleSerialPrefetch(after: chapter, delay: nil, respectsPreference: false)
@@ -1316,6 +1329,11 @@ final class LibraryStore {
             if lhs.sortIndex == rhs.sortIndex { return lhs.title < rhs.title }
             return lhs.sortIndex < rhs.sortIndex
         } ?? []
+        if let selectedBook {
+            for chapter in sortedChapters where chapter.book == nil {
+                chapter.book = selectedBook
+            }
+        }
         chapterByID = Dictionary(uniqueKeysWithValues: sortedChapters.map { ($0.id, $0) })
         chapterIndexByID = Dictionary(uniqueKeysWithValues: sortedChapters.enumerated().map { ($0.element.id, $0.offset) })
     }
@@ -1335,6 +1353,9 @@ final class LibraryStore {
               let next = neighbor(of: pendingChapter, offset: 1),
               next.isCached else {
             return
+        }
+        if next.book == nil, let selectedBook {
+            next.book = selectedBook
         }
         pendingContinuousAttachmentChapterID = nil
         readerSession.attachNext(next)

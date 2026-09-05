@@ -151,6 +151,7 @@ final class OfflineDownloadManager {
         let descriptor = FetchDescriptor<Chapter>(predicate: #Predicate { $0.id == chapterID })
         guard let chapter = try modelContext.fetch(descriptor).first else { return }
         chapter.title = result.title
+        chapter.replaceBodyText(result.bodyText)
         chapter.previousURL = result.previousChapterURL?.absoluteString
         chapter.nextURL = result.nextChapterURL?.absoluteString
         chapter.cachedAt = cachedAt

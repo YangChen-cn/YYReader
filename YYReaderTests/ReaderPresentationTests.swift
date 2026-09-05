@@ -572,6 +572,89 @@ struct ReaderPresentationTests {
         #expect(gate.accepts(candidateID: chapters[2], currentID: chapters[1], chapterIndexByID: indexes))
     }
 
+    @Test
+    @MainActor
+    func ensureReaderSessionBodiesLoadedHydratesAvailableOfflineChapters() async throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: config)
+        let context = container.mainContext
+
+        let book = Book(
+            title: "测试小说",
+            author: "作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/catalog"
+        )
+        let chapter1 = Chapter(
+            sourceURL: "https://example.com/c1",
+            title: "第1章",
+            sortIndex: 1,
+            bodyText: nil,
+            cachedAt: .now,
+            book: book
+        )
+        let chapter2 = Chapter(
+            sourceURL: "https://example.com/c2",
+            title: "第2章",
+            sortIndex: 2,
+            bodyText: "第二章正文内容",
+            cachedAt: .now,
+            book: book
+        )
+        book.chapters = [chapter1, chapter2]
+        context.insert(book)
+        context.insert(chapter1)
+        context.insert(chapter2)
+        try context.save()
+
+        let persistence = OfflineChapterPersistence(modelContainer: container)
+        try await persistence.persist(
+            ChapterLoadResult(
+                title: "第1章",
+                bookTitle: nil,
+                author: nil,
+                catalogURL: nil,
+                chapterURL: try #require(URL(string: "https://example.com/c1")),
+                bodyText: "第一章持久化正文",
+                previousChapterURL: nil,
+                nextChapterURL: nil
+            ),
+            chapterID: chapter1.id,
+            cachedAt: .now
+        )
+
+        let store = LibraryStore(
+            modelContext: context,
+            coordinator: NovelImportCoordinator(loader: MockHTMLLoader(documents: [:]))
+        )
+        store.restoreSelection(bookID: book.id, chapterID: chapter2.id)
+        #expect(!chapter1.isCached)
+
+        await store.hydrateChapterBodyIfNeeded(chapter1)
+        #expect(chapter1.isCached)
+        #expect(chapter1.paragraphs == ["第一章持久化正文"])
+    }
+
+    @Test
+    @MainActor
+    func chapterParagraphCacheDoesNotCacheEmptyParagraphsPermanently() {
+        let cache = ChapterParagraphCache(capacity: 4)
+        let chapter = Chapter(
+            sourceURL: "https://example.com/chapter2",
+            title: "第二章",
+            sortIndex: 2,
+            bodyText: nil,
+            cachedAt: .now
+        )
+
+        let initial = cache.paragraphs(for: chapter)
+        #expect(initial.isEmpty)
+
+        chapter.replaceBodyText("新加载正文段落")
+        let updated = cache.paragraphs(for: chapter)
+        #expect(updated == ["新加载正文段落"])
+    }
+
     private func contrastRatio(_ first: NSColor, _ second: NSColor) -> Double {
         let lighter = max(relativeLuminance(first), relativeLuminance(second))
         let darker = min(relativeLuminance(first), relativeLuminance(second))

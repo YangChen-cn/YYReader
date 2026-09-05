@@ -36,8 +36,10 @@ final class ChapterParagraphCache {
 
         values = values.filter { $0.key.chapterID != chapter.id }
         let paragraphs = chapter.paragraphs
-        values[key] = Value(paragraphs: paragraphs, accessOrder: accessOrder)
-        evictLeastRecentlyUsedIfNeeded()
+        if !paragraphs.isEmpty {
+            values[key] = Value(paragraphs: paragraphs, accessOrder: accessOrder)
+            evictLeastRecentlyUsedIfNeeded()
+        }
         return paragraphs
     }
 

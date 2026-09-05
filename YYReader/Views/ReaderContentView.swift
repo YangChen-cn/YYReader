@@ -45,7 +45,7 @@ struct ReaderContentView: View {
                 LazyVStack(alignment: .leading, spacing: paragraphSpacing * fontSize) {
                     ForEach(entries) { entry in
                         let paragraphs = entry.paragraphs
-                        if presentationMode == .academicPaper, let book = entry.chapter.book {
+                        if presentationMode == .academicPaper, let book = entry.chapter.book ?? store.selectedBook {
                             let plan = academicPlanCache.plan(
                                 book: book,
                                 chapter: entry.chapter,
@@ -157,6 +157,7 @@ struct ReaderContentView: View {
         .foregroundStyle(presentationMode == .academicPaper ? Color(white: 0.12) : theme.foreground)
         .tint(theme.accent)
         .task {
+            await store.ensureReaderSessionBodiesLoaded()
             await prepareContinuousReading()
         }
         .task(id: continuousReading) {
@@ -166,6 +167,7 @@ struct ReaderContentView: View {
             await applyPendingScrollRequest()
         }
         .task(id: presentationModeName + "|" + academicColumnModeName) {
+            await store.ensureReaderSessionBodiesLoaded()
             await restoreAfterPresentationChange()
         }
         .onChange(of: store.selectedChapterID) { oldID, newID in
