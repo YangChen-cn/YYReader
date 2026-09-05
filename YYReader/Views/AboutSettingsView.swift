@@ -83,11 +83,12 @@ struct AboutSettingsView: View {
             Text("最新改进")
                 .font(.headline)
 
-            GroupBox("版本 1.2.3") {
+            GroupBox("版本 1.3.0") {
                 VStack(alignment: .leading, spacing: 10) {
-                    Label("空闲预取扩展为最多 3 章，保持低优先级、串行、可取消并跳过缓存。", systemImage: "arrow.down.circle")
-                    Label("切换可见章节时会接管重叠窗口的在途加载，不再中断后续预取。", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
-                    Label("Windows 的更后阅读位置同步到当前书籍时会立即恢复，无需切换书籍。", systemImage: "rectangle.2.swap")
+                    Label("全新论文模式（⌃⌥P）：拟真学术文献排版、微缩上标引用、标准首行缩进与双栏中线。", systemImage: "graduationcap")
+                    Label("支持本地 TXT 小说导入与智能分章，保留进度，离线阅读稳定持久。", systemImage: "doc.text")
+                    Label("完善连续阅读与章节跳转，解决长章节末尾拼接和切换空白问题。", systemImage: "arrow.down.forward.and.arrow.up.backward")
+                    Label("多设备阅读进度与书架文件夹同步协议全面对齐 Windows 1.3.0。", systemImage: "arrow.triangle.2.circlepath")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }

@@ -15,14 +15,12 @@
 
 ## 快速下载
 
-1.3.0 先提供 Windows x64 安装包；macOS 当前安装包仍为 1.2.3。
-
 | 平台 | 安装包 | 系统要求 |
 | --- | --- | --- |
-| **macOS** | [下载 YYReader 1.2.3 arm64 DMG](https://github.com/YangChen-cn/YYReader/releases/download/v1.2.3/YYReader-1.2.3-arm64.dmg) | Apple 芯片，macOS 15 或更高版本 |
+| **macOS** | [下载 YYReader 1.3.0 arm64 DMG](https://github.com/YangChen-cn/YYReader/releases/download/v1.3.0/YYReader-1.3.0-arm64.dmg) | Apple 芯片，macOS 15 或更高版本 |
 | **Windows** | [下载 YYReader 1.3.0 x64 安装程序](https://github.com/YangChen-cn/YYReader/releases/download/v1.3.0/YYReader-Setup-x64-1.3.0.exe) | x64 Windows 10 1809 或更高版本，推荐 Windows 11 |
 
-也可以前往 [YYReader 1.3.0 Windows Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.3.0) 查看校验信息和完整发布说明。
+也可以前往 [YYReader 1.3.0 Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.3.0) 查看校验信息和完整发布说明。
 
 > macOS 版本使用 ad-hoc 签名且尚未经过 Apple 公证，首次启动时可能需要在 Finder 中右键 YYReader 并选择“打开”。Windows 安装程序尚未使用商业代码签名，SmartScreen 可能提示“未知发布者”。
 
