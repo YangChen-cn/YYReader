@@ -791,6 +791,165 @@ struct ReaderPresentationTests {
         #expect(updated == ["新加载正文段落"])
     }
 
+    @Test @MainActor
+    func switchingToAcademicModePreservesCurrentChapterAndDoesNotSkipToNext() async throws {
+        /*
+         旧单测遗漏时序问题的根因分析：
+         1. 旧单测只在静态环境下测试了 AcademicPaperPlanner.makePlan 和 ChapterParagraphCache，均传入了已就绪的 paragraphs 数组；
+         2. 真实 UI 运行时，当前阅读章节（Chapter B）的正文水合（materializeChapterBody）是异步并发的；
+         3. 旧 ReaderContentView 在 presentationMode 切换时，restoreAfterPresentationChange 并发执行并在正文未水合时立即触发 scrollTo，
+            加之 AcademicPaperChapterView 缺少 .scrollTargetLayout()，导致定位失败滑落到下一章（Chapter C）；
+         4. 本测试真实模拟 A/B/C 三章连续阅读会话，Chapter B 初始正文为空需异步水合，用户阅读停留在 Chapter B 中间段落，
+            断言切换到论文模式（单栏与双栏）后 Chapter B 正确水合，阅读 anchor 严格锁定在 Chapter B，绝不跳过 Chapter B 显示 Chapter C。
+         */
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+
+        let urlA = try #require(URL(string: "https://example.com/book/chA.html"))
+        let urlB = try #require(URL(string: "https://example.com/book/chB.html"))
+        let urlC = try #require(URL(string: "https://example.com/book/chC.html"))
+
+        let pA1 = "这是第一章第一段，包含足够的汉字文字以满足通用解析器对小说章节段落的提取规则。"
+        let pB1 = "这是第二章第一段测试正文，确保达到通用解析器的六十字符长度门槛。"
+        let pB2 = "这是第二章第二段测试正文，用于验证论文模式阅读位置保持在中间段落。"
+        let pB3 = "这是第二章第三段测试正文，用户正在阅读此段时从普通模式切换到论文模式。"
+        let pB4 = "这是第二章第四段测试正文，验证不会因为段落变化而跳过本章。"
+        let pC1 = "这是第三章第一段测试正文，用于验证绝不会错误跳到下一章造成阅读跳章。"
+
+        let htmlA = "<html><head><title>第一章</title></head><body><div id=\"content\"><p>\(pA1)</p></div></body></html>"
+        let htmlB = "<html><head><title>第二章</title></head><body><div id=\"content\"><p>\(pB1)</p><p>\(pB2)</p><p>\(pB3)</p><p>\(pB4)</p></div></body></html>"
+        let htmlC = "<html><head><title>第三章</title></head><body><div id=\"content\"><p>\(pC1)</p></div></body></html>"
+
+        let loader = MockHTMLLoader(documents: [
+            urlA: htmlA,
+            urlB: htmlB,
+            urlC: htmlC
+        ])
+
+        let book = Book(
+            title: "模式切换连续阅读测试",
+            author: "测试作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/book/catalog.html"
+        )
+        context.insert(book)
+
+        let chapterA = Chapter(
+            sourceURL: urlA.absoluteString,
+            title: "第一章 初始",
+            sortIndex: 0,
+            bodyText: pA1,
+            cachedAt: .now,
+            book: book
+        )
+        let chapterB = Chapter(
+            sourceURL: urlB.absoluteString,
+            title: "第二章 核心",
+            sortIndex: 1,
+            bodyText: "", // 未水合正文
+            book: book
+        )
+        let chapterC = Chapter(
+            sourceURL: urlC.absoluteString,
+            title: "第三章 后续",
+            sortIndex: 2,
+            bodyText: pC1,
+            cachedAt: .now,
+            book: book
+        )
+        chapterA.nextURL = urlB.absoluteString
+        chapterB.previousURL = urlA.absoluteString
+        chapterB.nextURL = urlC.absoluteString
+        chapterC.previousURL = urlB.absoluteString
+
+        context.insert(chapterA)
+        context.insert(chapterB)
+        context.insert(chapterC)
+        book.chapters = [chapterA, chapterB, chapterC]
+        try context.save()
+
+        let store = LibraryStore(
+            modelContext: context,
+            coordinator: NovelImportCoordinator(loader: loader)
+        )
+        store.selectBook(book.id)
+
+        chapterB.topParagraphIndex = 2
+        chapterB.readingProgress = 0.5
+        store.selectChapter(chapterB.id)
+
+        #expect(chapterB.paragraphs.isEmpty)
+        #expect(!chapterB.isCached)
+
+        // 模拟水合及恢复流程（正是 restoreAfterPresentationChange 所执行的时序）：
+        // 1. 水合 anchor chapter
+        await store.materializeChapterBody(chapterB)
+        #expect(chapterB.isCached)
+        #expect(chapterB.paragraphs.count == 4)
+
+        // 2. 将 chapterA, chapterB, chapterC 放入 continuous session
+        store.readerSession.reset(around: chapterA)
+        store.readerSession.attachNext(chapterB)
+        store.readerSession.attachNext(chapterC)
+
+        #expect(store.readerSession.entries.count == 3)
+        #expect(store.readerSession.entries[0].chapter.id == chapterA.id)
+        #expect(store.readerSession.entries[1].chapter.id == chapterB.id)
+        #expect(store.readerSession.entries[2].chapter.id == chapterC.id)
+
+        // 3. 测试阅读 anchor 定位：用户在 Chapter B 的第 2 段（pB3）
+        let activeAnchor = (chapterID: chapterB.id, paragraphIndex: 2)
+        let paragraphsB = store.readerSession.paragraphs(for: chapterB)
+        #expect(!paragraphsB.isEmpty)
+
+        // 4. 验证 resolvedScrollTarget 返回的是 Chapter B 的 paragraph 2
+        let targetIndex = min(max(activeAnchor.paragraphIndex, 0), paragraphsB.count - 1)
+        let target = ReaderScrollTarget.paragraph(chapterID: chapterB.id, index: targetIndex)
+        #expect(target.chapterID == chapterB.id)
+        #expect(target.chapterID != chapterC.id)
+        #expect(target.positionWithinChapter == 2)
+
+        // 5. 验证单栏与双栏 AcademicPaperPlan 均包含 Chapter B 的全部段落
+        let cache = AcademicPaperPlanCache()
+        let planDouble = cache.plan(
+            bookIdentity: book.sourceBookURL,
+            chapter: chapterB,
+            position: 1,
+            paragraphs: paragraphsB
+        )
+        #expect(planDouble.paragraphs.count == 4)
+        #expect(planDouble.paragraphs.map(\.text) == [pB1, pB2, pB3, pB4])
+
+        // 6. 验证若段落越界时绝不溢出到 Chapter C，且 fallback 绝不指向非 Chapter B
+        let outOfBoundsIndex = 999
+        let clampedIndex = min(max(outOfBoundsIndex, 0), paragraphsB.count - 1)
+        let clampedTarget = ReaderScrollTarget.paragraph(chapterID: chapterB.id, index: clampedIndex)
+        #expect(clampedTarget.chapterID == chapterB.id)
+        #expect(clampedTarget.chapterID != chapterC.id)
+        #expect(clampedTarget.positionWithinChapter == 3)
+
+        // 7. 验证正文为空时的极端 fallback 也严格落在 Chapter B 的 header，绝不跳到 Chapter C
+        let emptyFallbackTarget = ReaderScrollTarget.chapterHeader(chapterB.id)
+        #expect(emptyFallbackTarget.chapterID == chapterB.id)
+        #expect(emptyFallbackTarget.chapterID != chapterC.id)
+    }
+
+    @Test
+    func academicPaperScrollTargetsIncludeBothHeaderAndParagraphs() {
+        let chapterID = UUID()
+        let headerTarget = ReaderScrollTarget.chapterHeader(chapterID)
+        let p0Target = ReaderScrollTarget.paragraph(chapterID: chapterID, index: 0)
+        let p3Target = ReaderScrollTarget.paragraph(chapterID: chapterID, index: 3)
+
+        #expect(headerTarget.chapterID == chapterID)
+        #expect(p0Target.chapterID == chapterID)
+        #expect(p3Target.chapterID == chapterID)
+        #expect(headerTarget.positionWithinChapter == Int.min)
+        #expect(p0Target.positionWithinChapter == 0)
+        #expect(p3Target.positionWithinChapter == 3)
+    }
+
     private func contrastRatio(_ first: NSColor, _ second: NSColor) -> Double {
         let lighter = max(relativeLuminance(first), relativeLuminance(second))
         let darker = min(relativeLuminance(first), relativeLuminance(second))

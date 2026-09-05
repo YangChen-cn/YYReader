@@ -19,6 +19,7 @@ struct ReaderContentView: View {
     @State private var hasAppliedInitialScroll = false
     @State private var academicPlanCache = AcademicPaperPlanCache()
     @State private var isRestoringPresentation = false
+    @State private var activeReadingAnchor: (chapterID: UUID, paragraphIndex: Int)?
 
     var body: some View {
         let family = ReaderFontFamily(rawValue: fontFamily) ?? .serif
@@ -46,22 +47,33 @@ struct ReaderContentView: View {
                     ForEach(entries) { entry in
                         let paragraphs = entry.paragraphs
                         if paragraphs.isEmpty {
-                            VStack(spacing: 12) {
-                                ReaderChapterHeader(
-                                    chapter: entry.chapter,
-                                    accent: theme.accent,
-                                    target: .chapterHeader(entry.chapter.id),
-                                    style: entry.id == firstEntryID ? .prominent : .compact,
-                                    usesOrnament: theme.usesBookishChapterOrnament,
-                                    separator: theme.separator
+                            if presentationMode == .academicPaper {
+                                AcademicPaperLoadingCard(
+                                    title: entry.chapter.title,
+                                    showsPaperFrontMatter: entry.id == firstEntryID
                                 )
-                                ProgressView("正在加载正文…")
-                                    .padding(.vertical, 20)
-                                    .task(id: entry.chapter.id) {
-                                        await store.materializeChapterBody(entry.chapter)
-                                    }
+                                .id(ReaderScrollTarget.chapterHeader(entry.chapter.id))
+                                .task(id: entry.chapter.id) {
+                                    await store.materializeChapterBody(entry.chapter)
+                                }
+                            } else {
+                                VStack(spacing: 12) {
+                                    ReaderChapterHeader(
+                                        chapter: entry.chapter,
+                                        accent: theme.accent,
+                                        target: .chapterHeader(entry.chapter.id),
+                                        style: entry.id == firstEntryID ? .prominent : .compact,
+                                        usesOrnament: theme.usesBookishChapterOrnament,
+                                        separator: theme.separator
+                                    )
+                                    ProgressView("正在加载正文…")
+                                        .padding(.vertical, 20)
+                                        .task(id: entry.chapter.id) {
+                                            await store.materializeChapterBody(entry.chapter)
+                                        }
+                                }
+                                .id(ReaderScrollTarget.chapterHeader(entry.chapter.id))
                             }
-                            .id(ReaderScrollTarget.chapterHeader(entry.chapter.id))
                         } else if presentationMode == .academicPaper {
                             let bookIdentity = store.selectedBook?.sourceBookURL
                                 ?? entry.chapter.book?.sourceBookURL
@@ -89,7 +101,6 @@ struct ReaderContentView: View {
                                     .shadow(color: Color.black.opacity(0.07), radius: 7, x: 0, y: 2.5)
                             )
                             .padding(.vertical, 10)
-                            .id(ReaderScrollTarget.chapterHeader(entry.chapter.id))
                         } else {
                             ReaderChapterHeader(
                                 chapter: entry.chapter,
@@ -153,6 +164,7 @@ struct ReaderContentView: View {
             }
             .onScrollTargetVisibilityChange(idType: ReaderScrollTarget.self, threshold: 0.01) { targets in
                 scrollState.update(visibleTargets: targets, chapterIndexByID: store.chapterIndexByID)
+                updateActiveReadingAnchor(from: targets)
                 if continuousReading {
                     checkContinuousAttachment(for: targets)
                 }
@@ -200,23 +212,93 @@ struct ReaderContentView: View {
 
     @MainActor
     private func restoreAfterPresentationChange() async {
-        guard hasAppliedInitialScroll,
-              let target = scrollState.topVisibleTarget else { return }
+        guard hasAppliedInitialScroll else { return }
+        let anchor = resolveActiveReadingAnchor()
+        guard let anchorChapter = store.chapterByID[anchor.chapterID] ?? store.selectedChapter else { return }
+
         isRestoringPresentation = true
         store.beginReaderScrollTransaction()
         defer {
             releaseProgrammaticScrollPosition()
-            store.endReaderScrollTransaction(topVisibleChapterID: target.chapterID)
+            store.endReaderScrollTransaction(topVisibleChapterID: anchor.chapterID)
             isRestoringPresentation = false
         }
+
+        await store.materializeChapterBody(anchorChapter)
+
+        for entry in store.readerSession.entries {
+            if entry.chapter.id == anchorChapter.id { break }
+            if entry.paragraphs.isEmpty {
+                await store.materializeChapterBody(entry.chapter)
+            }
+        }
+
         await Task.yield()
+        do {
+            try await Task.sleep(for: .milliseconds(30))
+        } catch is CancellationError {
+            return
+        } catch {
+            return
+        }
+
+        let target = resolvedScrollTarget(for: anchorChapter, desiredParagraphIndex: anchor.paragraphIndex)
         scrollPosition.scrollTo(id: target, anchor: .top)
+
         do {
             try await Task.sleep(for: .milliseconds(60))
         } catch is CancellationError {
             return
         } catch {
             return
+        }
+    }
+
+    private func resolveActiveReadingAnchor() -> (chapterID: UUID, paragraphIndex: Int) {
+        if let current = activeReadingAnchor {
+            return current
+        }
+        if let top = scrollState.topVisibleTarget {
+            switch top {
+            case let .paragraph(chapterID, index):
+                return (chapterID: chapterID, paragraphIndex: index)
+            case let .chapterHeader(chapterID):
+                return (chapterID: chapterID, paragraphIndex: 0)
+            case let .chapterFooter(chapterID):
+                let count = store.readerSession.entries.first(where: { $0.chapter.id == chapterID })?.paragraphs.count ?? 1
+                return (chapterID: chapterID, paragraphIndex: max(count - 1, 0))
+            }
+        }
+        if let currentChapterID = store.readerSession.visibleChapterID ?? store.selectedChapterID,
+           let chapter = store.chapterByID[currentChapterID] {
+            return (chapterID: chapter.id, paragraphIndex: chapter.topParagraphIndex)
+        }
+        if let selected = store.selectedChapter {
+            return (chapterID: selected.id, paragraphIndex: selected.topParagraphIndex)
+        }
+        return (chapterID: UUID(), paragraphIndex: 0)
+    }
+
+    private func resolvedScrollTarget(for chapter: Chapter, desiredParagraphIndex: Int) -> ReaderScrollTarget {
+        let paragraphs = store.readerSession.paragraphs(for: chapter)
+        if !paragraphs.isEmpty {
+            let clampedIndex = min(max(desiredParagraphIndex, 0), paragraphs.count - 1)
+            return .paragraph(chapterID: chapter.id, index: clampedIndex)
+        }
+        return .chapterHeader(chapter.id)
+    }
+
+    private func updateActiveReadingAnchor(from targets: [ReaderScrollTarget]) {
+        guard !isRestoringPresentation else { return }
+        guard let target = scrollState.topVisibleTarget else { return }
+        switch target {
+        case let .paragraph(chapterID, index):
+            activeReadingAnchor = (chapterID: chapterID, paragraphIndex: index)
+        case let .chapterHeader(chapterID):
+            activeReadingAnchor = (chapterID: chapterID, paragraphIndex: 0)
+        case let .chapterFooter(chapterID):
+            let count = store.readerSession.entries.first(where: { $0.chapter.id == chapterID })?.paragraphs.count ?? 1
+            activeReadingAnchor = (chapterID: chapterID, paragraphIndex: max(count - 1, 0))
         }
     }
 
@@ -236,13 +318,18 @@ struct ReaderContentView: View {
             case .chapterTop:
                 scrollPosition = ScrollPosition(idType: ReaderScrollTarget.self, y: 0)
                 scrollPosition.scrollTo(id: ReaderScrollTarget.chapterHeader(chapter.id), anchor: .top)
+                activeReadingAnchor = (chapterID: chapter.id, paragraphIndex: 0)
             case .restore:
-                scrollPosition.scrollTo(id: restoredParagraphTarget(for: chapter), anchor: .top)
+                let target = restoredParagraphTarget(for: chapter)
+                scrollPosition.scrollTo(id: target, anchor: .top)
+                activeReadingAnchor = (chapterID: chapter.id, paragraphIndex: chapter.topParagraphIndex)
             }
             hasAppliedInitialScroll = true
             store.consumeReaderScrollRequest(request.id)
         } else if !hasAppliedInitialScroll {
-            scrollPosition.scrollTo(id: restoredParagraphTarget(for: chapter), anchor: .top)
+            let target = restoredParagraphTarget(for: chapter)
+            scrollPosition.scrollTo(id: target, anchor: .top)
+            activeReadingAnchor = (chapterID: chapter.id, paragraphIndex: chapter.topParagraphIndex)
             hasAppliedInitialScroll = true
         }
     }
@@ -257,10 +344,13 @@ struct ReaderContentView: View {
     }
 
     private func commitVisibleTarget(_ target: ReaderScrollTarget) {
+        guard !isRestoringPresentation else { return }
         switch target {
         case let .chapterHeader(chapterID):
+            activeReadingAnchor = (chapterID: chapterID, paragraphIndex: 0)
             store.updateVisibleReaderPosition(chapterID: chapterID, paragraphIndex: 0, total: 1)
         case let .paragraph(chapterID, index):
+            activeReadingAnchor = (chapterID: chapterID, paragraphIndex: index)
             guard let entry = store.readerSession.entries.first(where: { $0.chapter.id == chapterID }) else { return }
             let paragraphCount = entry.paragraphs.count
             store.updateVisibleReaderPosition(chapterID: chapterID, paragraphIndex: index, total: paragraphCount)
@@ -268,6 +358,8 @@ struct ReaderContentView: View {
                 store.prepareContinuousChapterAttachment(after: chapterID)
             }
         case let .chapterFooter(chapterID):
+            let count = store.readerSession.entries.first(where: { $0.chapter.id == chapterID })?.paragraphs.count ?? 1
+            activeReadingAnchor = (chapterID: chapterID, paragraphIndex: max(count - 1, 0))
             if continuousReading {
                 store.prepareContinuousChapterAttachment(after: chapterID)
             }

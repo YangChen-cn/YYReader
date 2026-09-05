@@ -12,8 +12,10 @@ struct AcademicPaperChapterView: View {
         VStack(alignment: .leading, spacing: 18) {
             if showsPaperFrontMatter {
                 paperFrontMatter
+                    .id(ReaderScrollTarget.chapterHeader(chapterID))
             } else {
                 runningHeader
+                    .id(ReaderScrollTarget.chapterHeader(chapterID))
             }
 
             Text(plan.sectionTitle)
@@ -30,6 +32,7 @@ struct AcademicPaperChapterView: View {
                                 paragraphView(paragraph)
                             }
                         }
+                        .scrollTargetLayout()
 
                         Rectangle()
                             .fill(Color(white: 0.84))
@@ -41,6 +44,7 @@ struct AcademicPaperChapterView: View {
                                 paragraphView(paragraph)
                             }
                         }
+                        .scrollTargetLayout()
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 10) {
@@ -48,6 +52,7 @@ struct AcademicPaperChapterView: View {
                             paragraphView(paragraph)
                         }
                     }
+                    .scrollTargetLayout()
                 }
 
                 if let supplement = segment.supplement {
@@ -57,6 +62,7 @@ struct AcademicPaperChapterView: View {
 
             paperFooter
         }
+        .scrollTargetLayout()
         .foregroundStyle(Color(white: 0.12))
     }
 
@@ -227,4 +233,81 @@ private struct Segment: Identifiable {
     let supplement: AcademicPaperPlan.Supplement?
 
     var id: String { "\(range.lowerBound)-\(range.upperBound)-\(supplement?.number ?? 0)" }
+}
+
+struct AcademicPaperLoadingCard: View {
+    let title: String
+    let showsPaperFrontMatter: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            if showsPaperFrontMatter {
+                HStack {
+                    Text("IEEE TRANSACTIONS ON APPLIED TEXTUAL SYSTEMS, VOL. 32, NO. 4, AUGUST 2026")
+                        .font(.system(size: 8.5, weight: .bold, design: .serif))
+                        .tracking(0.8)
+                        .foregroundStyle(Color(white: 0.38))
+                    Spacer()
+                    Text("PREPRINT")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Color.red.opacity(0.85))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 2)
+                                .stroke(Color.red.opacity(0.85), lineWidth: 0.8)
+                        )
+                }
+                .frame(maxWidth: .infinity)
+
+                Text(title)
+                    .font(.system(size: 24, weight: .bold, design: .serif))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 4)
+            } else {
+                HStack(alignment: .bottom) {
+                    Text("IEEE TRANSACTIONS ON APPLIED TEXTUAL SYSTEMS, VOL. 32, NO. 4")
+                        .font(.system(size: 8.5, weight: .semibold, design: .serif))
+                        .tracking(0.6)
+                        .foregroundStyle(Color(white: 0.45))
+                    Spacer()
+                    Text("SECTION: \(title.uppercased())")
+                        .font(.system(size: 8.5, weight: .medium, design: .serif))
+                        .tracking(0.5)
+                        .foregroundStyle(Color(white: 0.50))
+                }
+                .padding(.bottom, 6)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Color(white: 0.78))
+                        .frame(height: 0.5)
+                }
+
+                Text(title)
+                    .font(.system(size: 18, weight: .bold, design: .serif))
+                    .padding(.top, 12)
+                    .padding(.bottom, 4)
+            }
+
+            HStack {
+                Spacer()
+                ProgressView("正在加载学术排版正文…")
+                    .progressViewStyle(.circular)
+                    .font(.system(size: 13, design: .serif))
+                    .foregroundStyle(Color(white: 0.40))
+                    .padding(.vertical, 36)
+                Spacer()
+            }
+        }
+        .padding(.horizontal, 38)
+        .padding(.top, showsPaperFrontMatter ? 32 : 22)
+        .padding(.bottom, 26)
+        .background(
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.07), radius: 7, x: 0, y: 2.5)
+        )
+        .padding(.vertical, 10)
+    }
 }
