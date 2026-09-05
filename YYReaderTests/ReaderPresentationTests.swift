@@ -950,6 +950,70 @@ struct ReaderPresentationTests {
         #expect(p3Target.positionWithinChapter == 3)
     }
 
+    @Test
+    func chapterIsCachedIsLightweightAndRejectsEmptyOrWhitespaceOnlyBody() {
+        let emptyChapter = Chapter(
+            sourceURL: "https://example.com/chEmpty",
+            title: "空章节",
+            sortIndex: 0,
+            bodyText: nil
+        )
+        #expect(!emptyChapter.isCached)
+
+        emptyChapter.replaceBodyText("")
+        #expect(!emptyChapter.isCached)
+
+        emptyChapter.replaceBodyText("   \n\n\t  ")
+        #expect(!emptyChapter.isCached)
+
+        emptyChapter.replaceBodyText("　　全角缩进与正文内容")
+        #expect(emptyChapter.isCached)
+
+        emptyChapter.replaceBodyText("第一段正文\n\n第二段正文")
+        #expect(emptyChapter.isCached)
+    }
+
+    @Test @MainActor
+    func continuousReaderSessionReusesParagraphCacheInResetAndAttachNext() {
+        let session = ContinuousReaderSession(paragraphCacheCapacity: 4)
+
+        let ch1 = Chapter(
+            sourceURL: "https://example.com/ch1",
+            title: "第1章",
+            sortIndex: 0,
+            bodyText: "第一章正文第一段\n\n第一章正文第二段",
+            cachedAt: .now
+        )
+        let ch2 = Chapter(
+            sourceURL: "https://example.com/ch2",
+            title: "第2章",
+            sortIndex: 1,
+            bodyText: "第二章正文第一段\n\n第二章正文第二段",
+            cachedAt: .now
+        )
+
+        #expect(session.cachedParagraphChapterCount == 0)
+
+        // reset 填充 session 并写入缓存
+        session.reset(around: ch1)
+        #expect(session.entries.count == 1)
+        #expect(session.cachedParagraphChapterCount == 1)
+        #expect(session.entries[0].paragraphs == ["第一章正文第一段", "第一章正文第二段"])
+
+        // attachNext 同样使用并填充缓存
+        session.attachNext(ch2)
+        #expect(session.entries.count == 2)
+        #expect(session.cachedParagraphChapterCount == 2)
+        #expect(session.entries[1].paragraphs == ["第二章正文第一段", "第二章正文第二段"])
+
+        // 再次获取段落依然命中缓存，且不重复递增容量
+        let paragraphs1 = session.paragraphs(for: ch1)
+        let paragraphs2 = session.paragraphs(for: ch2)
+        #expect(paragraphs1.count == 2)
+        #expect(paragraphs2.count == 2)
+        #expect(session.cachedParagraphChapterCount == 2)
+    }
+
     private func contrastRatio(_ first: NSColor, _ second: NSColor) -> Double {
         let lighter = max(relativeLuminance(first), relativeLuminance(second))
         let darker = min(relativeLuminance(first), relativeLuminance(second))

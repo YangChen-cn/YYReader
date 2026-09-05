@@ -59,7 +59,7 @@ final class Chapter {
 
     var isCached: Bool {
         guard let bodyText, !bodyText.isEmpty else { return false }
-        return !paragraphs.isEmpty
+        return bodyText.contains { !$0.isWhitespace }
     }
 
     var isAvailableOffline: Bool {

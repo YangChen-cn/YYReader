@@ -293,13 +293,20 @@ struct ReaderContentView: View {
         guard let target = scrollState.topVisibleTarget else { return }
         switch target {
         case let .paragraph(chapterID, index):
-            activeReadingAnchor = (chapterID: chapterID, paragraphIndex: index)
+            setReadingAnchorIfNeeded(chapterID: chapterID, paragraphIndex: index)
         case let .chapterHeader(chapterID):
-            activeReadingAnchor = (chapterID: chapterID, paragraphIndex: 0)
+            setReadingAnchorIfNeeded(chapterID: chapterID, paragraphIndex: 0)
         case let .chapterFooter(chapterID):
             let count = store.readerSession.entries.first(where: { $0.chapter.id == chapterID })?.paragraphs.count ?? 1
-            activeReadingAnchor = (chapterID: chapterID, paragraphIndex: max(count - 1, 0))
+            setReadingAnchorIfNeeded(chapterID: chapterID, paragraphIndex: max(count - 1, 0))
         }
+    }
+
+    private func setReadingAnchorIfNeeded(chapterID: UUID, paragraphIndex: Int) {
+        guard activeReadingAnchor?.chapterID != chapterID || activeReadingAnchor?.paragraphIndex != paragraphIndex else {
+            return
+        }
+        activeReadingAnchor = (chapterID, paragraphIndex)
     }
 
     @MainActor
@@ -318,18 +325,18 @@ struct ReaderContentView: View {
             case .chapterTop:
                 scrollPosition = ScrollPosition(idType: ReaderScrollTarget.self, y: 0)
                 scrollPosition.scrollTo(id: ReaderScrollTarget.chapterHeader(chapter.id), anchor: .top)
-                activeReadingAnchor = (chapterID: chapter.id, paragraphIndex: 0)
+                setReadingAnchorIfNeeded(chapterID: chapter.id, paragraphIndex: 0)
             case .restore:
                 let target = restoredParagraphTarget(for: chapter)
                 scrollPosition.scrollTo(id: target, anchor: .top)
-                activeReadingAnchor = (chapterID: chapter.id, paragraphIndex: chapter.topParagraphIndex)
+                setReadingAnchorIfNeeded(chapterID: chapter.id, paragraphIndex: chapter.topParagraphIndex)
             }
             hasAppliedInitialScroll = true
             store.consumeReaderScrollRequest(request.id)
         } else if !hasAppliedInitialScroll {
             let target = restoredParagraphTarget(for: chapter)
             scrollPosition.scrollTo(id: target, anchor: .top)
-            activeReadingAnchor = (chapterID: chapter.id, paragraphIndex: chapter.topParagraphIndex)
+            setReadingAnchorIfNeeded(chapterID: chapter.id, paragraphIndex: chapter.topParagraphIndex)
             hasAppliedInitialScroll = true
         }
     }
@@ -347,10 +354,10 @@ struct ReaderContentView: View {
         guard !isRestoringPresentation else { return }
         switch target {
         case let .chapterHeader(chapterID):
-            activeReadingAnchor = (chapterID: chapterID, paragraphIndex: 0)
+            setReadingAnchorIfNeeded(chapterID: chapterID, paragraphIndex: 0)
             store.updateVisibleReaderPosition(chapterID: chapterID, paragraphIndex: 0, total: 1)
         case let .paragraph(chapterID, index):
-            activeReadingAnchor = (chapterID: chapterID, paragraphIndex: index)
+            setReadingAnchorIfNeeded(chapterID: chapterID, paragraphIndex: index)
             guard let entry = store.readerSession.entries.first(where: { $0.chapter.id == chapterID }) else { return }
             let paragraphCount = entry.paragraphs.count
             store.updateVisibleReaderPosition(chapterID: chapterID, paragraphIndex: index, total: paragraphCount)
@@ -359,7 +366,7 @@ struct ReaderContentView: View {
             }
         case let .chapterFooter(chapterID):
             let count = store.readerSession.entries.first(where: { $0.chapter.id == chapterID })?.paragraphs.count ?? 1
-            activeReadingAnchor = (chapterID: chapterID, paragraphIndex: max(count - 1, 0))
+            setReadingAnchorIfNeeded(chapterID: chapterID, paragraphIndex: max(count - 1, 0))
             if continuousReading {
                 store.prepareContinuousChapterAttachment(after: chapterID)
             }

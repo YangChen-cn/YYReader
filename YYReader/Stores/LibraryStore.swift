@@ -488,10 +488,11 @@ final class LibraryStore {
             chapter.previousURL = chapterDraft.previousURL
             chapter.nextURL = chapterDraft.nextURL
             chapter.cachedAt = importedAt
-            if chapter.topParagraphIndex >= chapter.paragraphs.count {
-                chapter.topParagraphIndex = max(chapter.paragraphs.count - 1, 0)
-                chapter.readingProgress = chapter.paragraphs.count > 1
-                    ? Double(chapter.topParagraphIndex) / Double(chapter.paragraphs.count - 1)
+            let paragraphCount = chapter.paragraphs.count
+            if chapter.topParagraphIndex >= paragraphCount {
+                chapter.topParagraphIndex = max(paragraphCount - 1, 0)
+                chapter.readingProgress = paragraphCount > 1
+                    ? Double(chapter.topParagraphIndex) / Double(paragraphCount - 1)
                     : 0
             }
             importedChapters.append(chapter)
@@ -592,7 +593,7 @@ final class LibraryStore {
         if chapter.book == nil, let book = selectedBook {
             chapter.book = book
         }
-        if chapter.isCached && !chapter.paragraphs.isEmpty {
+        if chapter.isCached, !readerSession.paragraphs(for: chapter).isEmpty {
             return
         }
         if chapter.isAvailableOffline,
@@ -1377,7 +1378,7 @@ final class LibraryStore {
               let pendingChapter = chapterByID[pendingChapterID],
               let next = neighbor(of: pendingChapter, offset: 1),
               next.isCached,
-              !next.paragraphs.isEmpty else {
+              !readerSession.paragraphs(for: next).isEmpty else {
             return
         }
         pendingContinuousAttachmentChapterID = nil
