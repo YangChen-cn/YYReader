@@ -46,6 +46,7 @@ enum ReaderKeyboardRouting {
         return false
     }
 
+    @MainActor
     private static func isDirectionalControl(
         _ responder: NSResponder?,
         in window: NSWindow?

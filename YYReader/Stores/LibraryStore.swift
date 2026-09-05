@@ -5,6 +5,8 @@ import SwiftData
 @MainActor
 @Observable
 final class LibraryStore {
+    typealias BookFetchOperation = @MainActor (ModelContext, FetchDescriptor<Book>) throws -> [Book]
+
     private static let maximumPrefetchChapterCount = 3
 
     private struct ContinuousLoad {
@@ -13,7 +15,13 @@ final class LibraryStore {
         var prefetchOwnerID: UUID?
     }
 
+    private struct ContinuousTailProbe {
+        let id: UUID
+        let task: Task<Void, Never>
+    }
+
     private let modelContext: ModelContext
+    private let bookFetchOperation: BookFetchOperation
     private let coordinator: NovelImportCoordinator
     private let folderSync: FolderSyncController?
     private let progressSaveDelay: Duration
@@ -21,13 +29,18 @@ final class LibraryStore {
     private var prefetchRequestID: UUID?
     private var prefetchOriginChapterID: UUID?
     private var importTask: Task<Void, Never>?
+    private var importRequestID: UUID?
     private var catalogRefreshTask: Task<Void, Never>?
+    private var catalogRefreshRequestID: UUID?
     private var progressSaveTask: Task<Void, Never>?
+    private var progressSaveRequestID: UUID?
     private var continuousLoadTasks: [UUID: ContinuousLoad] = [:]
     private var continuousLoadFailures: Set<UUID> = []
-    private var continuousTailProbeTasks: [UUID: Task<Void, Never>] = [:]
+    private var continuousTailProbeTasks: [UUID: ContinuousTailProbe] = [:]
     private var continuousTailProbeStates: [UUID: ContinuousReaderTailProbeState] = [:]
     private var visibleChapterDebounceTask: Task<Void, Never>?
+    private var visibleChapterRequestID: UUID?
+    private var activeLoadingRequestID: UUID?
     private var visibilityGate = ContinuousReaderVisibilityGate()
     private var pendingContinuousAttachmentChapterID: UUID?
     private var isReaderScrolling = false
@@ -58,9 +71,13 @@ final class LibraryStore {
         coordinator: NovelImportCoordinator,
         folderSync: FolderSyncController? = nil,
         progressSaveDelay: Duration = .milliseconds(600),
-        continuousTailProbeTTL: TimeInterval = 45
+        continuousTailProbeTTL: TimeInterval = 45,
+        bookFetchOperation: @escaping BookFetchOperation = { context, descriptor in
+            try context.fetch(descriptor)
+        }
     ) {
         self.modelContext = modelContext
+        self.bookFetchOperation = bookFetchOperation
         self.coordinator = coordinator
         self.folderSync = folderSync
         self.progressSaveDelay = progressSaveDelay
@@ -187,18 +204,25 @@ final class LibraryStore {
 
     func startImportURL(_ input: String) {
         guard !isLoading else { return }
+        let requestID = UUID()
+        importRequestID = requestID
         importTask = Task { [weak self] in
             guard let self else { return }
-            await importURL(input)
-            importTask = nil
+            await importURL(input, requestID: requestID)
+            finishImport(requestID: requestID)
         }
     }
 
     func cancelLoading() {
         importTask?.cancel()
         importTask = nil
+        importRequestID = nil
         catalogRefreshTask?.cancel()
         catalogRefreshTask = nil
+        catalogRefreshRequestID = nil
+        activeLoadingRequestID = nil
+        isLoading = false
+        loadingMessage = ""
     }
 
     func cancelOfflineDownload() {
@@ -222,16 +246,21 @@ final class LibraryStore {
               let catalogURL = URL(string: book.catalogURL) else {
             return
         }
+        let requestID = UUID()
+        catalogRefreshRequestID = requestID
         catalogRefreshTask = Task { [weak self] in
             guard let self else { return }
-            await performLoading("正在获取完整目录…") {
+            await performLoading("正在获取完整目录…", requestID: requestID) {
                 let catalog = try await coordinator.refreshCatalog(from: catalogURL) { [weak self] pageNumber in
+                    guard self?.catalogRefreshRequestID == requestID else { return }
                     self?.loadingMessage = "正在获取完整目录…（第 \(pageNumber) 页）"
                 }
+                try Task.checkCancellation()
+                guard catalogRefreshRequestID == requestID else { throw CancellationError() }
                 try applyRefreshedCatalog(catalog, to: book)
                 offlineDownloads.start(book: book, currentChapter: chapter, scope: .entireBook)
             }
-            catalogRefreshTask = nil
+            finishCatalogRefresh(requestID: requestID)
         }
     }
 
@@ -263,6 +292,7 @@ final class LibraryStore {
         cancelContinuousTailProbes()
         candidateVisibleChapterID = nil
         visibleChapterDebounceTask?.cancel()
+        visibleChapterRequestID = nil
         pendingContinuousAttachmentChapterID = nil
         refreshReaderSession()
         prefetchNextContinuousChapterIfNeeded()
@@ -369,11 +399,14 @@ final class LibraryStore {
         guard chapter.id != selectedChapterID else {
             candidateVisibleChapterID = nil
             visibleChapterDebounceTask?.cancel()
+            visibleChapterRequestID = nil
             return
         }
         guard readerSession.entries.contains(where: { $0.chapter.id == chapter.id }) else { return }
         candidateVisibleChapterID = chapter.id
         visibleChapterDebounceTask?.cancel()
+        let requestID = UUID()
+        visibleChapterRequestID = requestID
         visibleChapterDebounceTask = Task { [weak self] in
             do {
                 try await Task.sleep(for: .milliseconds(200))
@@ -383,9 +416,12 @@ final class LibraryStore {
                 return
             }
             guard let self,
+                  self.visibleChapterRequestID == requestID,
                   self.candidateVisibleChapterID == chapter.id else {
                 return
             }
+            self.visibleChapterRequestID = nil
+            self.visibleChapterDebounceTask = nil
             self.commitCandidateVisibleChapter(chapter.id)
         }
     }
@@ -415,13 +451,15 @@ final class LibraryStore {
         attachPendingContinuousChapterIfSafe()
     }
 
-    private func importURL(_ input: String) async {
+    private func importURL(_ input: String, requestID: UUID) async {
         guard let url = normalizedURL(from: input) else {
             presentedError = PresentedError(message: NovelParsingError.unsupportedURL.localizedDescription)
             return
         }
-        await performLoading("正在下载并识别小说…") {
+        await performLoading("正在下载并识别小说…", requestID: requestID) {
             let result = try await coordinator.importNovel(from: url)
+            try Task.checkCancellation()
+            guard importRequestID == requestID else { throw CancellationError() }
             guard flushPendingProgress() else { return }
             let chapter = try upsert(result)
             refreshBooks()
@@ -546,16 +584,27 @@ final class LibraryStore {
     }
 
     func refreshSelectedCatalog() async {
+        guard !isLoading else { return }
+        let requestID = UUID()
+        catalogRefreshRequestID = requestID
+        await refreshSelectedCatalog(requestID: requestID)
+        finishCatalogRefresh(requestID: requestID)
+    }
+
+    private func refreshSelectedCatalog(requestID: UUID) async {
         guard let book = selectedBook,
               book.sourceKind == .web,
               book.hasCatalog,
               let url = URL(string: book.catalogURL) else {
             return
         }
-        await performLoading("正在刷新目录…") {
+        await performLoading("正在刷新目录…", requestID: requestID) {
             let catalog = try await coordinator.refreshCatalog(from: url) { [weak self] pageNumber in
+                guard self?.catalogRefreshRequestID == requestID else { return }
                 self?.loadingMessage = "正在刷新目录…（第 \(pageNumber) 页）"
             }
+            try Task.checkCancellation()
+            guard catalogRefreshRequestID == requestID else { throw CancellationError() }
             try applyRefreshedCatalog(catalog, to: book)
         }
     }
@@ -577,10 +626,12 @@ final class LibraryStore {
 
     func startRefreshSelectedCatalog() {
         guard !isLoading else { return }
+        let requestID = UUID()
+        catalogRefreshRequestID = requestID
         catalogRefreshTask = Task { [weak self] in
             guard let self else { return }
-            await refreshSelectedCatalog()
-            catalogRefreshTask = nil
+            await refreshSelectedCatalog(requestID: requestID)
+            finishCatalogRefresh(requestID: requestID)
         }
     }
 
@@ -656,6 +707,7 @@ final class LibraryStore {
     func flushPendingProgress() -> Bool {
         progressSaveTask?.cancel()
         progressSaveTask = nil
+        progressSaveRequestID = nil
         return persistPendingProgress()
     }
 
@@ -870,14 +922,28 @@ final class LibraryStore {
         presentedError = nil
     }
 
-    private func refreshBooks() {
+    func refreshBooks() {
         let descriptor = FetchDescriptor<Book>(sortBy: [SortDescriptor(\Book.updatedAt, order: .reverse)])
-        let fetchedBooks = (try? modelContext.fetch(descriptor)) ?? []
+        let fetchedBooks: [Book]
+        do {
+            fetchedBooks = try bookFetchOperation(modelContext, descriptor)
+        } catch {
+            presentedError = PresentedError(message: "读取书架失败，已保留当前书架内容：\(error.localizedDescription)")
+            return
+        }
         var removedLegacyEntries = false
         for book in fetchedBooks where removeLegacyLatestChapterEntries(from: book) {
             removedLegacyEntries = true
         }
-        if removedLegacyEntries { try? modelContext.save() }
+        if removedLegacyEntries {
+            // This is a best-effort repair of obsolete, uncached preview rows.
+            // A repair failure must not turn a successful fetch into an empty shelf.
+            do {
+                try modelContext.save()
+            } catch {
+                presentedError = PresentedError(message: "修复旧目录数据失败：\(error.localizedDescription)")
+            }
+        }
         books = fetchedBooks
     }
 
@@ -964,13 +1030,16 @@ final class LibraryStore {
                 if chapter.isAvailableOffline,
                    let bodyText = try await offlineDownloads.loadPersistedBody(chapterID: chapter.id),
                    !bodyText.isEmpty {
+                    guard !Task.isCancelled,
+                          continuousLoadTasks[chapter.id]?.id == loadID else { return }
                     chapter.replaceBodyText(bodyText)
                     continuousLoadFailures.remove(chapter.id)
                     attachPendingContinuousChapterIfSafe()
                     return
                 }
                 let result = try await coordinator.loadChapterContent(from: url)
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled,
+                      continuousLoadTasks[chapter.id]?.id == loadID else { return }
                 apply(result, to: chapter)
                 try modelContext.save()
                 continuousLoadFailures.remove(chapter.id)
@@ -980,6 +1049,8 @@ final class LibraryStore {
             } catch HTMLLoadError.cancelled {
                 return
             } catch {
+                guard !Task.isCancelled,
+                      continuousLoadTasks[chapter.id]?.id == loadID else { return }
                 continuousLoadFailures.insert(chapter.id)
             }
         }
@@ -1012,13 +1083,15 @@ final class LibraryStore {
             return
         }
 
+        let probeID = UUID()
         continuousTailProbeStates[chapter.id] = .checking
-        continuousTailProbeTasks[chapter.id] = Task { [weak self] in
+        let task = Task { [weak self] in
             guard let self else { return }
-            defer { continuousTailProbeTasks[chapter.id] = nil }
+            defer { finishContinuousTailProbe(chapterID: chapter.id, probeID: probeID) }
             do {
                 let result = try await coordinator.loadChapterContent(from: url)
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled,
+                      continuousTailProbeTasks[chapter.id]?.id == probeID else { return }
                 chapter.title = result.title
                 chapter.previousURL = result.previousChapterURL?.absoluteString
                 chapter.nextURL = result.nextChapterURL?.absoluteString
@@ -1040,13 +1113,20 @@ final class LibraryStore {
             } catch HTMLLoadError.cancelled {
                 return
             } catch {
+                guard continuousTailProbeTasks[chapter.id]?.id == probeID else { return }
                 continuousTailProbeStates[chapter.id] = .failed
             }
         }
+        continuousTailProbeTasks[chapter.id] = ContinuousTailProbe(id: probeID, task: task)
+    }
+
+    private func finishContinuousTailProbe(chapterID: UUID, probeID: UUID) {
+        guard continuousTailProbeTasks[chapterID]?.id == probeID else { return }
+        continuousTailProbeTasks[chapterID] = nil
     }
 
     private func cancelContinuousTailProbes() {
-        for task in continuousTailProbeTasks.values { task.cancel() }
+        for probe in continuousTailProbeTasks.values { probe.task.cancel() }
         continuousTailProbeTasks.removeAll()
         continuousTailProbeStates.removeAll()
     }
@@ -1434,6 +1514,8 @@ final class LibraryStore {
         hasPendingProgressChanges = true
         progressSaveTask?.cancel()
         let delay = progressSaveDelay
+        let requestID = UUID()
+        progressSaveRequestID = requestID
         progressSaveTask = Task { [weak self] in
             do {
                 try await Task.sleep(for: delay)
@@ -1443,8 +1525,11 @@ final class LibraryStore {
                 self?.presentedError = PresentedError(message: "安排阅读进度保存失败：\(error.localizedDescription)")
                 return
             }
-            guard let self else { return }
+            guard let self,
+                  self.progressSaveRequestID == requestID,
+                  !Task.isCancelled else { return }
             self.progressSaveTask = nil
+            self.progressSaveRequestID = nil
             _ = self.persistPendingProgress()
         }
     }
@@ -1604,12 +1689,32 @@ final class LibraryStore {
         book.currentChapterID = chapter.id
     }
 
-    private func performLoading(_ message: String, operation: () async throws -> Void) async {
+    private func finishImport(requestID: UUID) {
+        guard importRequestID == requestID else { return }
+        importTask = nil
+        importRequestID = nil
+    }
+
+    private func finishCatalogRefresh(requestID: UUID) {
+        guard catalogRefreshRequestID == requestID else { return }
+        catalogRefreshTask = nil
+        catalogRefreshRequestID = nil
+    }
+
+    private func performLoading(
+        _ message: String,
+        requestID: UUID = UUID(),
+        operation: () async throws -> Void
+    ) async {
+        activeLoadingRequestID = requestID
         isLoading = true
         loadingMessage = message
         defer {
-            isLoading = false
-            loadingMessage = ""
+            if activeLoadingRequestID == requestID {
+                activeLoadingRequestID = nil
+                isLoading = false
+                loadingMessage = ""
+            }
         }
         do {
             try await operation()
@@ -1620,6 +1725,7 @@ final class LibraryStore {
         } catch let error as URLError where error.code == .cancelled {
             return
         } catch {
+            guard activeLoadingRequestID == requestID else { return }
             presentedError = PresentedError(message: error.localizedDescription)
         }
     }

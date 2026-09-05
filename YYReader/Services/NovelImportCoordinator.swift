@@ -4,15 +4,18 @@ import Foundation
 final class NovelImportCoordinator {
     private let loader: any HTMLDocumentLoading
     private let parser: NovelParserRegistry
+    private let processingWorker: NovelProcessingWorker
     private let catalogRefreshTimeout: Duration
 
     init(
         loader: any HTMLDocumentLoading,
         parser: NovelParserRegistry = NovelParserRegistry(),
+        processingWorker: NovelProcessingWorker = NovelProcessingWorker(),
         catalogRefreshTimeout: Duration = .seconds(180)
     ) {
         self.loader = loader
         self.parser = parser
+        self.processingWorker = processingWorker
         self.catalogRefreshTimeout = catalogRefreshTimeout
     }
 
@@ -119,10 +122,9 @@ final class NovelImportCoordinator {
 
     private func loadChapterContent(from firstDocument: LoadedHTML) async throws -> ChapterLoadResult {
         let firstPage = try await parseChapterPage(firstDocument)
-        var paragraphs = firstPage.paragraphs
+        var pages = [firstPage]
         var pageURL = firstPage.nextPageURL
         var visitedPages: Set<URL> = [firstDocument.finalURL]
-        var finalPage = firstPage
 
         while let nextPage = pageURL {
             guard visitedPages.count < 20 else { throw NovelParsingError.paginationLimit }
@@ -132,22 +134,12 @@ final class NovelImportCoordinator {
             guard visitedPages.insert(nextPage).inserted else { throw NovelParsingError.paginationLoop }
             let document = try await loader.load(nextPage)
             let parsed = try await parseChapterPage(document)
-            appendWithoutBoundaryDuplicate(parsed.paragraphs, to: &paragraphs)
-            finalPage = parsed
+            pages.append(parsed)
             pageURL = parsed.nextPageURL
         }
-
-        let chapterURL = canonicalChapterURL(firstDocument.finalURL)
-
-        return ChapterLoadResult(
-            title: firstPage.title,
-            bookTitle: firstPage.bookTitle,
-            author: firstPage.author,
-            catalogURL: firstPage.catalogURL,
-            chapterURL: chapterURL,
-            bodyText: paragraphs.joined(separator: "\n\n"),
-            previousChapterURL: firstPage.previousChapterURL,
-            nextChapterURL: finalPage.nextChapterURL
+        return try await processingWorker.aggregateChapterPages(
+            pages,
+            sourceURL: firstDocument.finalURL
         )
     }
 
@@ -172,10 +164,7 @@ final class NovelImportCoordinator {
         let startedAt = clock.now
         var nextURL: URL? = url
         var visited = Set<String>()
-        var allChapters: [ChapterSeed] = []
-        var seenChapterURLs = Set<String>()
-        var bookTitle = ""
-        var author = "未知作者"
+        var pages: [ParsedBookCatalog] = []
 
         while let pageURL = nextURL {
             try checkCatalogDeadline(startedAt: startedAt, clock: clock)
@@ -187,27 +176,7 @@ final class NovelImportCoordinator {
             let document = try await loader.load(pageURL)
             try checkCatalogDeadline(startedAt: startedAt, clock: clock)
             let page = try await parseCatalogPage(document)
-            if bookTitle.isEmpty { bookTitle = page.title }
-            if author == "未知作者" { author = page.author }
-            let pageChapterURLs = Set(page.chapters.map {
-                URLCanonicalizer.canonicalChapterString($0.url.absoluteString)
-            })
-            if page.chapters.count > allChapters.count,
-               !seenChapterURLs.isEmpty,
-               seenChapterURLs.isSubset(of: pageChapterURLs) {
-                // Some book landing pages expose a short, reverse-ordered
-                // "latest chapters" preview, then link to the complete catalog.
-                // The complete catalog replaces that preview instead of being
-                // appended after it, preserving the site's canonical DOM order.
-                allChapters.removeAll(keepingCapacity: true)
-                seenChapterURLs.removeAll(keepingCapacity: true)
-            }
-            for seed in page.chapters {
-                let chapterKey = URLCanonicalizer.canonicalChapterString(seed.url.absoluteString)
-                if seenChapterURLs.insert(chapterKey).inserted {
-                    allChapters.append(seed)
-                }
-            }
+            pages.append(page)
             if let candidate = page.nextPageURL,
                URLCanonicalizer.canonicalString(candidate.absoluteString)
                 == URLCanonicalizer.canonicalString(document.finalURL.absoluteString) {
@@ -217,16 +186,7 @@ final class NovelImportCoordinator {
             }
         }
 
-        let orderedChapters = allChapters.enumerated().map { offset, seed in
-            ChapterSeed(title: seed.title, url: seed.url, sortIndex: offset + 1)
-        }
-
-        return ParsedBookCatalog(
-            title: bookTitle,
-            author: author,
-            chapters: orderedChapters,
-            nextPageURL: nil
-        )
+        return try await processingWorker.aggregateCatalogPages(pages)
     }
 
     private func checkCatalogDeadline(startedAt: ContinuousClock.Instant, clock: ContinuousClock) throws {
@@ -269,13 +229,7 @@ final class NovelImportCoordinator {
     private func hasHighConfidenceChapterContent(in document: LoadedHTML) async throws -> Bool {
         do {
             let chapter = try await parser.parseChapterPage(document)
-            let bodyLength = chapter.paragraphs.joined().count
-            if bodyLength >= 180 {
-                return true
-            }
-            return bodyLength >= 60
-                && looksLikeChapterTitle(chapter.title)
-                && (chapter.previousChapterURL != nil || chapter.nextChapterURL != nil)
+            return await processingWorker.isHighConfidenceChapter(chapter)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -311,28 +265,6 @@ final class NovelImportCoordinator {
         return catalog
     }
 
-    private func appendWithoutBoundaryDuplicate(_ newParagraphs: [String], to paragraphs: inout [String]) {
-        guard !newParagraphs.isEmpty else { return }
-        if paragraphs.last == newParagraphs.first {
-            paragraphs.append(contentsOf: newParagraphs.dropFirst())
-        } else {
-            paragraphs.append(contentsOf: newParagraphs)
-        }
-    }
-
-    private func canonicalChapterURL(_ url: URL) -> URL {
-        let path = HTMLParsingSupport.replacingRegex(
-            "/(\\d+)/(\\d+)/(\\d+)\\.html$",
-            in: url.path,
-            with: "/$1/$2.html"
-        )
-        guard path != url.path, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-            return url
-        }
-        components.path = path
-        return components.url ?? url
-    }
-
     private func sourceBookURL(for chapter: ChapterLoadResult) -> URL {
         let chapterURL = chapter.chapterURL
         let pathComponents = chapterURL.path.split(separator: "/", omittingEmptySubsequences: true)
@@ -365,13 +297,4 @@ final class NovelImportCoordinator {
         )
     }
 
-    private func looksLikeChapterTitle(_ title: String) -> Bool {
-        if HTMLParsingSupport.chapterNumber(in: title) != nil {
-            return true
-        }
-        let normalized = HTMLParsingSupport.normalize(title)
-        return ["序章", "序言", "楔子", "引子", "尾声", "后记", "番外"].contains {
-            normalized.hasPrefix($0)
-        }
-    }
 }

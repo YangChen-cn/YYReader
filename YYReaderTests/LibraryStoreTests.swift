@@ -4,7 +4,95 @@ import Testing
 @testable import YYReader
 
 @MainActor
+private final class FetchFailureSwitch {
+    var shouldFail = false
+}
+
+@MainActor
 struct LibraryStoreTests {
+    @Test
+    func refreshBooksKeepsExistingStateWhenFetchFails() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        let book = Book(
+            title: "保留的书",
+            author: "测试作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/book/retained/"
+        )
+        let chapter = Chapter(
+            sourceURL: "https://example.com/book/retained/1.html",
+            title: "第1章",
+            sortIndex: 1,
+            book: book
+        )
+        book.chapters = [chapter]
+        context.insert(book)
+        context.insert(chapter)
+        try context.save()
+
+        let fetchFailure = FetchFailureSwitch()
+        let store = LibraryStore(
+            modelContext: context,
+            coordinator: NovelImportCoordinator(loader: MockHTMLLoader(documents: [:])),
+            bookFetchOperation: { context, descriptor in
+                if fetchFailure.shouldFail { throw CocoaError(.fileReadUnknown) }
+                return try context.fetch(descriptor)
+            }
+        )
+        store.restoreSelection(bookID: book.id, chapterID: chapter.id)
+        let previousBookIDs = store.books.map(\.id)
+        let previousReaderEntryIDs = store.readerSession.entries.map(\.id)
+
+        fetchFailure.shouldFail = true
+        store.refreshBooks()
+
+        #expect(store.books.map(\.id) == previousBookIDs)
+        #expect(store.selectedBookID == book.id)
+        #expect(store.selectedChapterID == chapter.id)
+        #expect(store.readerSession.entries.map(\.id) == previousReaderEntryIDs)
+        #expect(store.presentedError?.message.contains("读取书架失败，已保留当前书架内容") == true)
+    }
+
+    @Test
+    func cancelledImportCannotOverwriteAnewerImport() async throws {
+        let staleURL = try #require(URL(string: "https://example.com/serial/stale/1.html"))
+        let currentURL = try #require(URL(string: "https://example.com/serial/current/1.html"))
+        let loader = NonCooperativeHTMLLoader(
+            documents: [
+                staleURL: genericCataloglessChapter(
+                    title: "第1章 旧请求",
+                    bookTitle: "旧请求小说",
+                    body: "这是一段旧请求返回的测试正文。"
+                ),
+                currentURL: genericCataloglessChapter(
+                    title: "第1章 新请求",
+                    bookTitle: "新请求小说",
+                    body: "这是一段新请求返回的测试正文。"
+                )
+            ],
+            delays: [staleURL: .milliseconds(120), currentURL: .milliseconds(10)]
+        )
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let store = LibraryStore(
+            modelContext: container.mainContext,
+            coordinator: NovelImportCoordinator(loader: loader)
+        )
+
+        store.startImportURL(staleURL.absoluteString)
+        try await Task.sleep(for: .milliseconds(15))
+        store.cancelLoading()
+        store.startImportURL(currentURL.absoluteString)
+        try await Task.sleep(for: .milliseconds(220))
+
+        #expect(store.books.map(\.title) == ["新请求小说"])
+        #expect(store.selectedBook?.title == "新请求小说")
+        #expect(store.selectedChapter?.title == "第1章 新请求")
+        #expect(!store.isLoading)
+    }
+
     @Test
     func cataloglessChaptersFromTheSameSourceBookShareOneBook() async throws {
         let first = try #require(URL(string: "https://example.com/serial/stable-book/1.html"))
