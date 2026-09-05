@@ -1,3 +1,5 @@
+using YYReader.Windows.Core.Models;
+
 namespace YYReader.Windows.Core.Sync;
 
 public sealed class SyncEngine(
@@ -8,11 +10,16 @@ public sealed class SyncEngine(
     public const string MacFileName = "mac.json";
     public const string WindowsFileName = "windows.json";
     private int _windowsSnapshotEstablished;
+    private string? _capabilityDirectory;
+    private bool _peerSupportsLocalText;
 
     public async Task<SyncExecutionResult> SynchronizeAsync(string selectedFolderPath, CancellationToken cancellationToken = default)
     {
         var syncDirectory = EnsureSyncDirectory(selectedFolderPath);
 
+        if (_capabilityDirectory != syncDirectory) _peerSupportsLocalText = false;
+        _capabilityDirectory = syncDirectory;
+        _peerSupportsLocalText = false;
         var macPath = Path.Combine(syncDirectory, MacFileName);
         var application = SyncApplicationResult.None;
         if (File.Exists(macPath))
@@ -24,6 +31,7 @@ public sealed class SyncEngine(
                 throw new SyncSnapshotException("mac.json 的 device 必须为 mac。");
             }
             application = await mergeRemoteSnapshot(remote, cancellationToken).ConfigureAwait(false);
+            _peerSupportsLocalText = remote.Capabilities?.Contains(LocalTextIdentity.Capability) == true;
         }
 
         var published = await PublishLocalCoreAsync(syncDirectory, cancellationToken).ConfigureAwait(false);
@@ -47,7 +55,9 @@ public sealed class SyncEngine(
         {
             Device = "windows",
             UpdatedAt = built.UpdatedAt,
-            Books = SyncMergePlanner.Merge(built.Books, []).ToList()
+            Capabilities = [LocalTextIdentity.Capability],
+            Books = SyncMergePlanner.Merge(built.Books.Where(b => !LocalTextIdentity.IsBook(b.SourceUrl)
+                || (_capabilityDirectory == syncDirectory && _peerSupportsLocalText)), []).ToList()
         };
         var windowsPath = Path.Combine(syncDirectory, WindowsFileName);
         var shouldWrite = true;
@@ -59,6 +69,7 @@ public sealed class SyncEngine(
                 var existing = SyncSnapshotCodec.Decode(await ReadWithRetryAsync(windowsPath, cancellationToken).ConfigureAwait(false));
                 shouldWrite = existing.Version != SyncSnapshotCodec.Version
                     || !string.Equals(existing.Device, "windows", StringComparison.OrdinalIgnoreCase)
+                    || existing.Capabilities?.Contains(LocalTextIdentity.Capability) != true
                     || !BooksAreEquivalent(existing.Books, snapshot.Books);
             }
             catch (SyncSnapshotException)

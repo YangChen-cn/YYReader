@@ -1,6 +1,5 @@
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using YYReader.Windows.Core.Models;
+using YYReader.Windows.Core.Reading;
 
 namespace YYReader.Windows.Views;
 
@@ -8,7 +7,9 @@ public enum ReaderItemKind
 {
     Header,
     Paragraph,
-    Footer
+    Footer,
+    AcademicBlock,
+    AcademicSupplement
 }
 
 public sealed class ReaderItem(
@@ -17,6 +18,12 @@ public sealed class ReaderItem(
     int paragraphIndex = 0,
     IReadOnlyList<string>? paragraphs = null)
 {
+    public AcademicPaperPlan? PaperPlan { get; set; }
+    public AcademicSupplement? Supplement { get; set; }
+    public int EndParagraphIndex { get; set; }
+    public int ColumnForParagraph(int index, bool preferTwoColumns, double width) =>
+        preferTwoColumns && width >= 760 && index >= ParagraphIndex + (EndParagraphIndex - ParagraphIndex + 1) / 2 ? 1 : 0;
+    public bool ContainsParagraph(int index) => IsParagraph ? index == ParagraphIndex : Kind == ReaderItemKind.AcademicBlock && index >= ParagraphIndex && index < EndParagraphIndex;
     public ReaderItemKind Kind { get; } = kind;
     public Chapter Chapter { get; } = chapter;
     public int ParagraphIndex { get; } = paragraphIndex;
@@ -28,21 +35,4 @@ public sealed class ReaderItem(
             ? paragraphs[ParagraphIndex]
             : "";
     public bool IsParagraph => Kind == ReaderItemKind.Paragraph;
-}
-
-public sealed class ReaderItemTemplateSelector : DataTemplateSelector
-{
-    public DataTemplate? HeaderTemplate { get; set; }
-    public DataTemplate? ParagraphTemplate { get; set; }
-    public DataTemplate? FooterTemplate { get; set; }
-
-    protected override DataTemplate? SelectTemplateCore(object item, DependencyObject container) =>
-        item is ReaderItem readerItem
-            ? readerItem.Kind switch
-            {
-                ReaderItemKind.Header => HeaderTemplate,
-                ReaderItemKind.Footer => FooterTemplate,
-                _ => ParagraphTemplate
-            }
-            : base.SelectTemplateCore(item, container);
 }

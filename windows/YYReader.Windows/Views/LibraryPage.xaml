@@ -15,6 +15,7 @@
                                 <TextBlock Text="添加小说" FontSize="18" FontWeight="SemiBold" />
                                 <TextBlock Text="粘贴章节页或目录页 URL" Style="{StaticResource YYSecondaryTextStyle}" />
                                 <TextBox x:Name="UrlTextBox" PlaceholderText="https://…" KeyDown="UrlTextBox_KeyDown" />
+                                <Button Content="导入本地 TXT…" Click="ImportLocalText_Click" />
                                 <Button Content="添加到书架" HorizontalAlignment="Right"
                                         Style="{StaticResource AccentButtonStyle}" Click="AddUrl_Click" />
                             </StackPanel>
@@ -73,9 +74,10 @@
                                 <Grid.ContextFlyout>
                                     <MenuFlyout>
                                         <MenuFlyoutItem Text="打开" Tag="{x:Bind}" Click="OpenBookMenu_Click" />
-                                        <MenuFlyoutItem Text="刷新目录" Tag="{x:Bind}" Click="RefreshBookCatalog_Click" />
-                                        <MenuFlyoutItem Text="下载全部章节" Tag="{x:Bind}" Click="DownloadAllBook_Click" />
-                                        <MenuFlyoutItem Text="删除离线缓存" Tag="{x:Bind}" Click="ClearBookCache_Click" />
+                                        <MenuFlyoutItem Text="编辑书籍信息" Tag="{x:Bind}" Click="EditBookMetadata_Click" />
+                                        <MenuFlyoutItem IsEnabled="{x:Bind SupportsWebOperations}" Text="刷新目录" Tag="{x:Bind}" Click="RefreshBookCatalog_Click" />
+                                        <MenuFlyoutItem IsEnabled="{x:Bind SupportsWebOperations}" Text="下载全部章节" Tag="{x:Bind}" Click="DownloadAllBook_Click" />
+                                        <MenuFlyoutItem IsEnabled="{x:Bind SupportsWebOperations}" Text="删除离线缓存" Tag="{x:Bind}" Click="ClearBookCache_Click" />
                                         <MenuFlyoutSeparator />
                                         <MenuFlyoutItem Text="删除小说" Tag="{x:Bind}" Click="DeleteBook_Click" />
                                     </MenuFlyout>

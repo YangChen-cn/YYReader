@@ -97,6 +97,56 @@ public sealed partial class LibraryPage : Page
         BookListView.ItemsSource = Store.Books;
     }
 
+    private async void ImportLocalText_Click(object sender, RoutedEventArgs e)
+    {
+        AddBookFlyout.Hide();
+        try
+        {
+            var picker = new global::Windows.Storage.Pickers.FileOpenPicker();
+            picker.FileTypeFilter.Add(".txt");
+            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(_window));
+            var file = await picker.PickSingleFileAsync();
+            if (file is null) return;
+            using var cancellation = new CancellationTokenSource();
+            var preparing = new ContentDialog { Title = "正在读取 TXT…", Content = "正在识别编码和章节", CloseButtonText = "取消", XamlRoot = XamlRoot };
+            preparing.CloseButtonClick += (_, _) => cancellation.Cancel();
+            var shown = preparing.ShowAsync();
+            LocalTextImportDraft draft;
+            try { draft = await LocalTextImportService.PrepareAsync(file.Path, cancellation.Token); }
+            finally { preparing.Hide(); await shown; }
+            cancellation.Token.ThrowIfCancellationRequested();
+            var metadata = await EditMetadataAsync(draft.Title, "未知作者", $"{draft.Chapters.Count} 章 · {draft.Encoding} · 正文保存在此设备");
+            if (metadata is { } value) await Store.ImportLocalTextAsync(draft, value.Title, value.Author);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            await new ContentDialog { Title = "TXT 导入失败", Content = ex.Message, CloseButtonText = "关闭", XamlRoot = XamlRoot }.ShowAsync();
+        }
+        RefreshView();
+    }
+
+    private async Task<(string Title, string Author)?> EditMetadataAsync(string title, string author, string description)
+    {
+        var titleBox = new TextBox { Header = "书名", Text = title };
+        var authorBox = new TextBox { Header = "作者", Text = author };
+        var panel = new StackPanel { Width = 400, Spacing = 12 };
+        panel.Children.Add(new TextBlock { Text = description, TextWrapping = TextWrapping.Wrap });
+        panel.Children.Add(titleBox);
+        panel.Children.Add(authorBox);
+        var dialog = new ContentDialog { Title = "书籍信息", Content = panel, PrimaryButtonText = "保存", CloseButtonText = "取消", XamlRoot = XamlRoot };
+        titleBox.TextChanged += (_, _) => dialog.IsPrimaryButtonEnabled = !string.IsNullOrWhiteSpace(titleBox.Text);
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return null;
+        return (titleBox.Text.Trim(), string.IsNullOrWhiteSpace(authorBox.Text) ? "未知作者" : authorBox.Text.Trim());
+    }
+
+    private async void EditBookMetadata_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: Book book }
+            && await EditMetadataAsync(book.Title, book.Author, "编辑书名和作者") is { } value)
+            await Store.UpdateMetadataAsync(book, value.Title, value.Author);
+    }
+
     private async void AddUrl_Click(object sender, RoutedEventArgs e)
     {
         if (await Store.AddUrlAsync(UrlTextBox.Text))

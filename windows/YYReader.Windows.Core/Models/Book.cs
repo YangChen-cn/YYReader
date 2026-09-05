@@ -28,6 +28,8 @@ public sealed class Book
         CurrentChapterUrl = currentChapterUrl;
     }
 
+    public bool IsLocalText => LocalTextIdentity.IsBook(SourceBookUrl);
+    public bool SupportsWebOperations => !IsLocalText;
     public string Id { get; }
     public string SourceBookUrl { get; set; }
     public string CatalogUrl { get; set; }

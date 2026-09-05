@@ -103,7 +103,8 @@ public sealed partial class ReaderPage : Page
     private void RebuildItems(ReaderRebuildPosition position = ReaderRebuildPosition.PreserveAnchor)
     {
         var anchor = position == ReaderRebuildPosition.PreserveAnchor ? CaptureReaderAnchor() : null;
-        Items.ReplaceAll(ReaderItemBuilder.Build(Store.ReaderSession.Entries));
+        _presentationRestoring = true;
+        Items.ReplaceAll(ReaderItemBuilder.Build(Store.ReaderSession.Entries, AcademicBookIdentity));
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
             ReaderRepeater.UpdateLayout();
@@ -120,11 +121,13 @@ public sealed partial class ReaderPage : Page
                     if (anchor is not null) RestoreReaderAnchor(anchor);
                     break;
             }
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _presentationRestoring = false);
         });
     }
 
     private void ReaderRoot_SizeChanged(object sender, SizeChangedEventArgs e)
     {
+        if (_preferences.AcademicMode && (e.PreviousSize.Width < 760) != (e.NewSize.Width < 760)) RebuildItems();
         ReaderContent.Width = ReaderLayout.EffectiveContentWidth(
             _preferences.ContentWidthEm,
             _preferences.FontSize,
@@ -146,6 +149,7 @@ public sealed partial class ReaderPage : Page
 
     private void ApplyRealizedItemStyle(UIElement element, ReaderItem item)
     {
+        if (ApplyAcademicStyle(element, item)) return;
         var fontFamily = ReaderFontFamily();
         if (item.Kind == ReaderItemKind.Paragraph && element is TextBlock paragraph)
         {
@@ -162,6 +166,9 @@ public sealed partial class ReaderPage : Page
 
         if (item.Kind == ReaderItemKind.Header && element is StackPanel header)
         {
+            header.Children.Clear();
+            header.Children.Add(new TextBlock { Text = "◆", FontSize = 8, Opacity = .35, HorizontalAlignment = HorizontalAlignment.Center });
+            header.Children.Add(new TextBlock { Text = item.Text, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center });
             var isFirst = Store.ReaderSession.Entries.FirstOrDefault()?.Chapter.SourceUrl == item.ChapterUrl;
             var headingSize = _preferences.FontSize * (isFirst ? 1.35 : 1.12);
             header.Margin = new Thickness(0, isFirst ? 32 : 24, 0, isFirst ? 20 : 10);
@@ -208,7 +215,7 @@ public sealed partial class ReaderPage : Page
         _continuousIdleTimer.Stop();
         _continuousIdleVersion = _continuousAttachmentState.ObserveViewChanged();
         _continuousIdleTimer.Start();
-        if (!_restoringContinuousAnchor)
+        if (!_restoringContinuousAnchor && !_presentationRestoring)
         {
             ScheduleContinuousLoadFromViewport();
         }
@@ -277,6 +284,7 @@ public sealed partial class ReaderPage : Page
 
     private void CommitVisiblePosition()
     {
+        if (_presentationRestoring) return;
         var visible = FindVisibleParagraph();
         if (visible is null) return;
         Store.UpdateVisibleReaderPosition(visible.ChapterUrl, visible.ParagraphIndex, visible.ParagraphCount);
@@ -286,26 +294,15 @@ public sealed partial class ReaderPage : Page
 
     private ReaderItem? FindVisibleParagraph()
     {
-        ReaderItem? best = null;
-        var bestTop = double.MaxValue;
-        foreach (var (index, element) in _realizedElements.ToArray())
+        foreach (var (item, frameworkElement) in RealizedParagraphs())
         {
-            if (index < 0 || index >= Items.Count || Items[index] is not { IsParagraph: true } item || element is not FrameworkElement frameworkElement)
-            {
-                continue;
-            }
-
             var top = frameworkElement.TransformToVisual(ReaderScrollViewer).TransformPoint(new Point(0, 0)).Y;
             var bottom = top + frameworkElement.ActualHeight;
-            if (bottom < 0 || top > ReaderScrollViewer.ActualHeight) continue;
-            var candidateTop = top >= 0 ? top : 0;
-            if (candidateTop < bestTop)
-            {
-                best = item;
-                bestTop = candidateTop;
-            }
+            if (bottom <= 0 || top >= ReaderScrollViewer.ActualHeight) continue;
+            RememberAcademicColumn(item.ChapterUrl, item.ParagraphIndex);
+            return item;
         }
-        return best;
+        return null;
     }
 
     private bool IsNearEndOfLoadedEntries()
@@ -333,9 +330,9 @@ public sealed partial class ReaderPage : Page
         var itemIndex = -1;
         for (var index = 0; index < Items.Count; index++)
         {
-            if (Items[index] is { IsParagraph: true } item
+            if (Items[index] is { } item
                 && item.ChapterUrl == chapter.SourceUrl
-                && item.ParagraphIndex == restoredIndex)
+                && item.ContainsParagraph(restoredIndex))
             {
                 itemIndex = index;
                 break;
@@ -344,7 +341,7 @@ public sealed partial class ReaderPage : Page
 
         if (itemIndex >= 0)
         {
-            var element = ReaderRepeater.GetOrCreateElement(itemIndex);
+            var element = ParagraphElement(itemIndex, restoredIndex);
             element.StartBringIntoView(new BringIntoViewOptions
             {
                 AnimationDesired = false,
@@ -361,8 +358,8 @@ public sealed partial class ReaderPage : Page
     {
         var visible = FindVisibleParagraph();
         if (visible is null) return null;
-        var itemIndex = Items.IndexOf(visible);
-        if (!_realizedElements.TryGetValue(itemIndex, out var element) || element is not FrameworkElement frameworkElement)
+        var frameworkElement = RealizedParagraphs().FirstOrDefault(x => x.Item.ChapterUrl == visible.ChapterUrl && x.Item.ParagraphIndex == visible.ParagraphIndex).Element;
+        if (frameworkElement is null)
         {
             return new ReaderAnchor(visible.ChapterUrl, visible.ParagraphIndex);
         }
@@ -374,18 +371,19 @@ public sealed partial class ReaderPage : Page
 
     private void RestoreReaderAnchor(ReaderAnchor anchor)
     {
-        var paragraphCount = Items.Count(item => item.IsParagraph && item.ChapterUrl == anchor.ChapterUrl);
+        var paragraphCount = Store.ReaderSession.ParagraphCount(anchor.ChapterUrl);
         var normalized = anchor.Normalized(paragraphCount);
+        RememberAcademicColumn(normalized.ChapterUrl, normalized.ParagraphIndex);
         for (var index = 0; index < Items.Count; index++)
         {
-            if (Items[index] is not { IsParagraph: true } item
+            if (Items[index] is not { } item
                 || item.ChapterUrl != normalized.ChapterUrl
-                || item.ParagraphIndex != normalized.ParagraphIndex)
+                || !item.ContainsParagraph(normalized.ParagraphIndex))
             {
                 continue;
             }
 
-            var element = ReaderRepeater.GetOrCreateElement(index);
+            var element = ParagraphElement(index, normalized.ParagraphIndex);
             var options = new BringIntoViewOptions
             {
                 AnimationDesired = false,
@@ -440,7 +438,7 @@ public sealed partial class ReaderPage : Page
 
             if (preparation.Status == NextChapterPreparationStatus.ConfirmedLatest)
             {
-                ShowContinuationMessage("已到最新章节", false);
+                ShowContinuationMessage(Store.SelectedBook?.IsLocalText == true ? "已到本书末尾" : "已到最新章节", false);
                 return;
             }
 
@@ -500,7 +498,7 @@ public sealed partial class ReaderPage : Page
         }
 
         _restoringContinuousAnchor = anchor is not null;
-        Items.AddRange(ReaderItemBuilder.BuildEntry(Store.ReaderSession.Entries[^1]));
+        Items.AddRange(ReaderItemBuilder.BuildEntry(Store.ReaderSession.Entries[^1], AcademicBookIdentity));
         RefreshCatalogListIfVisible();
         _continuousLoadState.MarkAttached();
         HideContinuationBoundary();
@@ -830,6 +828,7 @@ public sealed partial class ReaderPage : Page
 
     private void ReaderPage_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (IsAcademicShortcut(e.Key)) { ToggleAcademicMode(); e.Handled = true; return; }
         if (e.Key == VirtualKey.Escape && CatalogSplitView.IsPaneOpen)
         {
             CatalogSplitView.IsPaneOpen = false;
@@ -1049,6 +1048,7 @@ public sealed partial class ReaderPage : Page
     private void ApplyAppearanceChange()
     {
         var anchor = CaptureReaderAnchor();
+        _presentationRestoring = true;
         ResetContinuousReadingState();
         Store.ConfigureNextChapterPrefetch(_preferences.PrefetchNextChapter);
         ApplyPreferences();
@@ -1060,8 +1060,10 @@ public sealed partial class ReaderPage : Page
                 ReaderRepeater.UpdateLayout();
                 ReaderScrollViewer.UpdateLayout();
                 RestoreReaderAnchor(anchor);
+                DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _presentationRestoring = false);
             });
         }
+        else _presentationRestoring = false;
         SchedulePreferencesSave();
     }
 
@@ -1139,6 +1141,8 @@ public sealed partial class ReaderPage : Page
     private void ApplyPreferences()
     {
         _preferences = _preferences.Normalized();
+        AcademicColumnsCheckBox.IsChecked = _preferences.AcademicTwoColumns;
+        AcademicShortcutBox.Text = _preferences.AcademicShortcut;
         var systemTheme = ActualTheme == ElementTheme.Dark ? ElementTheme.Dark : ElementTheme.Light;
         _palette = ReaderThemePalette.FromName(_preferences.Theme, systemTheme);
         ReaderRoot.RequestedTheme = _palette.ElementTheme;

@@ -40,6 +40,8 @@ public static partial class UrlCanonicalizer
 
     public static Uri Canonicalize(Uri uri)
     {
+        if (LocalTextIdentity.IsBook(uri.OriginalString) || LocalTextIdentity.IsChapter(uri.OriginalString))
+            return new Uri(uri.OriginalString.ToLowerInvariant());
         var builder = new UriBuilder(uri)
         {
             Scheme = uri.Scheme.ToLowerInvariant(),

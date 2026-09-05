@@ -32,7 +32,7 @@
         "sourceURL": {
           "type": "string",
           "format": "uri",
-          "description": "Canonical book-level source URL, not the current chapter URL."
+          "description": "Canonical book-level source URL, including strict yyreader-local://txt/<sha256> identities; never the current chapter URL."
         },
         "title": {
           "type": "string"

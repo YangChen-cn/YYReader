@@ -11,10 +11,10 @@
 
 ## 小说字段
 
-- `sourceURL`：必填。书籍级 canonical source URL；有目录时通常是目录 URL，无目录时是稳定的书籍身份 URL。不要填当前章节 URL 作为书籍身份。
+- `sourceURL`：必填。书籍级 canonical source URL；有目录时通常是目录 URL，无目录时是稳定的书籍身份 URL。本地 TXT 使用严格格式 `yyreader-local://txt/<64位 SHA-256>`。不要填当前章节 URL 作为书籍身份。
 - `title`：必填，书名。
 - `author`：必填，作者；未知时可以使用空字符串或“未知作者”。
-- `currentChapterURL`：可选，当前章节的 canonical URL。
+- `currentChapterURL`：可选，当前章节的 canonical URL。本地 TXT 对应 `.../chapter/<六位序号>`。
 - `paragraphIndex`：可选，当前章节顶部段落索引，非负整数。
 - `progress`：可选，当前章节阅读比例，范围 `0..1`。
 
@@ -31,3 +31,5 @@
 恢复优先级是 `currentChapterURL + paragraphIndex`。如果章节已加载但 `paragraphIndex` 超出正文段落范围，客户端使用 `progress` 按比例估算；两者都缺失时从章节开头开始。保存阅读位置时应同时保存章节 URL、段落索引、比例和最近阅读时间。
 
 `.yyreader` 文件只是 JSON 文件扩展名。Windows 导入器也应接受剪贴板文本和普通 `.json` 文件，并在导入前显示新书/已存在数量。
+
+本地 TXT 的传输记录同样不包含正文；目标设备导入同一字节内容的 TXT 后，以稳定 identity 命中占位书并补齐正文。

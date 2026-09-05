@@ -4,6 +4,7 @@ using YYReader.Windows.Core.Models;
 using YYReader.Windows.Core.Parsing;
 using YYReader.Windows.Core.Transfer;
 using YYReader.Windows.Core.Sync;
+using YYReader.Windows.Core.Services;
 
 namespace YYReader.Windows.Core.Persistence;
 
@@ -168,7 +169,7 @@ public sealed class SqliteLibraryRepository
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
-        command.CommandText = "UPDATE Chapters SET BodyText = NULL, CachedAt = NULL WHERE BookId = $book;";
+        command.CommandText = "UPDATE Chapters SET BodyText = NULL, CachedAt = NULL WHERE BookId = $book AND BookId NOT IN (SELECT Id FROM Books WHERE SourceBookUrl LIKE 'yyreader-local://txt/%');";
         command.Parameters.AddWithValue("$book", bookId);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -182,7 +183,8 @@ public sealed class SqliteLibraryRepository
 
     public async Task<Book> UpsertImportAsync(
         NovelImportResult result,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<Chapter>? localChapters = null)
     {
         var sourceBookUrl = UrlCanonicalizer.Canonicalize(result.SourceBookUrl).AbsoluteUri;
         var catalogUrl = UrlCanonicalizer.Canonicalize(result.CatalogUrl).AbsoluteUri;
@@ -205,8 +207,9 @@ public sealed class SqliteLibraryRepository
                 HasCatalog = excluded.HasCatalog,
                 UpdatedAt = excluded.UpdatedAt,
                 CatalogFetchedAt = excluded.CatalogFetchedAt,
-                CurrentChapterUrl = excluded.CurrentChapterUrl;
+                CurrentChapterUrl = CASE WHEN $local = 1 THEN COALESCE(Books.CurrentChapterUrl, excluded.CurrentChapterUrl) ELSE excluded.CurrentChapterUrl END;
             """, cancellationToken,
+            ("$local", localChapters is null ? 0 : 1),
             ("$id", bookId),
             ("$source", sourceBookUrl),
             ("$catalog", catalogUrl),
@@ -252,10 +255,56 @@ public sealed class SqliteLibraryRepository
             ("$next", DbValue(result.NextChapterUrl is null ? null : UrlCanonicalizer.CanonicalizeChapter(result.NextChapterUrl).AbsoluteUri)),
             ("$cached", now.ToString("O", CultureInfo.InvariantCulture))).ConfigureAwait(false);
 
+        if (localChapters is not null)
+        {
+            foreach (var chapter in localChapters)
+            {
+                await ExecuteAsync(connection, transaction, """
+                    INSERT INTO ReaderProgress (BookId, ChapterUrl, ParagraphIndex, Progress, LastReadAt)
+                    SELECT p.BookId, $url, p.ParagraphIndex, p.Progress, p.LastReadAt
+                    FROM ReaderProgress p JOIN Chapters c ON c.BookId = p.BookId AND c.SourceUrl = p.ChapterUrl
+                    WHERE c.BookId = $book AND c.SortIndex = $sort AND c.SourceUrl != $url AND c.BodyText IS NULL
+                    ON CONFLICT(BookId, ChapterUrl) DO UPDATE SET
+                        ParagraphIndex = MAX(ReaderProgress.ParagraphIndex, excluded.ParagraphIndex),
+                        Progress = MAX(ReaderProgress.Progress, excluded.Progress),
+                        LastReadAt = COALESCE(excluded.LastReadAt, ReaderProgress.LastReadAt);
+                    UPDATE Books SET CurrentChapterUrl = $url WHERE Id = $book AND CurrentChapterUrl IN
+                        (SELECT SourceUrl FROM Chapters WHERE BookId = $book AND SortIndex = $sort AND SourceUrl != $url AND BodyText IS NULL);
+                    DELETE FROM Chapters WHERE BookId = $book AND SortIndex = $sort AND SourceUrl != $url AND BodyText IS NULL;
+                    UPDATE Chapters SET BodyText = $body, CachedAt = $cached, PreviousUrl = $previous, NextUrl = $next
+                    WHERE BookId = $book AND SourceUrl = $url;
+                    UPDATE ReaderProgress SET ParagraphIndex = MIN(ParagraphIndex, $last), Progress = MIN(1, MAX(0, Progress))
+                    WHERE BookId = $book AND ChapterUrl = $url;
+                    """, cancellationToken, ("$book", bookId), ("$url", chapter.SourceUrl),
+                    ("$sort", chapter.SortIndex), ("$body", chapter.BodyText!), ("$cached", now.ToString("O", CultureInfo.InvariantCulture)),
+                    ("$previous", DbValue(chapter.PreviousUrl)), ("$next", DbValue(chapter.NextUrl)),
+                    ("$last", Math.Max(0, chapter.Paragraphs.Count - 1))).ConfigureAwait(false);
+            }
+        }
+
         await ExecuteAsync(connection, transaction, "DELETE FROM SyncTombstones WHERE SourceBookUrl = $source;",
             cancellationToken, ("$source", sourceBookUrl)).ConfigureAwait(false);
         transaction.Commit();
         return (await GetBooksAsync(cancellationToken).ConfigureAwait(false)).First(book => book.Id == bookId);
+    }
+
+    public Task<Book> ImportLocalTextAsync(LocalTextImportDraft draft, string title, string author, CancellationToken cancellationToken = default)
+    {
+        var first = draft.Chapters[0];
+        var result = new NovelImportResult(title.Trim(), string.IsNullOrWhiteSpace(author) ? "未知作者" : author.Trim(),
+            new Uri(draft.SourceBookUrl), new Uri(draft.SourceBookUrl), true,
+            draft.Chapters.Select(c => new ChapterSeed(c.Title, new Uri(c.SourceUrl), c.SortIndex)).ToArray(), true,
+            first.Title, new Uri(first.SourceUrl), first.BodyText!, null, first.NextUrl is null ? null : new Uri(first.NextUrl));
+        return UpsertImportAsync(result, cancellationToken, draft.Chapters);
+    }
+
+    public async Task UpdateMetadataAsync(Book book, string title, string author, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        using var transaction = connection.BeginTransaction();
+        await ExecuteAsync(connection, transaction, "UPDATE Books SET Title = $title, Author = $author, UpdatedAt = $updated WHERE Id = $id;",
+            cancellationToken, ("$title", title.Trim()), ("$author", author.Trim()), ("$updated", DateTimeOffset.UtcNow.ToString("O")), ("$id", book.Id)).ConfigureAwait(false);
+        transaction.Commit();
     }
 
     public async Task SaveChapterAsync(
@@ -513,6 +562,7 @@ public sealed class SqliteLibraryRepository
 
         return new SyncSnapshot
         {
+            Capabilities = [LocalTextIdentity.Capability],
             Device = device,
             UpdatedAt = DateTimeOffset.UtcNow,
             Books = entries

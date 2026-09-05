@@ -10,6 +10,12 @@
     "version": { "const": 2 },
     "device": { "enum": ["mac", "windows"] },
     "updatedAt": { "type": "string", "format": "date-time" },
+    "capabilities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true,
+      "description": "Optional feature negotiation. local-txt-v1 permits yyreader-local TXT metadata and progress records."
+    },
     "books": {
       "type": "array",
       "items": { "$ref": "#/$defs/book" }

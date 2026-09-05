@@ -18,6 +18,9 @@ public sealed class SyncSnapshot
     [JsonPropertyName("updatedAt")]
     public DateTimeOffset UpdatedAt { get; init; }
 
+    [JsonPropertyName("capabilities")]
+    public List<string> Capabilities { get; init; } = new();
+
     [JsonPropertyName("books")]
     public List<SyncSnapshotBook> Books { get; init; } = new();
 
@@ -99,7 +102,7 @@ public static class SyncSnapshotCodec
         {
             if (string.IsNullOrWhiteSpace(book.SourceUrl)
                 || !Uri.TryCreate(book.SourceUrl, UriKind.Absolute, out var source)
-                || (!UrlCanonicalizer.IsHttp(source) && !source.Scheme.Equals("yyreader-book", StringComparison.OrdinalIgnoreCase)))
+                || (!UrlCanonicalizer.IsHttp(source) && !source.Scheme.Equals("yyreader-book", StringComparison.OrdinalIgnoreCase) && !LocalTextIdentity.IsBook(book.SourceUrl)))
             {
                 throw new SyncSnapshotException("同步书籍包含无效 sourceURL。");
             }
@@ -114,7 +117,7 @@ public static class SyncSnapshotCodec
                 throw new SyncSnapshotException("同步书籍包含无效 currentChapterIndex。");
             }
             if (book.CurrentChapterUrl is not null
-                && (!Uri.TryCreate(book.CurrentChapterUrl, UriKind.Absolute, out var chapter) || !UrlCanonicalizer.IsHttp(chapter)))
+                && (!Uri.TryCreate(book.CurrentChapterUrl, UriKind.Absolute, out var chapter) || !(LocalTextIdentity.IsBook(book.SourceUrl) ? LocalTextIdentity.IsChapterOf(book.CurrentChapterUrl, book.SourceUrl) : UrlCanonicalizer.IsHttp(chapter))))
             {
                 throw new SyncSnapshotException("同步书籍包含无效 currentChapterURL。");
             }

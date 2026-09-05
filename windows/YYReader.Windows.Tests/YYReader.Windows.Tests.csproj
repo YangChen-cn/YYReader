@@ -8,6 +8,8 @@
   <ItemGroup>
     <ProjectReference Include="..\YYReader.Windows.Core\YYReader.Windows.Core.csproj" />
     <Compile Include="..\YYReader.Windows\Services\LibraryStore.cs" Link="ProductionSources\LibraryStore.cs" />
+    <Compile Include="..\YYReader.Windows\Views\ReaderItem.cs" Link="ProductionSources\ReaderItem.cs" />
+    <Compile Include="..\YYReader.Windows\Views\ReaderItemBuilder.cs" Link="ProductionSources\ReaderItemBuilder.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="MSTest.TestAdapter" Version="3.6.4" />
     <PackageReference Include="MSTest.TestFramework" Version="3.6.4" />

@@ -108,7 +108,7 @@ public static class BookshelfTransferCodec
     {
         if (string.IsNullOrWhiteSpace(book.SourceUrl)) return "缺少 sourceURL。";
         if (!Uri.TryCreate(book.SourceUrl.Trim(), UriKind.Absolute, out var sourceUri)
-            || (!UrlCanonicalizer.IsHttp(sourceUri) && !sourceUri.Scheme.Equals("yyreader-book", StringComparison.OrdinalIgnoreCase)))
+            || (!UrlCanonicalizer.IsHttp(sourceUri) && !sourceUri.Scheme.Equals("yyreader-book", StringComparison.OrdinalIgnoreCase) && !LocalTextIdentity.IsBook(book.SourceUrl)))
         {
             return "sourceURL 必须是 HTTP、HTTPS 或 YYReader 无目录书籍身份 URL。";
         }
@@ -118,7 +118,7 @@ public static class BookshelfTransferCodec
             return "progress 必须位于 0 到 1 之间。";
         }
         if (book.CurrentChapterUrl is not null
-            && (!Uri.TryCreate(book.CurrentChapterUrl, UriKind.Absolute, out var chapterUri) || !UrlCanonicalizer.IsHttp(chapterUri)))
+            && (!Uri.TryCreate(book.CurrentChapterUrl, UriKind.Absolute, out var chapterUri) || !(LocalTextIdentity.IsBook(book.SourceUrl) ? LocalTextIdentity.IsChapterOf(book.CurrentChapterUrl, book.SourceUrl) : UrlCanonicalizer.IsHttp(chapterUri))))
         {
             return "currentChapterURL 必须是 HTTP 或 HTTPS URL。";
         }

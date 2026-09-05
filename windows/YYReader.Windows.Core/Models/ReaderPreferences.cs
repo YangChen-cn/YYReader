@@ -9,7 +9,10 @@ public sealed record ReaderPreferences(
     bool ParagraphIndent = true,
     bool ContinuousReading = false,
     bool PrefetchNextChapter = true,
-    string Theme = "system")
+    string Theme = "system",
+    bool AcademicMode = false,
+    bool AcademicTwoColumns = true,
+    string AcademicShortcut = "P")
 {
     public static ReaderPreferences Defaults { get; } = new();
 

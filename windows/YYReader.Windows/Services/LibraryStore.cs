@@ -194,7 +194,7 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
     {
         if (SelectedChapter is null)
         {
-            ErrorMessage = "这本小说还没有可阅读的章节。";
+            ErrorMessage = SelectedBook?.IsLocalText == true ? "请在此设备导入同一 TXT" : "这本小说还没有可阅读的章节。";
             return false;
         }
 
@@ -270,6 +270,11 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
 
         var next = LocalNeighbor(book, lastLoadedChapter, 1);
 
+        if (next is null && book.IsLocalText)
+        {
+            onStatusChanged?.Invoke(NextChapterPreparationStatus.ConfirmedLatest);
+            return new(NextChapterPreparationStatus.ConfirmedLatest);
+        }
         if (next is null)
         {
             onStatusChanged?.Invoke(NextChapterPreparationStatus.CheckingLatest);
@@ -434,6 +439,28 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         await ReloadAsync(cancellationToken).ConfigureAwait(true);
     }
 
+    public async Task ImportLocalTextAsync(LocalTextImportDraft draft, string title, string author, CancellationToken cancellationToken = default)
+    {
+        await FlushPendingProgressAsync(cancellationToken);
+        await RunBusyAsync("正在导入 TXT…", async () =>
+        {
+            var book = await _repository.ImportLocalTextAsync(draft, title, author, cancellationToken);
+            await ReloadAsync(cancellationToken);
+            SelectBook(Books.First(b => b.Id == book.Id));
+            BooksChanged?.Invoke(this, EventArgs.Empty);
+        }, cancellationToken);
+    }
+
+    public async Task UpdateMetadataAsync(Book book, string title, string author)
+    {
+        await RunBusyAsync("正在保存书籍信息…", async () =>
+        {
+            await _repository.UpdateMetadataAsync(book, title, author);
+            await ReloadAsync();
+            BooksChanged?.Invoke(this, EventArgs.Empty);
+        }, default);
+    }
+
     public void ClearError() => ErrorMessage = null;
 
     public async Task<bool> RefreshSelectedCatalogAsync(CancellationToken cancellationToken = default)
@@ -459,6 +486,7 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
         OfflineDownloadScope scope,
         CancellationToken cancellationToken = default)
     {
+        if (book.IsLocalText) return false;
         return scope != OfflineDownloadScope.AllChapters
             || await RefreshCatalogAsync(book, cancellationToken).ConfigureAwait(true);
     }
@@ -646,6 +674,7 @@ public sealed class LibraryStore : INotifyPropertyChanged, IAsyncDisposable
             }
         }
 
+        if (book.IsLocalText) throw new InvalidOperationException("请在此设备导入同一 TXT");
         var result = await _coordinator.LoadChapterContentAsync(new Uri(chapter.SourceUrl), cancellationToken).ConfigureAwait(true);
         chapter.Title = result.Title;
         chapter.ReplaceBodyText(result.BodyText);

@@ -48,6 +48,7 @@ public sealed class OfflineDownloadManager
         OfflineDownloadScope scope,
         CancellationToken cancellationToken = default)
     {
+        if (book.IsLocalText) throw new InvalidOperationException("本地 TXT 无需下载。");
         Cancel();
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -115,6 +116,7 @@ public sealed class OfflineDownloadManager
 
     public async Task ClearOfflineCacheAsync(Book book, CancellationToken cancellationToken = default)
     {
+        if (book.IsLocalText) throw new InvalidOperationException("本地 TXT 正文不能作为缓存删除。");
         Cancel();
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
