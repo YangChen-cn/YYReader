@@ -45,9 +45,29 @@ struct ReaderContentView: View {
                 LazyVStack(alignment: .leading, spacing: paragraphSpacing * fontSize) {
                     ForEach(entries) { entry in
                         let paragraphs = entry.paragraphs
-                        if presentationMode == .academicPaper, let book = entry.chapter.book ?? store.selectedBook {
+                        if paragraphs.isEmpty {
+                            VStack(spacing: 12) {
+                                ReaderChapterHeader(
+                                    chapter: entry.chapter,
+                                    accent: theme.accent,
+                                    target: .chapterHeader(entry.chapter.id),
+                                    style: entry.id == firstEntryID ? .prominent : .compact,
+                                    usesOrnament: theme.usesBookishChapterOrnament,
+                                    separator: theme.separator
+                                )
+                                ProgressView("正在加载正文…")
+                                    .padding(.vertical, 20)
+                                    .task(id: entry.chapter.id) {
+                                        await store.materializeChapterBody(entry.chapter)
+                                    }
+                            }
+                            .id(ReaderScrollTarget.chapterHeader(entry.chapter.id))
+                        } else if presentationMode == .academicPaper {
+                            let bookIdentity = store.selectedBook?.sourceBookURL
+                                ?? entry.chapter.book?.sourceBookURL
+                                ?? ""
                             let plan = academicPlanCache.plan(
-                                book: book,
+                                bookIdentity: bookIdentity,
                                 chapter: entry.chapter,
                                 position: store.chapterIndexByID[entry.chapter.id] ?? 0,
                                 paragraphs: paragraphs
@@ -157,7 +177,6 @@ struct ReaderContentView: View {
         .foregroundStyle(presentationMode == .academicPaper ? Color(white: 0.12) : theme.foreground)
         .tint(theme.accent)
         .task {
-            await store.ensureReaderSessionBodiesLoaded()
             await prepareContinuousReading()
         }
         .task(id: continuousReading) {
@@ -167,7 +186,6 @@ struct ReaderContentView: View {
             await applyPendingScrollRequest()
         }
         .task(id: presentationModeName + "|" + academicColumnModeName) {
-            await store.ensureReaderSessionBodiesLoaded()
             await restoreAfterPresentationChange()
         }
         .onChange(of: store.selectedChapterID) { oldID, newID in

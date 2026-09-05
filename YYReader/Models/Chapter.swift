@@ -58,8 +58,8 @@ final class Chapter {
     }
 
     var isCached: Bool {
-        guard let bodyText else { return false }
-        return !bodyText.isEmpty
+        guard let bodyText, !bodyText.isEmpty else { return false }
+        return !paragraphs.isEmpty
     }
 
     var isAvailableOffline: Bool {

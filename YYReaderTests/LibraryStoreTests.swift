@@ -1201,6 +1201,48 @@ struct LibraryStoreTests {
         #expect(loader.requestedURLs.count == 2)
         #expect(store.offlineDownloads.completedCount < store.offlineDownloads.totalCount)
     }
+
+    @Test
+    func rebuildSelectedBookChaptersRepairsMissingChapterBookRelationship() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+
+        let book = Book(
+            title: "关系自愈测试",
+            author: "测试作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/book/repair-relationship/"
+        )
+        let chapter1 = Chapter(
+            sourceURL: "https://example.com/book/repair-relationship/1.html",
+            title: "第1章",
+            sortIndex: 0,
+            bodyText: "第一章正文",
+            cachedAt: .now,
+            book: nil
+        )
+        let chapter2 = Chapter(
+            sourceURL: "https://example.com/book/repair-relationship/2.html",
+            title: "第2章",
+            sortIndex: 1,
+            bodyText: "第二章正文",
+            cachedAt: .now,
+            book: nil
+        )
+
+        book.chapters = [chapter1, chapter2]
+        context.insert(book)
+
+        let store = LibraryStore(
+            modelContext: context,
+            coordinator: NovelImportCoordinator(loader: MockHTMLLoader(documents: [:]))
+        )
+        store.selectBook(book.id)
+
+        #expect(chapter1.book === book)
+        #expect(chapter2.book === book)
+    }
 }
 
 @MainActor

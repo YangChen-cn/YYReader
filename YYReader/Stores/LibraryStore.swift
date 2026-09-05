@@ -278,19 +278,6 @@ final class LibraryStore {
         refreshReaderSession()
     }
 
-    func ensureReaderSessionBodiesLoaded() async {
-        for entry in readerSession.entries {
-            await hydrateChapterBodyIfNeeded(entry.chapter)
-        }
-    }
-
-    func hydrateChapterBodyIfNeeded(_ chapter: Chapter) async {
-        guard !chapter.isCached, chapter.isAvailableOffline else { return }
-        if let body = try? await offlineDownloads.loadPersistedBody(chapterID: chapter.id), !body.isEmpty {
-            chapter.replaceBodyText(body)
-        }
-    }
-
     func prefetchContinuousChapter(after chapterID: UUID) {
         guard let chapter = chapterByID[chapterID] else { return }
         scheduleSerialPrefetch(after: chapter, delay: nil, respectsPreference: false)
@@ -331,7 +318,7 @@ final class LibraryStore {
             return .unavailable
         }
         guard let next = existingNeighbor(of: chapter, offset: 1) else {
-            if chapter.book?.isLocalText == true { return .endOfBook }
+            if (chapter.book ?? selectedBook)?.isLocalText == true { return .endOfBook }
             // A catalog-less chapter may only expose nextURL. The boundary's
             // onAppear action will create and prefetch that chapter outside the
             // SwiftUI body evaluation; this status query must remain read-only.
@@ -599,6 +586,33 @@ final class LibraryStore {
     func ensureSelectedChapterLoaded() async {
         guard let chapter = selectedChapter else { return }
         await ensureChapterLoaded(chapter)
+    }
+
+    func materializeChapterBody(_ chapter: Chapter) async {
+        if chapter.book == nil, let book = selectedBook {
+            chapter.book = book
+        }
+        if chapter.isCached && !chapter.paragraphs.isEmpty {
+            return
+        }
+        if chapter.isAvailableOffline,
+           let bodyText = try? await offlineDownloads.loadPersistedBody(chapterID: chapter.id),
+           !bodyText.isEmpty {
+            chapter.replaceBodyText(bodyText)
+            try? modelContext.save()
+            return
+        }
+        guard (chapter.book ?? selectedBook)?.sourceKind == .web else {
+            return
+        }
+        guard let url = URL(string: chapter.sourceURL) else { return }
+        do {
+            let result = try await coordinator.loadChapterContent(from: url)
+            apply(result, to: chapter)
+            try? modelContext.save()
+        } catch {
+            continuousLoadFailures.insert(chapter.id)
+        }
     }
 
     func goToPreviousChapter() {
@@ -892,6 +906,9 @@ final class LibraryStore {
     }
 
     private func ensureChapterLoaded(_ chapter: Chapter) async {
+        if chapter.book == nil, let book = selectedBook {
+            chapter.book = book
+        }
         guard !chapter.isCached else { return }
         if chapter.isAvailableOffline,
            let bodyText = try? await offlineDownloads.loadPersistedBody(chapterID: chapter.id),
@@ -900,7 +917,7 @@ final class LibraryStore {
             refreshReaderSession()
             return
         }
-        guard chapter.book?.sourceKind == .web else {
+        guard (chapter.book ?? selectedBook)?.sourceKind == .web else {
             presentedError = PresentedError(message: "这本本地 TXT 尚未在此设备保存正文，请重新导入同一 TXT 文件。")
             return
         }
@@ -927,9 +944,12 @@ final class LibraryStore {
 
     @discardableResult
     private func startContinuousLoad(for chapter: Chapter) -> Task<Void, Never>? {
+        if chapter.book == nil, let book = selectedBook {
+            chapter.book = book
+        }
         guard !chapter.isCached else { return nil }
         if let load = continuousLoadTasks[chapter.id] { return load.task }
-        guard chapter.book?.sourceKind == .web else {
+        guard (chapter.book ?? selectedBook)?.sourceKind == .web else {
             continuousLoadFailures.insert(chapter.id)
             return nil
         }
@@ -1325,15 +1345,20 @@ final class LibraryStore {
 
     private func rebuildSelectedBookChapters() {
         cachedSyncChapterRanks = nil
+        if let book = selectedBook {
+            var didRepair = false
+            for chapter in book.chapters where chapter.book == nil {
+                chapter.book = book
+                didRepair = true
+            }
+            if didRepair {
+                try? modelContext.save()
+            }
+        }
         sortedChapters = selectedBook?.chapters.sorted { lhs, rhs in
             if lhs.sortIndex == rhs.sortIndex { return lhs.title < rhs.title }
             return lhs.sortIndex < rhs.sortIndex
         } ?? []
-        if let selectedBook {
-            for chapter in sortedChapters where chapter.book == nil {
-                chapter.book = selectedBook
-            }
-        }
         chapterByID = Dictionary(uniqueKeysWithValues: sortedChapters.map { ($0.id, $0) })
         chapterIndexByID = Dictionary(uniqueKeysWithValues: sortedChapters.enumerated().map { ($0.element.id, $0.offset) })
     }
@@ -1351,13 +1376,14 @@ final class LibraryStore {
               pendingChapterID == selectedChapterID || pendingChapterID == readerSession.entries.last?.id,
               let pendingChapter = chapterByID[pendingChapterID],
               let next = neighbor(of: pendingChapter, offset: 1),
-              next.isCached else {
+              next.isCached,
+              !next.paragraphs.isEmpty else {
             return
         }
-        if next.book == nil, let selectedBook {
-            next.book = selectedBook
-        }
         pendingContinuousAttachmentChapterID = nil
+        if next.book == nil, let book = selectedBook {
+            next.book = book
+        }
         readerSession.attachNext(next)
     }
 

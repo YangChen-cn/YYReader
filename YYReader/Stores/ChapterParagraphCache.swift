@@ -28,7 +28,7 @@ final class ChapterParagraphCache {
             contentRevision: chapter.contentRevision
         )
         accessOrder &+= 1
-        if var value = values[key] {
+        if var value = values[key], !value.paragraphs.isEmpty {
             value.accessOrder = accessOrder
             values[key] = value
             return value.paragraphs

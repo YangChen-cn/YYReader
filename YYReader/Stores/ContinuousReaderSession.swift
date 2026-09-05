@@ -21,7 +21,7 @@ final class ContinuousReaderSession {
     }
 
     func reset(around chapter: Chapter?) {
-        guard let chapter, chapter.isCached else {
+        guard let chapter, chapter.isCached, !chapter.paragraphs.isEmpty else {
             entries = []
             visibleChapterID = nil
             return
@@ -37,6 +37,7 @@ final class ContinuousReaderSession {
 
     func attachNext(_ chapter: Chapter) {
         guard chapter.isCached,
+              !chapter.paragraphs.isEmpty,
               !entries.contains(where: { $0.chapter.id == chapter.id }) else {
             return
         }

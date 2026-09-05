@@ -572,67 +572,203 @@ struct ReaderPresentationTests {
         #expect(gate.accepts(candidateID: chapters[2], currentID: chapters[1], chapterIndexByID: indexes))
     }
 
-    @Test
-    @MainActor
-    func ensureReaderSessionBodiesLoadedHydratesAvailableOfflineChapters() async throws {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: config)
+    @Test @MainActor
+    func continuousReadingPreservesAllChaptersAndParagraphsInAcademicModeEvenWithMissingBookRelationship() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
         let context = container.mainContext
 
         let book = Book(
-            title: "测试小说",
-            author: "作者",
+            title: "连续阅读论文模式测试",
+            author: "测试作者",
             sourceHost: "example.com",
-            catalogURL: "https://example.com/catalog"
+            catalogURL: "https://example.com/book/academic-continuous/"
         )
-        let chapter1 = Chapter(
-            sourceURL: "https://example.com/c1",
-            title: "第1章",
-            sortIndex: 1,
-            bodyText: nil,
-            cachedAt: .now,
-            book: book
-        )
-        let chapter2 = Chapter(
-            sourceURL: "https://example.com/c2",
-            title: "第2章",
-            sortIndex: 2,
-            bodyText: "第二章正文内容",
-            cachedAt: .now,
-            book: book
-        )
-        book.chapters = [chapter1, chapter2]
         context.insert(book)
-        context.insert(chapter1)
-        context.insert(chapter2)
-        try context.save()
 
-        let persistence = OfflineChapterPersistence(modelContainer: container)
-        try await persistence.persist(
-            ChapterLoadResult(
-                title: "第1章",
-                bookTitle: nil,
-                author: nil,
-                catalogURL: nil,
-                chapterURL: try #require(URL(string: "https://example.com/c1")),
-                bodyText: "第一章持久化正文",
-                previousChapterURL: nil,
-                nextChapterURL: nil
-            ),
-            chapterID: chapter1.id,
-            cachedAt: .now
+        let chapterA = Chapter(
+            sourceURL: "https://example.com/book/academic-continuous/1.html",
+            title: "第1章 开启",
+            sortIndex: 0,
+            bodyText: "第一章第一段内容。\n\n第一章第二段内容。\n\n第一章第三段内容。",
+            cachedAt: .now,
+            book: nil
         )
+        let chapterB = Chapter(
+            sourceURL: "https://example.com/book/academic-continuous/2.html",
+            title: "第2章 进展",
+            sortIndex: 1,
+            bodyText: "第二章第一段内容。\n\n第二章第二段内容。",
+            cachedAt: .now,
+            book: nil
+        )
+        let chapterC = Chapter(
+            sourceURL: "https://example.com/book/academic-continuous/3.html",
+            title: "第3章 结论",
+            sortIndex: 2,
+            bodyText: "第三章第一段内容。\n\n第三章第二段内容。\n\n第三章第三段内容。\n\n第三章第四段内容。",
+            cachedAt: .now,
+            book: book
+        )
+
+        context.insert(chapterA)
+        context.insert(chapterB)
+        context.insert(chapterC)
+
+        book.chapters = [chapterA, chapterB, chapterC]
+        // Explicitly simulate broken inverse relationship on A and B
+        chapterA.book = nil
+        chapterB.book = nil
+        #expect(chapterA.book == nil)
+        #expect(chapterB.book == nil)
+        #expect(chapterC.book != nil)
+
+        // Set up ContinuousReaderSession and attach A, B, C
+        let session = ContinuousReaderSession()
+        session.reset(around: chapterA)
+        session.attachNext(chapterB)
+        session.attachNext(chapterC)
+
+        // Attempting duplicate attach must not duplicate entries
+        session.attachNext(chapterB)
+        session.attachNext(chapterC)
+
+        #expect(session.entries.count == 3)
+        #expect(session.entries.map(\.chapter.id) == [chapterA.id, chapterB.id, chapterC.id])
+
+        // Normal mode paragraphs
+        let normalParagraphsA = session.entries[0].paragraphs
+        let normalParagraphsB = session.entries[1].paragraphs
+        let normalParagraphsC = session.entries[2].paragraphs
+        #expect(normalParagraphsA.count == 3)
+        #expect(normalParagraphsB.count == 2)
+        #expect(normalParagraphsC.count == 4)
+
+        // Normal mode paragraph anchors
+        let normalTargetsA = normalParagraphsA.indices.map {
+            ReaderScrollTarget.paragraph(chapterID: chapterA.id, index: $0)
+        }
+        let normalTargetsB = normalParagraphsB.indices.map {
+            ReaderScrollTarget.paragraph(chapterID: chapterB.id, index: $0)
+        }
+        let normalTargetsC = normalParagraphsC.indices.map {
+            ReaderScrollTarget.paragraph(chapterID: chapterC.id, index: $0)
+        }
+
+        // Academic paper presentation:
+        // Even when chapter.book == nil, plan is successfully generated using bookIdentity
+        let planCache = AcademicPaperPlanCache()
+        let bookIdentity = book.sourceBookURL
+        let chapterIndexByID: [UUID: Int] = [chapterA.id: 0, chapterB.id: 1, chapterC.id: 2]
+
+        let planA = planCache.plan(
+            bookIdentity: bookIdentity,
+            chapter: session.entries[0].chapter,
+            position: chapterIndexByID[chapterA.id] ?? 0,
+            paragraphs: normalParagraphsA
+        )
+        let planB = planCache.plan(
+            bookIdentity: bookIdentity,
+            chapter: session.entries[1].chapter,
+            position: chapterIndexByID[chapterB.id] ?? 0,
+            paragraphs: normalParagraphsB
+        )
+        let planC = planCache.plan(
+            bookIdentity: bookIdentity,
+            chapter: session.entries[2].chapter,
+            position: chapterIndexByID[chapterC.id] ?? 0,
+            paragraphs: normalParagraphsC
+        )
+
+        // All 3 chapters have full text and all enter academic presentation
+        #expect(planA.paragraphs.count == normalParagraphsA.count)
+        #expect(planB.paragraphs.count == normalParagraphsB.count)
+        #expect(planC.paragraphs.count == normalParagraphsC.count)
+
+        #expect(planA.paragraphs.map(\.text) == normalParagraphsA)
+        #expect(planB.paragraphs.map(\.text) == normalParagraphsB)
+        #expect(planC.paragraphs.map(\.text) == normalParagraphsC)
+
+        // Academic paragraph anchors match normal targets 1:1
+        let academicTargetsA = planA.paragraphs.map {
+            ReaderScrollTarget.paragraph(chapterID: chapterA.id, index: $0.index)
+        }
+        let academicTargetsB = planB.paragraphs.map {
+            ReaderScrollTarget.paragraph(chapterID: chapterB.id, index: $0.index)
+        }
+        let academicTargetsC = planC.paragraphs.map {
+            ReaderScrollTarget.paragraph(chapterID: chapterC.id, index: $0.index)
+        }
+
+        #expect(academicTargetsA == normalTargetsA)
+        #expect(academicTargetsB == normalTargetsB)
+        #expect(academicTargetsC == normalTargetsC)
+
+        // Normal -> Academic -> Normal: session paragraphs are identical
+        #expect(session.entries[0].paragraphs == normalParagraphsA)
+        #expect(session.entries[1].paragraphs == normalParagraphsB)
+        #expect(session.entries[2].paragraphs == normalParagraphsC)
+        #expect(session.entries.count == 3)
+
+        // Verify data relationship self-healing for chapters belonging to book with chapter.book == nil
+        let chaptersToRepair = [chapterA, chapterB, chapterC]
+        for chapter in chaptersToRepair where chapter.book == nil {
+            chapter.book = book
+        }
+        #expect(chapterA.book === book)
+        #expect(chapterB.book === book)
+        #expect(chapterC.book === book)
+    }
+
+    @Test @MainActor
+    func materializesChapterBodyWhenAttachedCachedChapterHasZeroParagraphs() async throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+
+        let chapterURL = try #require(URL(string: "https://example.com/book/materialize/1.html"))
+        let p1 = "这是用于测试正文恢复与重新构建的完整段落之一，确保达到通用解析器的六十字符长度门槛。"
+        let p2 = "这是第二段测试正文内容，同样包含足够多的汉字字符以保证解析器正确提取全部有效段落文本。"
+        let html = "<html><head><title>第1章</title></head><body><div id=\"content\"><p>\(p1)</p><p>\(p2)</p></div></body></html>"
+        let loader = MockHTMLLoader(documents: [
+            chapterURL: html
+        ])
+
+        let book = Book(
+            title: "正文恢复测试",
+            author: "测试作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/book/materialize/"
+        )
+        context.insert(book)
+
+        let chapter = Chapter(
+            sourceURL: chapterURL.absoluteString,
+            title: "第1章",
+            sortIndex: 0,
+            bodyText: "",
+            book: book
+        )
+        context.insert(chapter)
+        book.chapters = [chapter]
 
         let store = LibraryStore(
             modelContext: context,
-            coordinator: NovelImportCoordinator(loader: MockHTMLLoader(documents: [:]))
+            coordinator: NovelImportCoordinator(loader: loader)
         )
-        store.restoreSelection(bookID: book.id, chapterID: chapter2.id)
-        #expect(!chapter1.isCached)
+        store.selectBook(book.id)
 
-        await store.hydrateChapterBodyIfNeeded(chapter1)
-        #expect(chapter1.isCached)
-        #expect(chapter1.paragraphs == ["第一章持久化正文"])
+        #expect(chapter.paragraphs.isEmpty)
+        #expect(!chapter.isCached)
+
+        await store.materializeChapterBody(chapter)
+
+        #expect(chapter.isCached)
+        #expect(chapter.paragraphs.count == 2)
+        #expect(chapter.paragraphs == [p1, p2])
+
+        store.readerSession.reset(around: chapter)
+        #expect(store.readerSession.entries.first?.paragraphs == [p1, p2])
     }
 
     @Test

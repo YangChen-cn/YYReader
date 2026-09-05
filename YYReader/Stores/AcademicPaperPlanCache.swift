@@ -3,6 +3,7 @@ import Foundation
 @MainActor
 final class AcademicPaperPlanCache {
     private struct Key: Hashable {
+        let bookIdentity: String
         let chapterID: UUID
         let cachedAt: Date?
         let contentRevision: Int
@@ -17,30 +18,42 @@ final class AcademicPaperPlanCache {
         self.capacity = max(capacity, 1)
     }
 
-    func plan(book: Book, chapter: Chapter, position: Int, paragraphs: [String]) -> AcademicPaperPlan {
+    func plan(bookIdentity: String, chapter: Chapter, position: Int, paragraphs: [String]) -> AcademicPaperPlan {
         let key = Key(
+            bookIdentity: bookIdentity,
             chapterID: chapter.id,
             cachedAt: chapter.cachedAt,
             contentRevision: chapter.contentRevision,
             chapterPosition: position
         )
-        if let value = values[key] {
+        if let value = values[key], !value.paragraphs.isEmpty {
             touch(key)
             return value
         }
         let value = AcademicPaperPlanner.makePlan(
-            bookIdentity: book.sourceBookURL,
+            bookIdentity: bookIdentity,
             chapterIdentity: chapter.sourceURL,
             chapterPosition: position,
             paragraphs: paragraphs
         )
-        values[key] = value
-        touch(key)
-        while values.count > capacity, let oldest = recency.first {
-            recency.removeFirst()
-            values.removeValue(forKey: oldest)
+        if !paragraphs.isEmpty {
+            values[key] = value
+            touch(key)
+            while values.count > capacity, let oldest = recency.first {
+                recency.removeFirst()
+                values.removeValue(forKey: oldest)
+            }
         }
         return value
+    }
+
+    func plan(book: Book, chapter: Chapter, position: Int, paragraphs: [String]) -> AcademicPaperPlan {
+        plan(
+            bookIdentity: book.sourceBookURL,
+            chapter: chapter,
+            position: position,
+            paragraphs: paragraphs
+        )
     }
 
     private func touch(_ key: Key) {
