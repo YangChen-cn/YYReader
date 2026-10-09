@@ -49,7 +49,11 @@ struct ReaderContinuationBoundary: View {
             }
         }
         .font(.callout)
+        #if os(iOS)
+        .frame(minHeight: 44)
+        #else
         .frame(height: 36)
+        #endif
         .frame(maxWidth: .infinity)
         .onAppear(perform: prepareIfNeeded)
         .onChange(of: status) { _, _ in prepareIfNeeded() }

@@ -41,7 +41,7 @@ xcodegen generate
 ./script/build_and_run.sh run
 ```
 
-日常开发、人工验收和需要交付给用户运行的 Debug App 必须使用上述脚本。不要把直接调用
+macOS 日常开发、人工验收和需要交付给用户运行的 Mac Debug App 必须使用上述脚本。仅做 iOS 或 Windows 任务时不要求运行它。不要把直接调用
 `xcodebuild build` 生成的 `DerivedData/Build/Products/*/YYReader.app` 当作可运行交付；
 该命令仅可用于自动化构建校验。脚本会更新 `dist/YYReader.app`，完成便携化、签名和校验后，
 再从临时副本启动它。
@@ -64,6 +64,15 @@ xcodebuild test \
 
 普通功能开发、修复、测试和 Debug 交付不得额外构建 Release，也不得生成 DMG。Release 产物位于
 `dist/YYReader-<version>-arm64.dmg`，不生成 ZIP。`DerivedData/` 与 `dist/` 不提交 Git。
+
+## 任务范围与避免无意义验证
+
+- 只完成用户指定的平台和任务。iOS 发布不得顺带构建、测试或启动 Mac / Windows，也不得生成 Mac DMG；其他平台同理。只有新的共用逻辑改动确实影响其他平台，且有具体验证理由，或用户明确要求时，才扩大范围。
+- 仅修改版本号、发布说明、下载链接、About 文案或打包配置时，复用同一份功能代码已有的测试结果，不重跑全量测试、XCUITest，也不启动 App、模拟器或浏览器。
+- 版本发布只做必要的目标平台打包，以及版本、架构、资源、包完整性和校验值检查。产物已经构建且源码未再变化时，直接使用该产物，不重复构建。
+- 功能修改按风险选择最小相关测试。只有重大功能新增、影响范围不明的核心逻辑变动、具体回归证据或用户明确要求时，才运行全量测试。相关检查通过后，没有新变化或新问题就停止验证并交付。
+- 不以“保险起见”“交付前必须”为由重复已经通过的检查。耗时操作必须能说明它要验证的具体变化；没有具体目的就不执行。
+- 不顺手扩展功能、补无关测试、引入框架或改造发布流程。本项目为个人使用，优先直接、简单、可复用的实现，避免过度工程。
 
 ## 目录与职责
 
@@ -167,7 +176,7 @@ xcodebuild test \
 
 ## 测试要求
 
-修改相关代码后运行风险相称的测试；交付前运行完整测试。
+修改功能代码后运行风险相称的相关测试；是否运行完整测试遵循“任务范围与避免无意义验证”，交付和发布本身不构成重跑理由。
 
 至少覆盖：
 
@@ -188,19 +197,18 @@ Fixture 必须精简且使用自造段落，不提交完整版权章节内容。
 - 提交 `project.yml` 和重新生成的 `YYReader.xcodeproj`，保证仓库可直接打开。
 - 默认不执行破坏性 Git 命令，不使用 `git reset --hard` 或强制推送。
 - GitHub 发布前确认仓库可见性；未经用户明确要求不创建公开仓库。
-- 仅在发布任务中执行 Release 验收；Release 必须为 arm64、ad-hoc 签名，并通过
+- 仅在对应平台发布任务中执行 Release 验收；macOS Release 必须为 arm64、ad-hoc 签名，并通过
   `codesign --verify --strict` 和 DMG 完整性检查。
 - 发布新版本时必须同步更新 `project.yml` 的版本号、`README.md`、`RELEASE_NOTES.md` 和 About 页可见的更新内容；运行 `xcodegen generate` 后提交重新生成的工程文件。
-- 发布流程必须记录 Release Notes，使用 `./script/package_release.sh` 生成 `dist/YYReader-<version>-arm64.dmg`，验证 DMG 后再创建版本标签并推送 `main` 与标签。
+- 发布流程必须记录 Release Notes。macOS 发布使用 `./script/package_release.sh` 生成并验证 DMG；iOS 发布使用 `./script/build_ios.sh release` 生成并验证 IPA，供侧载工具重新签名。只更新指定平台版本，随后创建对应版本标签并推送 `main` 与标签。
 
 ## 完成标准
 
 只有同时满足以下条件才视为完成：
 
 - XcodeGen 可重新生成工程。
-- 日常开发和修复使用 `./script/build_and_run.sh run` 完成 Debug 构建与运行交付；只有发布任务才要求
-  Release 构建和 DMG 打包通过。
-- 相关测试全部通过。
+- 仅在需要交付 Mac Debug App 的开发和修复任务中使用 `./script/build_and_run.sh run`；发布只要求指定平台的产物打包通过，不额外启动其他平台 App。
+- 本次变动必要的相关检查通过；功能代码未变时可复用此前通过的测试，不重复全量验证。
 - 发布任务中的 Release 二进制仅包含要求的架构；非发布任务不额外生成 Release 产物。
 - App Sandbox 权限正确。
 - App 图标和资源已进入 App 包。

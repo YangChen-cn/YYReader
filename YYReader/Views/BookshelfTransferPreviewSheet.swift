@@ -47,7 +47,9 @@ struct BookshelfTransferPreviewSheet: View {
             }
         }
         .padding(24)
+        #if os(macOS)
         .frame(minWidth: 420)
+        #endif
     }
 
     private func importAndDismiss() {

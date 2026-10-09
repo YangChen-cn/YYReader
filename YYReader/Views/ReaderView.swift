@@ -5,6 +5,7 @@ struct ReaderView: View {
     let keyboardNavigationEnabled: Bool
     @AppStorage(ReaderPreferenceKeys.theme) private var themeName = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentationModeName = ReaderPresentationMode.normal.rawValue
+    @AppStorage(ReaderPreferenceKeys.pageTurnMode) private var pageTurnMode = ReaderPageTurnMode.verticalScroll.rawValue
 
     var body: some View {
         let theme = ReaderTheme(rawValue: themeName) ?? .system
@@ -16,10 +17,19 @@ struct ReaderView: View {
 
             Group {
                 if let chapter = store.selectedChapter, chapter.isCached {
+                    #if os(iOS)
+                    if pageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue && !isAcademic {
+                        MobilePagedReaderView(store: store, chapter: chapter)
+                            .id(chapter.id)
+                    } else {
+                        ReaderContentView(store: store, keyboardNavigationEnabled: keyboardNavigationEnabled)
+                    }
+                    #else
                     ReaderContentView(
                         store: store,
                         keyboardNavigationEnabled: keyboardNavigationEnabled
                     )
+                    #endif
                 } else if store.selectedBook?.isLocalText == true {
                     ContentUnavailableView(
                         "缺少本地正文",
@@ -42,12 +52,21 @@ struct ReaderView: View {
             .foregroundStyle(isAcademic ? Color(white: 0.12) : theme.foreground)
         }
         .overlay(alignment: .bottom) {
-            if store.selectedChapter != nil {
+            if store.selectedChapter != nil && showsProgressOverlay {
                 ReaderReadingProgressFooter(
                     text: isAcademic ? store.academicFooterText : store.readerProgressText,
                     foreground: isAcademic ? Color(white: 0.30) : theme.accent
                 )
             }
         }
+    }
+
+    private var showsProgressOverlay: Bool {
+        #if os(iOS)
+        pageTurnMode != ReaderPageTurnMode.horizontalPages.rawValue
+            || presentationModeName == ReaderPresentationMode.academicPaper.rawValue
+        #else
+        true
+        #endif
     }
 }

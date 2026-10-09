@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 
 enum ReaderKeyboardCommand: Equatable {
     case moveUp
@@ -6,6 +8,7 @@ enum ReaderKeyboardCommand: Equatable {
     case pageBackward
     case pageForward
 
+    #if os(macOS)
     static func resolve(keyCode: UInt16, modifierFlags: NSEvent.ModifierFlags) -> Self? {
         let unsupportedModifiers: NSEvent.ModifierFlags = [.command, .control, .option]
         guard modifierFlags.intersection(unsupportedModifiers).isEmpty else { return nil }
@@ -18,8 +21,10 @@ enum ReaderKeyboardCommand: Equatable {
         default: return nil
         }
     }
+    #endif
 }
 
+#if os(macOS)
 enum ReaderKeyboardRouting {
     @MainActor
     static func shouldDeferToFocusedControl(
@@ -69,3 +74,4 @@ enum ReaderKeyboardRouting {
             || responder is NSSegmentedControl
     }
 }
+#endif

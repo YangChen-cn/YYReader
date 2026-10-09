@@ -82,8 +82,11 @@ private struct ReaderChapterNavigationButton: View {
                 }
             }
             .foregroundStyle(isHovered && isEnabled ? foreground : secondaryForeground)
-            .contentShape(.rect)
             .padding(.vertical, 4)
+            #if os(iOS)
+            .frame(minWidth: 88, minHeight: 44)
+            #endif
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)

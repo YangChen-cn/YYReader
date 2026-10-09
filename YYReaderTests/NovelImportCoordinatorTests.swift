@@ -5,6 +5,50 @@ import Testing
 @MainActor
 struct NovelImportCoordinatorTests {
     @Test
+    func nextPageWithDifferentChapterNumberDoesNotMergeEntireNovel() async throws {
+        let first = try #require(URL(string: "https://example.com/book/1.html"))
+        let second = try #require(URL(string: "https://example.com/book/2.html"))
+        let loader = MockHTMLLoader(documents: [
+            first: try TestFixture.sharedHTML("next-page-first"),
+            second: try TestFixture.sharedHTML("next-page-second")
+        ])
+        let chapter = try await NovelImportCoordinator(loader: loader).loadChapterContent(from: first)
+        #expect(chapter.title == "第1章 开始")
+        #expect(!chapter.bodyText.contains("第二章的自造正文"))
+        #expect(chapter.nextChapterURL == second)
+        #expect(loader.requestedURLs == [first, second])
+    }
+
+    @Test
+    func expandedCatalogDOMReplacesStaticPreviewBeforeImport() async throws {
+        let catalog = try #require(URL(string: "https://example.com/book/list.html"))
+        let chapter = try #require(URL(string: "https://example.com/book/1.html"))
+        let loader = RenderedDOMFallbackLoader(staticDocuments: [
+            catalog: """
+                <h1>展开测试</h1><ul><li><a href="3.html">第3章 最新</a></li>
+                <li><a href="2.html">第2章 中途</a></li></ul>
+                <a href="javascript:void(0)">[展开完整列表]</a>
+                """,
+            chapter: """
+                <h1>第1章 开始</h1><div id="content">
+                <p>这是展开目录后正确选择的第一章，用自造的足够长段落验证导入没有选择最新章节。</p>
+                <p>正文第二段继续确保解析阈值稳定通过，完整目录由渲染后的 DOM 提供，不能保留旧预览顺序。</p>
+                </div><a href="2.html">下一章</a>
+                """
+        ], renderedDocuments: [catalog: """
+            <h1>展开测试</h1><ul>
+            <li><a href="1.html">第1章 开始</a></li>
+            <li><a href="2.html">第2章 中途</a></li>
+            <li><a href="3.html">第3章 最新</a></li></ul>
+            """])
+        let result = try await NovelImportCoordinator(loader: loader).importNovel(from: catalog)
+        #expect(result.chapterURL == chapter)
+        #expect(result.catalog.map(\.title) == ["第1章 开始", "第2章 中途", "第3章 最新"])
+        #expect(result.catalogIsComplete)
+        #expect(loader.renderedURLs == [catalog])
+    }
+
+    @Test
     func acceptsDocumentedQidiyExampleMetadataAndTwoPageChapter() async throws {
         let chapter1 = URL(string: "https://www.qidiy.com/book/75509/35622389.html")!
         let chapter2 = URL(string: "https://www.qidiy.com/book/75509/35622389/2.html")!

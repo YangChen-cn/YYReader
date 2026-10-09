@@ -8,6 +8,7 @@ struct LibraryRootView: View {
     @State private var readerColumnVisibility: NavigationSplitViewVisibility = .detailOnly
     @State private var isReading = false
     @State private var showingAddURL = false
+    @State private var pendingURL: String?
     @State private var showingAppearancePopover = false
     @State private var showingAppearanceInspector = false
     @State private var showingDownloadProgress = false
@@ -100,8 +101,8 @@ struct LibraryRootView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingAddURL) {
-            AddURLSheet(onSubmit: store.startImportURL)
+        .sheet(isPresented: $showingAddURL, onDismiss: submitPendingURL) {
+            AddURLSheet { pendingURL = $0 }
         }
         .sheet(item: $bookshelfTransfer.pendingImport) { pendingImport in
             BookshelfTransferPreviewSheet(
@@ -179,6 +180,12 @@ struct LibraryRootView: View {
     }
 
     private func showAddURL() { showingAddURL = true }
+
+    private func submitPendingURL() {
+        guard let pendingURL else { return }
+        self.pendingURL = nil
+        store.startImportURL(pendingURL)
+    }
     private func confirmDelete() { confirmingDelete = true }
     private func importBookshelf() { bookshelfTransfer.chooseImportFile(for: store) }
     private func importBookshelfFromClipboard() { bookshelfTransfer.importFromClipboard(for: store) }

@@ -44,7 +44,8 @@ actor NovelProcessingWorker {
 
     func aggregateChapterPages(
         _ pages: [ParsedChapterPage],
-        sourceURL: URL
+        sourceURL: URL,
+        nextChapterOverride: URL? = nil
     ) throws -> ChapterLoadResult {
         guard let firstPage = pages.first, let finalPage = pages.last else {
             throw NovelParsingError.noReadableContent
@@ -65,7 +66,7 @@ actor NovelProcessingWorker {
             chapterURL: canonicalChapterURL(sourceURL),
             bodyText: paragraphs.joined(separator: "\n\n"),
             previousChapterURL: firstPage.previousChapterURL,
-            nextChapterURL: finalPage.nextChapterURL
+            nextChapterURL: nextChapterOverride ?? finalPage.nextChapterURL
         )
     }
 

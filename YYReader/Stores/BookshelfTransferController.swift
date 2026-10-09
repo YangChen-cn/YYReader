@@ -15,8 +15,10 @@ final class BookshelfTransferController {
     }
 
     func chooseImportFile(for store: LibraryStore) {
+        #if os(macOS)
         guard !isWorking, let url = BookshelfTransferPanel.chooseImportFile() else { return }
         loadImport(from: url, for: store)
+        #endif
     }
 
     func importFromClipboard(for store: LibraryStore) {
@@ -48,6 +50,7 @@ final class BookshelfTransferController {
         }
     }
 
+    #if os(macOS)
     func exportToFile(from store: LibraryStore) {
         guard !isWorking, store.flushPendingProgress() else { return }
         let document = store.bookshelfTransferDocument()
@@ -70,6 +73,8 @@ final class BookshelfTransferController {
         }
     }
 
+    #endif
+
     func copyExportJSON(from store: LibraryStore) {
         guard !isWorking, store.flushPendingProgress() else { return }
         do {
@@ -84,7 +89,7 @@ final class BookshelfTransferController {
         }
     }
 
-    private func loadImport(from url: URL, for store: LibraryStore) {
+    func loadImport(from url: URL, for store: LibraryStore) {
         isWorking = true
         Task { [weak self] in
             guard let self else { return }

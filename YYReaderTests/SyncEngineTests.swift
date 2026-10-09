@@ -233,7 +233,7 @@ struct SyncEngineTests {
             SyncSnapshot(device: .windows, updatedAt: Date(timeIntervalSince1970: 110), books: [windowsBook])
         )
         try windowsData.write(to: windowsURL)
-        let engine = SyncEngine()
+        let engine = SyncEngine(device: .mac)
         let local = SyncBookRecord(
             sourceURL: "https://example.com/mac/",
             title: "Mac 书籍",
@@ -283,7 +283,7 @@ struct SyncEngineTests {
             author: "作者",
             updatedAt: Date(timeIntervalSince1970: 100)
         )
-        let engine = SyncEngine()
+        let engine = SyncEngine(device: .mac)
 
         let publishedAt = try await engine.publishLocal(
             selectedFolder: selectedFolder,
@@ -319,7 +319,7 @@ struct SyncEngineTests {
             progress: 0.5,
             updatedAt: Date(timeIntervalSince1970: 100)
         )
-        let engine = SyncEngine()
+        let engine = SyncEngine(device: .mac)
 
         try SyncSnapshotCodec.encode(SyncSnapshot(device: .windows, books: []))
             .write(to: windowsURL)
@@ -381,7 +381,7 @@ struct SyncEngineTests {
         let originalMacData = try SyncSnapshotCodec.encode(SyncSnapshot(device: .mac, books: []))
         try originalMacData.write(to: macURL)
         try Data("{".utf8).write(to: windowsURL)
-        let engine = SyncEngine()
+        let engine = SyncEngine(device: .mac)
 
         await #expect(throws: SyncError.self) {
             _ = try await engine.synchronize(selectedFolder: selectedFolder, localBooks: [])

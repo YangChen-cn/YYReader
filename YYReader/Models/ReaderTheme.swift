@@ -75,6 +75,7 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
     ) {
         switch self {
         case .system:
+            #if os(macOS)
             (
                 Color(nsColor: .textBackgroundColor),
                 Color(nsColor: .controlAccentColor),
@@ -83,6 +84,13 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
                 Color(nsColor: .tertiaryLabelColor),
                 Color(nsColor: .separatorColor)
             )
+            #else
+            (
+                Color(uiColor: .systemBackground), Color.accentColor,
+                Color(uiColor: .label), Color(uiColor: .secondaryLabel),
+                Color(uiColor: .tertiaryLabel), Color(uiColor: .separator)
+            )
+            #endif
         case .light:
             (
                 Color(red: 0.975, green: 0.978, blue: 0.973),

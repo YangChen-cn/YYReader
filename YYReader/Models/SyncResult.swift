@@ -3,6 +3,7 @@ import Foundation
 struct SyncResult: Equatable, Sendable {
     var books: [SyncBookRecord]
     var synchronizedAt: Date
-    var windowsFileSignature: SyncFileSignature?
+    var remoteFileSignatures: [SyncDevice: SyncFileSignature]
+    var windowsFileSignature: SyncFileSignature? { remoteFileSignatures[.windows] }
     var remoteCapabilities: [String]
 }

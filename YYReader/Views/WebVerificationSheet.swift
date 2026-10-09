@@ -35,7 +35,9 @@ struct WebVerificationSheet: View {
                     .background(.bar)
                 }
         }
+        #if os(macOS)
         .frame(minWidth: 760, minHeight: 560)
+        #endif
         .interactiveDismissDisabled()
         .task(id: request.id) {
             do {

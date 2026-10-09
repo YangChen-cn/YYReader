@@ -1,0 +1,70 @@
+{
+  "description": "Synthetic pages only; no third-party novel text or network required.",
+  "cases": [
+    {
+      "case": "latest-update-outside-catalog",
+      "kind": "catalog",
+      "url": "https://example.com/novel/",
+      "expected": {
+        "chapterTitles": [
+          "第1章 开始",
+          "第2章 中途",
+          "第3章 结尾"
+        ]
+      }
+    },
+    {
+      "case": "article-text-body",
+      "kind": "chapter",
+      "url": "https://example.com/wangluo/12/100.html",
+      "expected": {
+        "paragraphCount": 2,
+        "previousChapterURL": null,
+        "nextChapterURL": "https://example.com/wangluo/12/101.html"
+      }
+    },
+    {
+      "case": "novel-content-body",
+      "kind": "chapter",
+      "url": "https://example.com/book/1.html",
+      "expected": {
+        "paragraphCount": 2,
+        "excludedText": [
+          "作者："
+        ]
+      }
+    },
+    {
+      "case": "last-chapter-catalog-link",
+      "kind": "chapter",
+      "url": "https://example.com/novel/3.html",
+      "expected": {
+        "nextChapterURL": null
+      }
+    },
+    {
+      "case": "ajax-catalog-preview",
+      "kind": "catalog-error",
+      "url": "https://example.com/novel/list.html",
+      "expected": {
+        "error": "catalogNeedsExpansion"
+      }
+    }
+  ],
+  "chapterFlow": {
+    "startURL": "https://example.com/book/1.html",
+    "documents": {
+      "https://example.com/book/1.html": "next-page-first.html",
+      "https://example.com/book/2.html": "next-page-second.html"
+    },
+    "expected": {
+      "chapterTitle": "第1章 开始",
+      "nextChapterURL": "https://example.com/book/2.html",
+      "excludedBodyText": "第二章的自造正文",
+      "requestedURLs": [
+        "https://example.com/book/1.html",
+        "https://example.com/book/2.html"
+      ]
+    }
+  }
+}

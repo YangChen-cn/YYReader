@@ -24,6 +24,8 @@ final class WebKitHostSession: NSObject {
     private var activeNavigation: WKNavigation?
     @ObservationIgnored
     private var activeTimeoutTask: Task<Void, Never>?
+    @ObservationIgnored
+    private var inspectingLoadID: UUID?
 
     init(
         host: String,
@@ -109,9 +111,21 @@ final class WebKitHostSession: NSObject {
     }
 
     private func inspectFinishedPage() async {
-        guard let activeLoad else { return }
+        guard let activeLoad, inspectingLoadID != activeLoad.id else { return }
+        inspectingLoadID = activeLoad.id
+        defer {
+            if inspectingLoadID == activeLoad.id { inspectingLoadID = nil }
+        }
         do {
+            _ = try await webView.callAsyncJavaScript(
+                CatalogExpansionScripts.expand,
+                arguments: [:],
+                in: nil,
+                contentWorld: .page
+            )
+            guard self.activeLoad?.id == activeLoad.id else { return }
             let result = try await webView.evaluateJavaScript("document.documentElement.outerHTML")
+            guard self.activeLoad?.id == activeLoad.id else { return }
             guard let html = result as? String, !html.isEmpty, let finalURL = webView.url else {
                 throw HTMLLoadError.invalidResponse
             }
@@ -123,6 +137,7 @@ final class WebKitHostSession: NSObject {
             }
 
             await synchronizeCookies(for: finalURL)
+            guard self.activeLoad?.id == activeLoad.id else { return }
             onVerificationCompleted?(self)
             cancelActiveTimeout()
             self.activeLoad = nil
@@ -136,6 +151,7 @@ final class WebKitHostSession: NSObject {
             ))
             startNextLoadIfNeeded()
         } catch {
+            guard self.activeLoad?.id == activeLoad.id else { return }
             failCurrentLoad(error)
         }
     }

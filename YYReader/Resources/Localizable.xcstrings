@@ -1,6 +1,291 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "本次更新：上下滚动与左右翻页、TXT 导入、离线缓存和跨端书架传输。" : {
+      "extractionState" : "manual"
+    },
+    "上下滚动" : {
+      "extractionState" : "manual"
+    },
+    "左右翻页" : {
+      "extractionState" : "manual"
+    },
+    "翻页方式" : {
+      "extractionState" : "manual"
+    },
+    "阅读方式" : {
+      "extractionState" : "manual"
+    },
+    "上一页" : {
+      "extractionState" : "manual"
+    },
+    "下一页" : {
+      "extractionState" : "manual"
+    },
+    "正在分页…" : {
+      "extractionState" : "manual"
+    },
+    "第 %lld / %lld 页" : {
+      "extractionState" : "manual"
+    },
+    "章节分页失败：%@" : {
+      "extractionState" : "manual"
+    },
+    "上下滚动支持连续阅读；左右翻页按屏幕分页，章末继续左滑进入下一章。左右翻页使用常规排版，学术论文使用上下滚动。" : {
+      "extractionState" : "manual"
+    },
+    "" : {
+
+    },
+    "· · ·" : {
+
+    },
+    "(%@)" : {
+
+    },
+    "[%@]" : {
+
+    },
+    "* Manuscript received April 12, 2026; revised July 19, 2026. This work was supported in part by the National Textual Analytics Initiative under Grant #2024-TA-092." : {
+
+    },
+    "© 2026 IEEE. Personal use permitted." : {
+
+    },
+    "❖" : {
+
+    },
+    "❦" : {
+
+    },
+    "95% CI" : {
+
+    },
+    "Abstract—" : {
+
+    },
+    "COMPARATIVE ESTIMATES FOR EMPIRICAL TEXTUAL INDICATORS" : {
+
+    },
+    "DOI: 10.1109/TATS.2026.3141592" : {
+
+    },
+    "Estimate" : {
+
+    },
+    "Fig. %@. " : {
+
+    },
+    "IEEE TRANSACTIONS ON APPLIED TEXTUAL SYSTEMS, VOL. 32, NO. 4" : {
+
+    },
+    "IEEE TRANSACTIONS ON APPLIED TEXTUAL SYSTEMS, VOL. 32, NO. 4, AUGUST 2026" : {
+
+    },
+    "Index Terms—" : {
+
+    },
+    "Indicator" : {
+
+    },
+    "Note. *** p < 0.001, ** p < 0.01, * p < 0.05. Estimates are standardized coefficients; CI = confidence interval. Deterministically generated." : {
+
+    },
+    "p-value" : {
+
+    },
+    "PREPRINT" : {
+
+    },
+    "SECTION: %@" : {
+
+    },
+    "Standardized trajectory across sequential evaluation epochs. The blue solid curve depicts the observed representation metrics; the dashed rule tracks baseline convergence under fixed calibration." : {
+
+    },
+    "TABLE %@" : {
+
+    },
+    "The authors are with the Department of Computational Textual Studies, Institute of Fiction Systems (e-mail: yy.reader@research.org)." : {
+
+    },
+    "Y. Y. Research Group*, Senior Member, IEEE, and Project Collaborators" : {
+
+    },
+    "Y. Y. RESEARCH: %@" : {
+
+    },
+    "YYReader" : {
+      "extractionState" : "manual"
+    },
+    "上次同步" : {
+      "extractionState" : "manual"
+    },
+    "书架" : {
+      "extractionState" : "manual"
+    },
+    "书架与阅读进度同步" : {
+      "extractionState" : "manual"
+    },
+    "书架还是空的" : {
+      "extractionState" : "manual"
+    },
+    "从书架中打开一本小说，或选择一个章节。" : {
+
+    },
+    "从剪贴板导入书架" : {
+      "extractionState" : "manual"
+    },
+    "关于" : {
+      "extractionState" : "manual"
+    },
+    "关闭状态" : {
+      "extractionState" : "manual"
+    },
+    "删除" : {
+      "extractionState" : "manual"
+    },
+    "刷新目录" : {
+      "extractionState" : "manual"
+    },
+    "原生阅读 · 与 Mac 共用解析、缓存和进度逻辑" : {
+      "extractionState" : "manual"
+    },
+    "取消下载" : {
+      "extractionState" : "manual"
+    },
+    "在“文件”中选择共享文件夹。iOS 写入 YYReaderSync/ios.json，读取 Mac 和 Windows 快照。同步不包含正文；本地 TXT 需在各设备分别导入。文件提供商的更新速度可能不同。" : {
+      "extractionState" : "manual"
+    },
+    "复制书架 JSON" : {
+      "extractionState" : "manual"
+    },
+    "好" : {
+      "extractionState" : "manual"
+    },
+    "字号" : {
+      "extractionState" : "manual"
+    },
+    "学术论文" : {
+      "extractionState" : "manual"
+    },
+    "完成" : {
+      "extractionState" : "manual"
+    },
+    "完整目录需要网页展开，但未能载入完整章节列表。请稍后重试或换一个目录网址。" : {
+      "extractionState" : "manual"
+    },
+    "导入 TXT" : {
+      "extractionState" : "manual"
+    },
+    "导入书架文件" : {
+      "extractionState" : "manual"
+    },
+    "导入书架预览" : {
+
+    },
+    "导入本地 TXT" : {
+
+    },
+    "导出书架文件" : {
+      "extractionState" : "manual"
+    },
+    "已到本书末尾" : {
+
+    },
+    "常规" : {
+      "extractionState" : "manual"
+    },
+    "开始阅读" : {
+      "extractionState" : "manual"
+    },
+    "操作失败" : {
+      "extractionState" : "manual"
+    },
+    "无法选择文件夹" : {
+      "extractionState" : "manual"
+    },
+    "检测到 %@ 本小说。导入会更新已存在书籍的元数据和阅读位置，但不会导入正文缓存。" : {
+
+    },
+    "正文会复制到 YYReader，本地文件之后可以移动或删除。" : {
+
+    },
+    "正文宽度" : {
+      "extractionState" : "manual"
+    },
+    "段落间距" : {
+      "extractionState" : "manual"
+    },
+    "添加小说" : {
+      "extractionState" : "manual"
+    },
+    "添加小说章节网址，或导入本地 TXT。" : {
+      "extractionState" : "manual"
+    },
+    "添加网页" : {
+      "extractionState" : "manual"
+    },
+    "清除正文缓存" : {
+      "extractionState" : "manual"
+    },
+    "目录" : {
+      "extractionState" : "manual"
+    },
+    "窄屏自动使用单栏。文字内容保持不变。" : {
+      "extractionState" : "manual"
+    },
+    "立即同步" : {
+      "extractionState" : "manual"
+    },
+    "粘贴任意章节 URL。YYReader 会识别小说、目录和章节分页。" : {
+
+    },
+    "继续阅读" : {
+      "extractionState" : "manual"
+    },
+    "缓存全书" : {
+      "extractionState" : "manual"
+    },
+    "缓存后续章节" : {
+      "extractionState" : "manual"
+    },
+    "缓存当前章" : {
+      "extractionState" : "manual"
+    },
+    "编辑书籍信息" : {
+
+    },
+    "编辑信息" : {
+      "extractionState" : "manual"
+    },
+    "网站要求验证时，请手动完成；不绕过登录或付费访问。" : {
+      "extractionState" : "manual"
+    },
+    "行距" : {
+      "extractionState" : "manual"
+    },
+    "设置" : {
+      "extractionState" : "manual"
+    },
+    "请在此设备重新导入同一 TXT 文件。书架同步不会传输小说正文。" : {
+
+    },
+    "选择共享文件夹" : {
+      "extractionState" : "manual"
+    },
+    "选择小说和章节，或继续上次阅读。" : {
+      "extractionState" : "manual"
+    },
+    "重试加载" : {
+      "extractionState" : "manual"
+    },
+    "阅读外观" : {
+      "extractionState" : "manual"
+    },
+    "阅读设置" : {
+      "extractionState" : "manual"
+    }
   },
   "version" : "1.0"
 }

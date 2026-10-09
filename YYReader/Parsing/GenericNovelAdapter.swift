@@ -33,20 +33,20 @@ struct GenericNovelAdapter: NovelSourceAdapter {
             author: metadata.author,
             paragraphs: paragraphs,
             catalogURL: catalogURL,
-            previousChapterURL: try navigationURL(
+            previousChapterURL: chapterURL(try navigationURL(
                 in: document,
                 labels: ["上一章", "上一章节", "前一章"],
                 rel: "prev",
                 fallbackSelectors: [".prev_page a"],
                 baseURL: loaded.finalURL
-            ),
-            nextChapterURL: try navigationURL(
+            ), excluding: catalogURL),
+            nextChapterURL: chapterURL(try navigationURL(
                 in: document,
                 labels: ["下一章", "下一章节", "后一章"],
                 rel: "next",
                 fallbackSelectors: [".next_page_links a"],
                 baseURL: loaded.finalURL
-            ),
+            ), excluding: catalogURL),
             nextPageURL: try navigationURL(
                 in: document,
                 labels: ["下一页", "下页"],
@@ -62,6 +62,9 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         let title = metadata.bookTitle ?? headingTitle ?? "未命名小说"
         let seeds = try chapterSeeds(in: document, baseURL: loaded.finalURL)
         guard !seeds.isEmpty else { throw NovelParsingError.missingCatalog }
+        if try requiresCatalogExpansion(in: document) {
+            throw NovelParsingError.catalogNeedsExpansion
+        }
 
         return ParsedBookCatalog(
             title: title,
@@ -75,10 +78,23 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         )
     }
 
+    private func requiresCatalogExpansion(in document: Document) throws -> Bool {
+        for control in try document.select("a[href^=javascript], button[type=button]").array() {
+            let label = try control.text().filter { !$0.isWhitespace && !"[]【】".contains($0) }
+            if CatalogExpansionScripts.labels.contains(label),
+               try control.attr("data-yyreader-expanded") != "true" {
+                return true
+            }
+        }
+        return false
+    }
+
     private func bestContentCandidate(in document: Document) throws -> Element? {
         let dedicated = try document.select(
             "[itemprop=articleBody], #content, #chaptercontent, #chapter-content, "
-                + "#nr1, .chapter-content, .read-content, .post-content, .entry-content, .content"
+                + "#nr1, .chapter-content, .read-content, .post-content, .entry-content, "
+                + "[class*=article-text], [class*=article-body], .article-content, "
+                + "#novel-content, .novel-content, .content"
         ).array()
         if let candidate = try dedicated.max(by: { try score($0) < score($1) }),
            try score(candidate) >= 60 {
@@ -362,17 +378,17 @@ struct GenericNovelAdapter: NovelSourceAdapter {
             "ul", "ol"
         ]
         let containers = try selectors.flatMap { try document.select($0).array() }
-        let chapterURLs = try Set(
+        let catalogAnchorIDs = try Set(
             containers
-                .map { try chapterSeeds(in: $0, baseURL: baseURL) }
-                .filter { $0.count >= 2 }
-                .flatMap { $0.map { $0.url.absoluteString } }
+                .filter { try chapterSeeds(in: $0, baseURL: baseURL).count >= 2 }
+                .flatMap { try $0.select("a").array() }
+                .map(ObjectIdentifier.init)
         )
-        if !chapterURLs.isEmpty {
+        if !catalogAnchorIDs.isEmpty {
             return try chapterSeeds(
                 from: document.select("a").array(),
                 baseURL: baseURL,
-                restrictingTo: chapterURLs
+                restrictingTo: catalogAnchorIDs
             )
         }
         return try chapterSeeds(from: document.select("a").array(), baseURL: baseURL)
@@ -385,7 +401,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
     private func chapterSeeds(
         from anchors: [Element],
         baseURL: URL,
-        restrictingTo allowedURLs: Set<String>? = nil
+        restrictingTo allowedAnchorIDs: Set<ObjectIdentifier>? = nil
     ) throws -> [ChapterSeed] {
         var seen = Set<String>()
         var seeds: [ChapterSeed] = []
@@ -394,7 +410,7 @@ struct GenericNovelAdapter: NovelSourceAdapter {
             guard isLikelyChapterTitle(chapterTitle),
                   let url = HTMLParsingSupport.absoluteURL(for: anchor, relativeTo: baseURL),
                   HTMLParsingSupport.isSameOrigin(url, as: baseURL),
-                  allowedURLs?.contains(url.absoluteString) ?? true,
+                  allowedAnchorIDs?.contains(ObjectIdentifier(anchor)) ?? true,
                   seen.insert(url.absoluteString).inserted else {
                 continue
             }
@@ -445,6 +461,15 @@ struct GenericNovelAdapter: NovelSourceAdapter {
             }
         }
         return nil
+    }
+
+    private func chapterURL(_ url: URL?, excluding catalogURL: URL?) -> URL? {
+        guard let url else { return nil }
+        guard let catalogURL else { return url }
+        // First/last chapters may render enabled-looking navigation links back
+        // to the catalog. Those links are not readable neighboring chapters.
+        return URLCanonicalizer.canonicalString(url.absoluteString)
+            == URLCanonicalizer.canonicalString(catalogURL.absoluteString) ? nil : url
     }
 
     private func navigationURL(

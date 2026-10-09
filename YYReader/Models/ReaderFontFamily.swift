@@ -22,7 +22,7 @@ enum ReaderFontFamily: String, CaseIterable, Identifiable {
         case .system: .system(size: size)
         case .serif: .system(size: size, design: .serif)
         case .rounded: .system(size: size, design: .rounded)
-        case .kaiti: .custom("Kaiti SC", size: size, relativeTo: .body)
+        case .kaiti: .custom("Kaiti SC", fixedSize: size)
         }
     }
 }

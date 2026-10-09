@@ -1,6 +1,7 @@
 import SwiftUI
 @preconcurrency import WebKit
 
+#if os(macOS)
 struct WebVerificationWebView: NSViewRepresentable {
     let session: WebKitHostSession
 
@@ -14,3 +15,15 @@ struct WebVerificationWebView: NSViewRepresentable {
         webView.removeFromSuperview()
     }
 }
+#else
+struct WebVerificationWebView: UIViewRepresentable {
+    let session: WebKitHostSession
+
+    func makeUIView(context: Context) -> WKWebView {
+        session.webView.removeFromSuperview()
+        return session.webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {}
+}
+#endif

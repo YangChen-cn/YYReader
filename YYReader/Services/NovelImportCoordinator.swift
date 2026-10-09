@@ -124,6 +124,7 @@ final class NovelImportCoordinator {
         let firstPage = try await parseChapterPage(firstDocument)
         var pages = [firstPage]
         var pageURL = firstPage.nextPageURL
+        var nextChapterOverride: URL?
         var visitedPages: Set<URL> = [firstDocument.finalURL]
 
         while let nextPage = pageURL {
@@ -134,12 +135,22 @@ final class NovelImportCoordinator {
             guard visitedPages.insert(nextPage).inserted else { throw NovelParsingError.paginationLoop }
             let document = try await loader.load(nextPage)
             let parsed = try await parseChapterPage(document)
+            if let originalNumber = HTMLParsingSupport.chapterNumber(in: firstPage.title),
+               let incomingNumber = HTMLParsingSupport.chapterNumber(in: parsed.title),
+               originalNumber != incomingNumber {
+                // Some readers label the next chapter "下一页". Verify the
+                // fetched heading before merging, so a whole novel is never
+                // concatenated into the first chapter until the page limit.
+                nextChapterOverride = document.finalURL
+                break
+            }
             pages.append(parsed)
             pageURL = parsed.nextPageURL
         }
         return try await processingWorker.aggregateChapterPages(
             pages,
-            sourceURL: firstDocument.finalURL
+            sourceURL: firstDocument.finalURL,
+            nextChapterOverride: nextChapterOverride
         )
     }
 
@@ -219,6 +230,10 @@ final class NovelImportCoordinator {
             let catalog = try await parser.parseCatalogPage(document)
             // Two or more chapter entries distinguish a catalog from a chapter page's navigation links.
             return catalog.chapters.count > 1 ? catalog : nil
+        } catch NovelParsingError.catalogNeedsExpansion {
+            // A static preview is not a complete catalog. Use the existing
+            // bounded JavaScript DOM fallback before choosing the first chapter.
+            return try await parseCatalogPage(document)
         } catch is CancellationError {
             throw CancellationError()
         } catch {

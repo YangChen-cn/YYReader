@@ -3,6 +3,7 @@ import Foundation
 enum ReaderScrollIntent: Equatable, Sendable {
     case restore
     case chapterTop
+    case chapterBottom
 }
 
 struct ReaderScrollRequest: Equatable, Identifiable, Sendable {

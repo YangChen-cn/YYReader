@@ -47,6 +47,8 @@ struct LocalTextImportSheet: View {
             }
         }
         .padding(24)
+        #if os(macOS)
         .frame(width: 480)
+        #endif
     }
 }

@@ -25,7 +25,7 @@ actor SyncFolderBookmarkStore: SyncFolderBookmarkAccessing {
         var isStale = false
         let url = try URL(
             resolvingBookmarkData: data,
-            options: .withSecurityScope,
+            options: Self.resolutionOptions,
             relativeTo: nil,
             bookmarkDataIsStale: &isStale
         )
@@ -44,10 +44,26 @@ actor SyncFolderBookmarkStore: SyncFolderBookmarkAccessing {
 
     private func makeBookmark(for url: URL) throws -> Data {
         try url.bookmarkData(
-            options: .withSecurityScope,
+            options: Self.creationOptions,
             includingResourceValuesForKeys: nil,
             relativeTo: nil
         )
+    }
+
+    private static var resolutionOptions: URL.BookmarkResolutionOptions {
+        #if os(macOS)
+        .withSecurityScope
+        #else
+        []
+        #endif
+    }
+
+    private static var creationOptions: URL.BookmarkCreationOptions {
+        #if os(macOS)
+        .withSecurityScope
+        #else
+        .minimalBookmark
+        #endif
     }
 
     private func replaceAccess(with url: URL) {

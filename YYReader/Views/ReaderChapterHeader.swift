@@ -7,6 +7,7 @@ struct ReaderChapterHeader: View {
     let style: ReaderChapterHeaderStyle
     let usesOrnament: Bool
     let separator: Color
+    @ScaledMetric(relativeTo: .title) private var titleSize = 28.0
 
     var body: some View {
         VStack(spacing: 12) {
@@ -23,7 +24,7 @@ struct ReaderChapterHeader: View {
             }
 
             Text(chapter.title)
-                .font(.system(size: 28, weight: .semibold, design: .serif))
+                .font(.system(size: titleSize, weight: .semibold, design: .serif))
                 .multilineTextAlignment(.center)
                 .textSelection(.enabled)
         }

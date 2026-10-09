@@ -18,13 +18,13 @@ final class FolderSyncController {
     private var syncTimeoutTask: Task<Void, Never>?
     private var syncGeneration = UUID()
     private var pollingTask: Task<Void, Never>?
-    private var windowsChangeCheckTask: Task<Void, Never>?
-    private var windowsChangeTimeoutTask: Task<Void, Never>?
-    private var windowsChangeGeneration = UUID()
+    private var remoteChangeCheckTask: Task<Void, Never>?
+    private var remoteChangeTimeoutTask: Task<Void, Never>?
+    private var remoteChangeGeneration = UUID()
     private var folderAccessTask: Task<Void, Never>?
     private var folderAccessTimeoutTask: Task<Void, Never>?
     private var folderAccessGeneration = UUID()
-    private var lastWindowsFileSignature: SyncFileSignature?
+    private var lastRemoteFileSignatures: [SyncDevice: SyncFileSignature] = [:]
     private var peerSupportsLocalText = false
     private var syncAgainAfterCurrentRun = false
     private var debounceShouldApplyMergedRecords = false
@@ -77,7 +77,13 @@ final class FolderSyncController {
     }
 
     func chooseFolder() {
+        #if os(macOS)
         guard let url = SyncFolderPicker.chooseFolder() else { return }
+        selectFolder(url)
+        #endif
+    }
+
+    func selectFolder(_ url: URL) {
         folderAccessTask?.cancel()
         folderAccessTimeoutTask?.cancel()
         let generation = UUID()
@@ -169,11 +175,11 @@ final class FolderSyncController {
         syncGeneration = UUID()
         pollingTask?.cancel()
         pollingTask = nil
-        windowsChangeCheckTask?.cancel()
-        windowsChangeCheckTask = nil
-        windowsChangeTimeoutTask?.cancel()
-        windowsChangeTimeoutTask = nil
-        windowsChangeGeneration = UUID()
+        remoteChangeCheckTask?.cancel()
+        remoteChangeCheckTask = nil
+        remoteChangeTimeoutTask?.cancel()
+        remoteChangeTimeoutTask = nil
+        remoteChangeGeneration = UUID()
         folderAccessTask?.cancel()
         folderAccessTask = nil
         folderAccessTimeoutTask?.cancel()
@@ -379,7 +385,7 @@ final class FolderSyncController {
             )
             tombstones.merge(retainedLocalTombstones) { synchronized, _ in synchronized }
             peerSupportsLocalText = result.remoteCapabilities.contains(SyncEngine.localTextCapability)
-            lastWindowsFileSignature = result.windowsFileSignature
+            lastRemoteFileSignatures = result.remoteFileSignatures
             finishSuccessfulOperation(at: result.synchronizedAt)
         } catch is CancellationError {
             return
@@ -427,7 +433,7 @@ final class FolderSyncController {
         Task { [weak self] in
             await self?.monitor.start(directory: directory) { [weak self] in
                 Task { @MainActor [weak self] in
-                    self?.checkWindowsFileChange()
+                    self?.checkRemoteFileChanges()
                 }
             }
         }
@@ -443,55 +449,55 @@ final class FolderSyncController {
                     return
                 }
                 guard let self else { return }
-                self.checkWindowsFileChange()
+                self.checkRemoteFileChanges()
             }
         }
     }
 
-    private func checkWindowsFileChange() {
-        guard windowsChangeCheckTask == nil,
+    private func checkRemoteFileChanges() {
+        guard remoteChangeCheckTask == nil,
               isEnabled,
               let selectedFolderURL else { return }
         let generation = UUID()
-        windowsChangeGeneration = generation
+        remoteChangeGeneration = generation
         let signatureEngine = SyncEngine()
-        windowsChangeTimeoutTask?.cancel()
-        windowsChangeTimeoutTask = Task { [weak self] in
+        remoteChangeTimeoutTask?.cancel()
+        remoteChangeTimeoutTask = Task { [weak self] in
             do {
                 try await Task.sleep(for: .seconds(5))
             } catch {
                 return
             }
             guard let self,
-                  self.windowsChangeGeneration == generation,
-                  self.windowsChangeCheckTask != nil else { return }
-            self.windowsChangeGeneration = UUID()
-            self.windowsChangeCheckTask?.cancel()
-            self.windowsChangeCheckTask = nil
-            self.windowsChangeTimeoutTask = nil
+                  self.remoteChangeGeneration == generation,
+                  self.remoteChangeCheckTask != nil else { return }
+            self.remoteChangeGeneration = UUID()
+            self.remoteChangeCheckTask?.cancel()
+            self.remoteChangeCheckTask = nil
+            self.remoteChangeTimeoutTask = nil
             self.errorMessage = SyncError.folderUnavailable.localizedDescription
         }
-        windowsChangeCheckTask = Task { [weak self] in
+        remoteChangeCheckTask = Task { [weak self] in
             guard let self else { return }
-            defer { self.finishWindowsChangeCheck(generation: generation) }
+            defer { self.finishRemoteChangeCheck(generation: generation) }
             do {
-                let signature = try await signatureEngine.windowsFileSignature(selectedFolder: selectedFolderURL)
-                guard !Task.isCancelled, self.windowsChangeGeneration == generation else { return }
-                if signature != self.lastWindowsFileSignature {
+                let signature = try await signatureEngine.remoteFileSignatures(selectedFolder: selectedFolderURL)
+                guard !Task.isCancelled, self.remoteChangeGeneration == generation else { return }
+                if signature != self.lastRemoteFileSignatures {
                     self.syncNow()
                 }
             } catch {
-                guard self.windowsChangeGeneration == generation else { return }
+                guard self.remoteChangeGeneration == generation else { return }
                 self.errorMessage = self.userFacingSyncError(error)
             }
         }
     }
 
-    private func finishWindowsChangeCheck(generation: UUID) {
-        guard windowsChangeGeneration == generation else { return }
-        windowsChangeTimeoutTask?.cancel()
-        windowsChangeTimeoutTask = nil
-        windowsChangeCheckTask = nil
+    private func finishRemoteChangeCheck(generation: UUID) {
+        guard remoteChangeGeneration == generation else { return }
+        remoteChangeTimeoutTask?.cancel()
+        remoteChangeTimeoutTask = nil
+        remoteChangeCheckTask = nil
     }
 
     private func userFacingSyncError(_ error: Error) -> String {
@@ -502,7 +508,7 @@ final class FolderSyncController {
     }
 
     private func persistTombstones() {
-        let snapshot = SyncSnapshot(device: .mac, books: Array(tombstones.values))
+        let snapshot = SyncSnapshot(device: .current, books: Array(tombstones.values))
         if let data = try? SyncSnapshotCodec.encode(snapshot) {
             defaults.set(data, forKey: SyncPreferenceKeys.tombstones)
         }
@@ -510,7 +516,7 @@ final class FolderSyncController {
 
     private static func loadTombstones(defaults: UserDefaults) -> [String: SyncBookRecord] {
         guard let data = defaults.data(forKey: SyncPreferenceKeys.tombstones),
-              let snapshot = try? SyncSnapshotCodec.decode(data, expectedDevice: .mac) else {
+              let snapshot = try? SyncSnapshotCodec.decode(data, expectedDevice: .current) else {
             return [:]
         }
         var records: [String: SyncBookRecord] = [:]

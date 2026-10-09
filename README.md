@@ -7,6 +7,7 @@
   <p>
     <a href="https://github.com/YangChen-cn/YYReader/releases/tag/v1.3.0"><img src="https://img.shields.io/badge/release-v1.3.0-2ea44f?style=flat-square" alt="Release v1.3.0"></a>
     <img src="https://img.shields.io/badge/macOS-15%2B-111111?style=flat-square&logo=apple" alt="macOS 15+">
+    <a href="https://github.com/YangChen-cn/YYReader/releases/tag/ios-v1.0.0"><img src="https://img.shields.io/badge/iOS-v1.0.0-007AFF?style=flat-square&logo=apple" alt="iOS 1.0.0"></a>
     <img src="https://img.shields.io/badge/Windows-10%201809%2B-0078D4?style=flat-square&logo=windows11" alt="Windows 10 1809+">
     <img src="https://img.shields.io/badge/Swift-6-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 6">
     <img src="https://img.shields.io/badge/.NET-8-512BD4?style=flat-square&logo=dotnet&logoColor=white" alt=".NET 8">
@@ -18,13 +19,16 @@
 | 平台 | 安装包 | 系统要求 |
 | --- | --- | --- |
 | **macOS** | [下载 YYReader 1.3.0 arm64 DMG](https://github.com/YangChen-cn/YYReader/releases/download/v1.3.0/YYReader-1.3.0-arm64.dmg) | Apple 芯片，macOS 15 或更高版本 |
+| **iOS / iPadOS** | [下载 YYReader iOS 1.0.0 IPA](https://github.com/YangChen-cn/YYReader/releases/download/ios-v1.0.0/YYReader-iOS-1.0.0-resign.ipa)，需用侧载工具签名 | iOS / iPadOS 18 或更高版本 |
 | **Windows** | [下载 YYReader 1.3.0 x64 安装程序](https://github.com/YangChen-cn/YYReader/releases/download/v1.3.0/YYReader-Setup-x64-1.3.0.exe) | x64 Windows 10 1809 或更高版本，推荐 Windows 11 |
 
 也可以前往 [YYReader 1.3.0 Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.3.0) 查看校验信息和完整发布说明。
 
+iOS 使用独立版本号，首个正式版本为 [iOS 1.0.0](https://github.com/YangChen-cn/YYReader/releases/tag/ios-v1.0.0)。IPA 为 arm64 Release 未签名包，可通过 SideStore 等工具签名安装与续签；操作见 [iOS 安装说明](docs/IOS_DEVELOPMENT.md#使用-sidestore-在手机端安装与续签)。
+
 ## 界面预览
 
-YYReader 在 macOS 与 Windows 上分别使用 SwiftUI 和 WinUI 3 构建，保留各自平台熟悉的窗口、目录与设置体验；网页只负责提供内容，正文始终由原生控件渲染。
+YYReader 在 macOS、iOS / iPadOS 上使用 SwiftUI，在 Windows 上使用 WinUI 3 构建，保留各自平台熟悉的窗口、目录与设置体验；网页只负责提供内容，正文始终由原生控件渲染。
 
 <h3 align="center">macOS</h3>
 
@@ -56,15 +60,16 @@ YYReader 在 macOS 与 Windows 上分别使用 SwiftUI 和 WinUI 3 构建，保�
 
 | 原生阅读 | 本地优先 | 连续沉浸 | 跨端同步 |
 | --- | --- | --- | --- |
-| macOS 使用 SwiftUI，Windows 使用 WinUI 3；正文不由 WebView 渲染 | 书架、正文缓存和进度保存在本机，支持离线重开 | 支持目录搜索、连续章节、键盘翻页、主题和排版调节 | 通过用户选择的共享文件夹或 `.yyreader` 文件交换书架与阅读位置 |
+| macOS 与 iOS 使用 SwiftUI，Windows 使用 WinUI 3；正文不由 WebView 渲染 | 书架、正文缓存和进度保存在本机，支持离线重开 | 支持目录搜索、连续章节、键盘翻页、主题和排版调节 | 通过用户选择的共享文件夹或 `.yyreader` 文件交换书架与阅读位置 |
 
 - 自动识别书名、作者、章节正文、前后章节与目录，并合并网站拆分的章节分页。
-- macOS 可直接导入 UTF-8、GBK / GB18030 的本地 TXT；正文复制进本地书库，不依赖原文件继续存在。
+- macOS 与 iOS 可直接导入 UTF-8、GBK / GB18030 的本地 TXT；正文复制进本地书库，不依赖原文件继续存在。
 - 阅读器提供确定性“论文伪装模式”，可在普通阅读、学术单栏和双栏之间切换，阅读位置保持不变。
 - 支持当前章节、后续章节或整本目录的离线下载；后台预取不会阻塞当前阅读。
 - 提供字体、字号、行距、段距、正文宽度、段首缩进及明暗主题设置。
+- iOS 可在阅读设置切换上下滚动与左右屏幕翻页，保留段落进度；字号与屏幕尺寸变化后自动重新分页。
 - 为 `qidiy.com` 提供专用解析器，其他站点使用通用语义和正文密度解析。
-- 遇到必要的 JavaScript 或 Cloudflare 验证时，macOS 使用 WebKit、Windows 使用 WebView2 获取最终页面；提取后的正文仍回到原生阅读器。
+- 遇到必要的 JavaScript 或 Cloudflare 验证时，macOS 与 iOS 使用 WebKit、Windows 使用 WebView2 获取最终页面；提取后的正文仍回到原生阅读器。
 
 ## 文件夹同步
 
@@ -73,10 +78,11 @@ YYReader 不绑定 iCloud 或任何云服务。你可以选择 iCloud Drive、Dr
 ```text
 YYReaderSync/
 ├── mac.json
+├── ios.json
 └── windows.json
 ```
 
-- Mac 只写 `mac.json`，Windows 只写 `windows.json`，双方读取对端快照。
+- Mac 只写 `mac.json`，iOS 只写 `ios.json`，两者读取其他端快照。Windows 当前仍只写 `windows.json`、读取 `mac.json`；与 iOS 的进度可经运行中的新版 Mac 中转，或使用 `.yyreader` 手动传输。
 - 书籍按 canonical source URL 合并；阅读位置只向目录中更后的章节或同章更后的段落推进。
 - 不同步正文缓存、Cookie、登录信息或 WebView 状态。
 - 本地 TXT 同样只同步元数据与阅读位置；另一台设备需导入同一 TXT 才会补齐正文。
@@ -110,7 +116,7 @@ macOS 快捷键：
 
 ## 技术架构
 
-| | macOS | Windows |
+| | macOS / iOS | Windows |
 | --- | --- | --- |
 | UI | SwiftUI | WinUI 3 |
 | 语言 | Swift 6，严格并发检查 | C#，.NET 8 |
@@ -118,7 +124,7 @@ macOS 快捷键：
 | 网页验证 | WebKit | WebView2 |
 | 正文渲染 | `ScrollView` + `LazyVStack` + `Text` | WinUI 原生文本控件 |
 
-两个客户端共用 URL canonicalization、BookshelfTransfer 和 SyncSnapshot 数据约定。通用网页解析的双端对齐规则见 [通用小说解析器说明](shared/generic-parser/README.md)；macOS 使用 SwiftSoup 2.13.5 与 XcodeGen，Windows 的详细结构和开发要求见 [Windows README](windows/README.md)。
+macOS 和 iOS 直接编译同一份 Models、Parsing、Services、Stores、正文阅读组件与 SwiftData 代码；平台差异集中在应用入口、导航、文件选择与验证视图。三端共用 URL canonicalization、BookshelfTransfer 和 SyncSnapshot 数据约定。通用网页解析的双端对齐规则见 [通用小说解析器说明](shared/generic-parser/README.md)；macOS 使用 SwiftSoup 2.13.5 与 XcodeGen，Windows 的详细结构和开发要求见 [Windows README](windows/README.md)。
 
 <details>
 <summary><strong>从源码构建 macOS</strong></summary>
@@ -145,6 +151,30 @@ xcodebuild test \
 ```bash
 ./script/package_release.sh
 ```
+
+</details>
+
+<details>
+<summary><strong>从源码构建和调试 iOS / iPadOS</strong></summary>
+
+工程内选择 `YYReaderIOS` scheme，再选择 iPhone 或 iPad 模拟器并按 ⌘R。需要先在 Xcode Settings → Components 安装 iOS 运行时。Canvas 预览位于 `YYReaderIOS/Views/MobileLibraryPreview.swift`，使用自造文本和内存数据库。
+
+```bash
+./script/build_ios.sh simulator   # 构建、安装并启动模拟器
+./script/build_ios.sh test        # 在模拟器运行共享逻辑测试
+./script/build_ios.sh ipa         # 生成供侧载工具重新签名的设备版 IPA
+./script/build_ios.sh release     # 发布用 arm64 Release IPA 与 SHA-256 校验文件
+```
+
+IPA 位于 `dist/iOS/YYReader-iOS-1.0.0-resign.ipa`。这是未签名包，需要使用自己的 Apple ID / 证书和描述文件重新签名后才能安装。模拟器无需开发者证书。真机调试需在 Xcode 的 Signing & Capabilities 选择 Team，并在手机开启开发者模式。
+
+已有开发者签名资源时：
+
+```bash
+YYREADER_IOS_TEAM_ID=你的TeamID ./script/build_ios.sh signed
+```
+
+日常开发使用 Debug，`release` 使用 iOS Release；均不构建 Mac Release 或 DMG。完整的操作与手动验收步骤见 [iOS 开发说明](docs/IOS_DEVELOPMENT.md)。
 
 </details>
 

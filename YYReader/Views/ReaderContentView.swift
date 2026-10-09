@@ -39,7 +39,7 @@ struct ReaderContentView: View {
                 && (AcademicColumnMode(rawValue: academicColumnModeName) ?? .double) == .double
                 && geometry.size.width >= 760
             let displayedWidth = presentationMode == .academicPaper
-                ? min(max(geometry.size.width - 56, 520), 1080)
+                ? min(max(geometry.size.width - (geometry.size.width < 600 ? 24 : 56), 1), 1080)
                 : effectiveWidth
 
             ScrollView {
@@ -175,6 +175,7 @@ struct ReaderContentView: View {
             .contentMargins(.vertical, 0, for: .scrollContent)
             .textSelection(.enabled)
             .background {
+                #if os(macOS)
                 if keyboardNavigationEnabled {
                     ReaderKeyboardEventBridge { command in
                         handleKeyboardCommand(
@@ -183,6 +184,7 @@ struct ReaderContentView: View {
                         )
                     }
                 }
+                #endif
             }
         }
         .background(presentationMode == .academicPaper ? Color(white: 0.88) : theme.background)
@@ -326,6 +328,10 @@ struct ReaderContentView: View {
                 scrollPosition = ScrollPosition(idType: ReaderScrollTarget.self, y: 0)
                 scrollPosition.scrollTo(id: ReaderScrollTarget.chapterHeader(chapter.id), anchor: .top)
                 setReadingAnchorIfNeeded(chapterID: chapter.id, paragraphIndex: 0)
+            case .chapterBottom:
+                let index = max(store.readerSession.paragraphs(for: chapter).count - 1, 0)
+                scrollPosition.scrollTo(id: resolvedScrollTarget(for: chapter, desiredParagraphIndex: index), anchor: .bottom)
+                setReadingAnchorIfNeeded(chapterID: chapter.id, paragraphIndex: index)
             case .restore:
                 let target = restoredParagraphTarget(for: chapter)
                 scrollPosition.scrollTo(id: target, anchor: .top)

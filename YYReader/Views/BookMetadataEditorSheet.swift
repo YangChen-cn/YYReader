@@ -41,6 +41,8 @@ struct BookMetadataEditorSheet: View {
             }
         }
         .padding(24)
+        #if os(macOS)
         .frame(width: 440)
+        #endif
     }
 }

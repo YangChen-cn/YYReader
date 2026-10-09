@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.yyreader
   deploymentTarget:
     macOS: "15.0"
+    iOS: "18.0"
   createIntermediateGroups: true
 packages:
   SwiftSoup:
@@ -60,14 +61,142 @@ targets:
       - path: YYReaderTests
         excludes:
           - Fixtures
-    resources:
       - path: YYReaderTests/Fixtures
+        type: folder
+        buildPhase: resources
+      - path: shared/generic-parser/cases
+        type: folder
+        buildPhase: resources
     dependencies:
       - target: YYReader
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.yyreader.app.tests
         GENERATE_INFOPLIST_FILE: YES
+  YYReaderIOS:
+    type: application
+    platform: iOS
+    productName: YYReader
+    sources:
+      - path: YYReaderIOS
+      - path: YYReader/Models
+      - path: YYReader/Parsing
+      - path: YYReader/Stores
+      - path: YYReader/Services
+        excludes:
+          - SyncFolderPicker.swift
+      - path: YYReader/Support
+      - path: YYReader/Views/ReaderView.swift
+      - path: YYReader/Views/ReaderContentView.swift
+      - path: YYReader/Views/ReaderParagraphView.swift
+      - path: YYReader/Views/ReaderChapterHeader.swift
+      - path: YYReader/Views/ReaderChapterFooter.swift
+      - path: YYReader/Views/ReaderContinuationBoundary.swift
+      - path: YYReader/Views/ReaderReadingProgressFooter.swift
+      - path: YYReader/Views/WebVerificationWebView.swift
+      - path: YYReader/Views/WebVerificationSheet.swift
+      - path: YYReader/Views/BookSidebarRow.swift
+      - path: YYReader/Views/ChapterListRow.swift
+      - path: YYReader/Views/BookshelfTransferPreviewSheet.swift
+      - path: YYReader/Views/LocalTextImportSheet.swift
+      - path: YYReader/Views/BookMetadataEditorSheet.swift
+      - path: YYReader/Views/AddURLSheet.swift
+      - path: YYReader/Views/LoadingOverlay.swift
+      - path: YYReader/Views/AcademicPaperChapterView.swift
+      - path: YYReader/Views/AcademicPaperEquationView.swift
+      - path: YYReader/Views/AcademicPaperFigureView.swift
+      - path: YYReader/Views/AcademicPaperSupplementView.swift
+      - path: YYReader/Views/AcademicPaperTableView.swift
+      - path: YYReader/Resources/Localizable.xcstrings
+        buildPhase: resources
+    dependencies:
+      - package: SwiftSoup
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yyreader.ios
+        PRODUCT_MODULE_NAME: YYReader
+        PRODUCT_NAME: YYReader
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: 1.0.0
+        CURRENT_PROJECT_VERSION: 10
+    info:
+      path: YYReaderIOS/Info.plist
+      properties:
+        CFBundleDisplayName: YYReader
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UIApplicationSceneConfigurations: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        LSRequiresIPhoneOS: true
+        UIRequiredDeviceCapabilities: [arm64]
+        UIFileSharingEnabled: false
+        LSSupportsOpeningDocumentsInPlace: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.yyreader.bookshelf
+            UTTypeDescription: YYReader Bookshelf
+            UTTypeConformsTo: [public.json]
+            UTTypeTagSpecification:
+              public.filename-extension: [yyreader]
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: YYReader Bookshelf
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Owner
+            LSItemContentTypes: [com.yyreader.bookshelf, public.json]
+          - CFBundleTypeName: Plain Text Novel
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.plain-text]
+  YYReaderIOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: YYReaderTests
+        excludes:
+          - Fixtures
+          - ReaderPresentationTests.swift
+      - path: YYReaderTests/Fixtures
+        type: folder
+        buildPhase: resources
+      - path: shared/generic-parser/cases
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - target: YYReaderIOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yyreader.ios.tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+  YYReaderIOSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: YYReaderIOSUITests
+    dependencies:
+      - target: YYReaderIOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yyreader.ios.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
 schemes:
   YYReader:
     build:
@@ -78,3 +207,14 @@ schemes:
       gatherCoverageData: true
       targets:
         - YYReaderTests
+  YYReaderIOS:
+    build:
+      targets:
+        YYReaderIOS: all
+        YYReaderIOSTests: [test]
+        YYReaderIOSUITests: [test]
+    test:
+      gatherCoverageData: true
+      targets:
+        - YYReaderIOSTests
+        - YYReaderIOSUITests

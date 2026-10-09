@@ -1,6 +1,6 @@
 # YYReader 文件夹同步
 
-用户选择任意普通文件夹后，客户端在其中使用 `YYReaderSync/`：macOS 只写 `mac.json`，Windows 只写 `windows.json`，并读取对端文件。
+用户选择任意普通文件夹后，客户端在其中使用 `YYReaderSync/`：macOS 只写 `mac.json`，iOS 只写 `ios.json`，两者读取其他端快照；Windows 当前只写 `windows.json`、读取 `mac.json`。iOS 与 Windows 可以通过新版 Mac 中转或手动书架传输。
 
 SyncSnapshot v2 只包含书籍身份、元数据、阅读位置与删除 tombstone。它不包含正文、Cookie、WebView 数据或账号信息。客户端继续读取 v1，但新写出的文件使用 v2；v2 包含可选的 `currentChapterIndex` 和 `capabilities`。
 

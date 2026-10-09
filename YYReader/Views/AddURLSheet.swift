@@ -16,9 +16,15 @@ struct AddURLSheet: View {
                 .foregroundStyle(.secondary)
 
             TextField("https://example.com/book/chapter.html", text: $url)
+                #if os(iOS)
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                #endif
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(submit)
                 .accessibilityLabel("小说章节网址")
+                .accessibilityIdentifier("chapterURL")
 
             HStack {
                 Spacer()
@@ -31,17 +37,16 @@ struct AddURLSheet: View {
             }
         }
         .padding(24)
+        #if os(macOS)
         .frame(width: 520)
+        #endif
     }
 
     private func submit() {
         guard !submitting else { return }
         submitting = true
         let submittedURL = url
+        onSubmit(submittedURL)
         dismiss()
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(350))
-            onSubmit(submittedURL)
-        }
     }
 }

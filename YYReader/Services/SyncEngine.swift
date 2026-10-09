@@ -7,9 +7,11 @@ actor SyncEngine {
     static let localTextCapability = "local-txt-v1"
     private static let localCapabilities = [localTextCapability]
 
+    private let device: SyncDevice
     private let fileManager: FileManager
 
-    init(fileManager: FileManager = .default) {
+    init(device: SyncDevice = .current, fileManager: FileManager = .default) {
+        self.device = device
         self.fileManager = fileManager
     }
 
@@ -22,19 +24,19 @@ actor SyncEngine {
         let directory = selectedFolder.appendingPathComponent(Self.directoryName, isDirectory: true)
         try ensureDirectory(directory)
 
-        let macURL = directory.appendingPathComponent(Self.macFileName)
-        let previousMac = try readSnapshotIfPresent(at: macURL, expectedDevice: .mac)
+        let localURL = directory.appendingPathComponent(device.fileName)
+        let previousLocal = try readSnapshotIfPresent(at: localURL, expectedDevice: device)
         let publishedBooks = filteredBooks(localBooks, includeLocalText: includeLocalText)
         let snapshot = SyncSnapshot(
-            device: .mac,
+            device: device,
             updatedAt: now,
             capabilities: Self.localCapabilities,
             books: publishedBooks
         )
-        if previousMac?.version != SyncSnapshot.currentVersion
-            || previousMac?.capabilities != snapshot.capabilities
-            || previousMac?.books != publishedBooks {
-            try atomicWrite(try SyncSnapshotCodec.encode(snapshot), to: macURL)
+        if previousLocal?.version != SyncSnapshot.currentVersion
+            || previousLocal?.capabilities != snapshot.capabilities
+            || previousLocal?.books != publishedBooks {
+            try atomicWrite(try SyncSnapshotCodec.encode(snapshot), to: localURL)
         }
         return now
     }
@@ -48,34 +50,37 @@ actor SyncEngine {
         let directory = selectedFolder.appendingPathComponent(Self.directoryName, isDirectory: true)
         try ensureDirectory(directory)
 
-        let macURL = directory.appendingPathComponent(Self.macFileName)
-        let windowsURL = directory.appendingPathComponent(Self.windowsFileName)
-        let previousMac = try readSnapshotIfPresent(at: macURL, expectedDevice: .mac)
-        let windows = try readSnapshotIfPresent(at: windowsURL, expectedDevice: .windows)
-        let remoteSupportsLocalText = windows?.capabilities.contains(Self.localTextCapability) == true
+        let localURL = directory.appendingPathComponent(device.fileName)
+        let previousLocal = try readSnapshotIfPresent(at: localURL, expectedDevice: device)
+        let signatures = try remoteFileSignatures(selectedFolder: selectedFolder)
+        let remotes = try device.peers.compactMap { peer in
+            try readSnapshotIfPresent(at: directory.appendingPathComponent(peer.fileName), expectedDevice: peer)
+        }
+        let remoteSupportsLocalText = !remotes.isEmpty
+            && remotes.allSatisfy { $0.capabilities.contains(Self.localTextCapability) }
         let mergedBooks = SyncMerger.merge(
-            filteredBooks(previousMac?.books ?? [], includeLocalText: remoteSupportsLocalText)
+            filteredBooks(previousLocal?.books ?? [], includeLocalText: remoteSupportsLocalText)
                 + filteredBooks(localBooks, includeLocalText: remoteSupportsLocalText)
-                + (windows?.books ?? []),
+                + filteredBooks(remotes.flatMap(\.books), includeLocalText: remoteSupportsLocalText),
             chapterRanksByBook: chapterRanksByBook
         )
         let snapshot = SyncSnapshot(
-            device: .mac,
+            device: device,
             updatedAt: now,
             capabilities: Self.localCapabilities,
             books: mergedBooks
         )
-        if previousMac?.version != SyncSnapshot.currentVersion
-            || previousMac?.capabilities != snapshot.capabilities
-            || previousMac?.books != mergedBooks {
-            try atomicWrite(try SyncSnapshotCodec.encode(snapshot), to: macURL)
+        if previousLocal?.version != SyncSnapshot.currentVersion
+            || previousLocal?.capabilities != snapshot.capabilities
+            || previousLocal?.books != mergedBooks {
+            try atomicWrite(try SyncSnapshotCodec.encode(snapshot), to: localURL)
         }
 
         return SyncResult(
             books: mergedBooks,
             synchronizedAt: now,
-            windowsFileSignature: try fileSignature(at: windowsURL),
-            remoteCapabilities: windows?.capabilities ?? []
+            remoteFileSignatures: signatures,
+            remoteCapabilities: remoteSupportsLocalText ? Self.localCapabilities : []
         )
     }
 
@@ -85,6 +90,17 @@ actor SyncEngine {
     ) -> [SyncBookRecord] {
         guard !includeLocalText else { return books }
         return books.filter { BookSourceKind.resolve($0.sourceURL) != .localText }
+    }
+
+    func remoteFileSignatures(selectedFolder: URL) throws -> [SyncDevice: SyncFileSignature] {
+        let directory = selectedFolder.appendingPathComponent(Self.directoryName, isDirectory: true)
+        var result: [SyncDevice: SyncFileSignature] = [:]
+        for peer in device.peers {
+            if let signature = try fileSignature(at: directory.appendingPathComponent(peer.fileName)) {
+                result[peer] = signature
+            }
+        }
+        return result
     }
 
     func windowsFileSignature(selectedFolder: URL) throws -> SyncFileSignature? {

@@ -15,7 +15,7 @@ enum ReaderViewportLayout {
             maximumPreferredWidthEM
         )
         let preferredWidth = preferredWidthEM * fontSize
-        let horizontalMargin = viewportWidth >= 900 ? 52.0 : 40.0
+        let horizontalMargin = viewportWidth >= 900 ? 52.0 : (viewportWidth < 600 ? 20.0 : 40.0)
         let availableWidth = max(viewportWidth - (horizontalMargin * 2), 1)
         return min(preferredWidth, availableWidth)
     }

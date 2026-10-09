@@ -9,6 +9,7 @@ enum ReaderPreferenceKeys {
     static let theme = "reader.theme"
     static let paragraphIndent = "reader.paragraphIndent"
     static let continuousReading = "reader.continuousReading"
+    static let pageTurnMode = "reader.pageTurnMode"
     static let prefetchNext = "reader.prefetchNext"
     static let lastReadingBookID = "reader.lastReadingBookID"
     static let lastReadingChapterID = "reader.lastReadingChapterID"

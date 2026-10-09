@@ -1,8 +1,13 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import UniformTypeIdentifiers
 
 @MainActor
 enum BookshelfTransferPanel {
+    #if os(macOS)
     static func chooseImportFile() -> URL? {
         let panel = NSOpenPanel()
         panel.title = "导入 YYReader 书架"
@@ -26,8 +31,15 @@ enum BookshelfTransferPanel {
         return panel.runModal() == .OK ? panel.url : nil
     }
 
+    #endif
+
     static func readClipboard() throws -> Data {
-        guard let text = NSPasteboard.general.string(forType: .string),
+        #if os(macOS)
+        let clipboardText = NSPasteboard.general.string(forType: .string)
+        #else
+        let clipboardText = UIPasteboard.general.string
+        #endif
+        guard let text = clipboardText,
               text.localizedCaseInsensitiveContains(BookshelfTransferCodec.currentFormat) else {
             throw BookshelfTransferError.clipboardUnavailable
         }
@@ -38,11 +50,15 @@ enum BookshelfTransferPanel {
         guard let text = String(data: data, encoding: .utf8) else {
             throw BookshelfTransferError.invalidDocument("无法生成 UTF-8 书架 JSON。")
         }
+        #if os(macOS)
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         guard pasteboard.setString(text, forType: .string) else {
             throw BookshelfTransferError.invalidDocument("无法写入系统剪贴板。")
         }
+        #else
+        UIPasteboard.general.string = text
+        #endif
     }
 
     private static let yyreaderType = UTType(filenameExtension: "yyreader", conformingTo: .json) ?? .json

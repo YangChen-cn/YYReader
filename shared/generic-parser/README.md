@@ -26,6 +26,11 @@
 .read-content
 .post-content
 .entry-content
+[class*=article-text]
+[class*=article-body]
+.article-content
+#novel-content
+.novel-content
 .content
 ```
 
@@ -114,3 +119,9 @@
 | `yeduji.com/book/...` | 从概览页进入“全部章节”；用完整正序目录替换倒序最新章节预览；全本下载前刷新目录 |
 
 Windows 端完成对应升级时，至少为上述规则添加合成 HTML 单元测试。测试正文使用自造短段落，不保存第三方网站的完整版权内容，也不依赖实时网站。
+
+## 2026-10-09 补充
+
+Mac 与 iOS 共用实现已修复目录外“最新更新”抢占顺序、正文窄容器遗漏、首尾链接误指目录、把下一章误作“下一页”合并，以及 JavaScript 完整目录展开。Windows 实现尚待移植。
+
+具体规则、正常页面实测 URL 和 C# 修改位置见 [Windows 交接文档](../../docs/WINDOWS_GENERIC_PARSER_HANDOFF_2026-10-09.md)。可直接复用的自造 HTML 与预期结果位于 [cases/expected.json](cases/expected.json)。
