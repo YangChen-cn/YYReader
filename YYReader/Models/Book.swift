@@ -13,6 +13,8 @@ final class Book {
     var hasCatalog: Bool = true
     var catalogFetchedAt: Date?
     var currentChapterID: UUID?
+    var importContentType: String = "auto"
+    var resolvedContentType: String = "auto"
 
     @Relationship(deleteRule: .cascade, inverse: \Chapter.book)
     var chapters: [Chapter]
@@ -21,7 +23,13 @@ final class Book {
     /// `hasCatalog` distinguishes an actual catalog URL from a derived source-book URL.
     var sourceBookURL: String { catalogURL }
     var sourceKind: BookSourceKind { BookSourceKind.resolve(sourceBookURL) }
-    var isManga: Bool { sourceHost == "guazimanhua.com" || sourceHost.hasSuffix(".guazimanhua.com") || sourceHost == "manhua.zaimanhua.com" || sourceHost == "haoduoman.com" || sourceHost.hasSuffix(".haoduoman.com") }
+    var preferredContentType: BookContentType { BookContentType(rawValue: importContentType) ?? .auto }
+    var isManga: Bool {
+        if resolvedContentType == BookContentType.manga.rawValue { return true }
+        if resolvedContentType == BookContentType.novel.rawValue { return false }
+        // Legacy books have no resolved type; retain their existing classification.
+        return sourceHost == "guazimanhua.com" || sourceHost.hasSuffix(".guazimanhua.com") || sourceHost == "manhua.zaimanhua.com" || sourceHost == "haoduoman.com" || sourceHost.hasSuffix(".haoduoman.com")
+    }
     var isLocalText: Bool { sourceKind == .localText }
 
     init(

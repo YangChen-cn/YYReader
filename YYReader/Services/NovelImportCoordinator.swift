@@ -19,28 +19,34 @@ final class NovelImportCoordinator {
         self.catalogRefreshTimeout = catalogRefreshTimeout
     }
 
-    func importNovel(from inputURL: URL) async throws -> NovelImportResult {
+    func importNovel(from inputURL: URL, contentType: BookContentType = .auto) async throws -> NovelImportResult {
         loader.beginOperation()
         guard ["http", "https"].contains(inputURL.scheme?.lowercased() ?? "") else {
             throw NovelParsingError.unsupportedURL
         }
-        let firstDocument = try await loadSourceDocument(inputURL)
-        if let catalog = try await staticCatalog(in: firstDocument) {
-            return try await importCatalog(catalog, from: firstDocument)
+        let firstDocument = try await loadSourceDocument(inputURL, contentType: contentType)
+        if let catalog = try await staticCatalog(in: firstDocument, contentType: contentType) {
+            return try await importCatalog(catalog, from: firstDocument, contentType: contentType)
         }
         do {
-            let chapter = try await loadChapterContent(from: firstDocument)
-            return try await importChapter(chapter)
-        } catch NovelParsingError.noReadableContent {
-            return try await importCatalog(firstDocument)
+            let chapter = try await loadChapterContent(from: firstDocument, contentType: contentType)
+            return try await importChapter(chapter, contentType: contentType)
+        } catch {
+            guard let parsingError = error as? NovelParsingError,
+                  parsingError == .noReadableContent || parsingError == .noMangaImages else { throw error }
+            do { return try await importCatalog(firstDocument, contentType: contentType) }
+            catch NovelParsingError.missingCatalog {
+                if contentType == .auto { throw NovelParsingError.missingCatalog }
+                throw parsingError
+            }
         }
     }
 
-    private func importChapter(_ chapter: ChapterLoadResult) async throws -> NovelImportResult {
+    private func importChapter(_ chapter: ChapterLoadResult, contentType: BookContentType) async throws -> NovelImportResult {
         let initialCatalog: ParsedBookCatalog?
         if let catalogURL = chapter.catalogURL {
             do {
-                initialCatalog = try await loadCatalogPage(at: catalogURL)
+                initialCatalog = try await loadCatalogPage(at: catalogURL, contentType: contentType)
             } catch is CancellationError {
                 throw CancellationError()
             } catch HTMLLoadError.cancelled {
@@ -73,23 +79,25 @@ final class NovelImportCoordinator {
             bodyText: chapter.bodyText,
             previousChapterURL: chapter.previousChapterURL,
             nextChapterURL: chapter.nextChapterURL,
-            imageURLs: chapter.imageURLs
+            imageURLs: chapter.imageURLs,
+            contentType: contentType
         )
     }
 
-    private func importCatalog(_ document: LoadedHTML) async throws -> NovelImportResult {
-        let catalog = try await parseCatalogPage(document)
-        return try await importCatalog(catalog, from: document)
+    private func importCatalog(_ document: LoadedHTML, contentType: BookContentType) async throws -> NovelImportResult {
+        let catalog = try await parseCatalogPage(document, contentType: contentType)
+        return try await importCatalog(catalog, from: document, contentType: contentType)
     }
 
     private func importCatalog(
         _ catalog: ParsedBookCatalog,
-        from document: LoadedHTML
+        from document: LoadedHTML,
+        contentType: BookContentType
     ) async throws -> NovelImportResult {
         guard let firstChapter = catalog.chapters.first else {
             throw NovelParsingError.missingCatalog
         }
-        let chapter = try await loadChapterContentWithoutReset(from: firstChapter.url)
+        let chapter = try await loadChapterContentWithoutReset(from: firstChapter.url, contentType: contentType)
 
         return NovelImportResult(
             bookTitle: catalog.title,
@@ -104,26 +112,27 @@ final class NovelImportCoordinator {
             bodyText: chapter.bodyText,
             previousChapterURL: chapter.previousChapterURL,
             nextChapterURL: chapter.nextChapterURL,
-            imageURLs: chapter.imageURLs
+            imageURLs: chapter.imageURLs,
+            contentType: contentType
         )
     }
 
-    func loadChapterContent(from inputURL: URL) async throws -> ChapterLoadResult {
+    func loadChapterContent(from inputURL: URL, contentType: BookContentType = .auto) async throws -> ChapterLoadResult {
         loader.beginOperation()
-        return try await loadChapterContentWithoutReset(from: inputURL)
+        return try await loadChapterContentWithoutReset(from: inputURL, contentType: contentType)
     }
 
-    private func loadChapterContentWithoutReset(from inputURL: URL) async throws -> ChapterLoadResult {
+    private func loadChapterContentWithoutReset(from inputURL: URL, contentType: BookContentType) async throws -> ChapterLoadResult {
         guard ["http", "https"].contains(inputURL.scheme?.lowercased() ?? "") else {
             throw NovelParsingError.unsupportedURL
         }
 
-        let firstDocument = try await loadSourceDocument(inputURL)
-        return try await loadChapterContent(from: firstDocument)
+        let firstDocument = try await loadSourceDocument(inputURL, contentType: contentType)
+        return try await loadChapterContent(from: firstDocument, contentType: contentType)
     }
 
-    private func loadChapterContent(from firstDocument: LoadedHTML) async throws -> ChapterLoadResult {
-        let firstPage = try await parseChapterPage(firstDocument)
+    private func loadChapterContent(from firstDocument: LoadedHTML, contentType: BookContentType) async throws -> ChapterLoadResult {
+        let firstPage = try await parseChapterPage(firstDocument, contentType: contentType)
         var pages = [firstPage]
         var pageURL = firstPage.nextPageURL
         var nextChapterOverride: URL?
@@ -135,10 +144,10 @@ final class NovelImportCoordinator {
                 throw NovelParsingError.unsupportedURL
             }
             guard visitedPages.insert(nextPage).inserted else { throw NovelParsingError.paginationLoop }
-            let document = try await loadSourceDocument(nextPage)
-            let parsed = try await parseChapterPage(document)
-            if let originalNumber = HTMLParsingSupport.chapterNumber(in: firstPage.title),
-               let incomingNumber = HTMLParsingSupport.chapterNumber(in: parsed.title),
+            let document = try await loadSourceDocument(nextPage, contentType: contentType)
+            let parsed = try await parseChapterPage(document, contentType: contentType)
+            if let originalNumber = chapterNumber(of: firstPage),
+               let incomingNumber = chapterNumber(of: parsed),
                originalNumber != incomingNumber {
                 // Some readers label the next chapter "下一页". Verify the
                 // fetched heading before merging, so a whole novel is never
@@ -158,19 +167,21 @@ final class NovelImportCoordinator {
 
     func refreshCatalog(
         from catalogURL: URL,
+        contentType: BookContentType = .auto,
         onPageStarted: ((Int) -> Void)? = nil
     ) async throws -> ParsedBookCatalog {
         loader.beginOperation()
-        return try await loadCatalog(startingAt: catalogURL, onPageStarted: onPageStarted)
+        return try await loadCatalog(startingAt: catalogURL, contentType: contentType, onPageStarted: onPageStarted)
     }
 
-    private func loadCatalogPage(at url: URL) async throws -> ParsedBookCatalog {
-        let document = try await loadSourceDocument(url)
-        return try await parseCatalogPage(document)
+    private func loadCatalogPage(at url: URL, contentType: BookContentType) async throws -> ParsedBookCatalog {
+        let document = try await loadSourceDocument(url, contentType: contentType)
+        return try await parseCatalogPage(document, contentType: contentType)
     }
 
     private func loadCatalog(
         startingAt url: URL,
+        contentType: BookContentType,
         onPageStarted: ((Int) -> Void)?
     ) async throws -> ParsedBookCatalog {
         let clock = ContinuousClock()
@@ -186,9 +197,9 @@ final class NovelImportCoordinator {
             let pageKey = URLCanonicalizer.canonicalString(pageURL.absoluteString)
             guard visited.insert(pageKey).inserted else { throw NovelParsingError.paginationLoop }
             onPageStarted?(visited.count)
-            let document = try await loadSourceDocument(pageURL)
+            let document = try await loadSourceDocument(pageURL, contentType: contentType)
             try checkCatalogDeadline(startedAt: startedAt, clock: clock)
-            let page = try await parseCatalogPage(document)
+            let page = try await parseCatalogPage(document, contentType: contentType)
             pages.append(page)
             if let candidate = page.nextPageURL,
                URLCanonicalizer.canonicalString(candidate.absoluteString)
@@ -208,41 +219,48 @@ final class NovelImportCoordinator {
         }
     }
 
-    private func loadSourceDocument(_ url: URL) async throws -> LoadedHTML {
-        let dataURL = await parser.dataURL(for: url)
+    private func chapterNumber(of page: ParsedChapterPage) -> Int? {
+        if let number = HTMLParsingSupport.chapterNumber(in: page.title) { return number }
+        guard !page.imageURLs.isEmpty,
+              let number = HTMLParsingSupport.firstCapture("第\\s*(\\d+)\\s*[话話]", in: page.title) else { return nil }
+        return Int(number)
+    }
+
+    private func loadSourceDocument(_ url: URL, contentType: BookContentType) async throws -> LoadedHTML {
+        let dataURL = await parser.dataURL(for: url, contentType: contentType)
         let response = try await loader.load(dataURL ?? url)
         let finalURL = await parser.canonicalSourceURL(dataURL == nil ? response.finalURL : url)
         return LoadedHTML(requestedURL: url, finalURL: finalURL, html: response.html, retrievalKind: response.retrievalKind)
     }
 
-    private func parseChapterPage(_ document: LoadedHTML) async throws -> ParsedChapterPage {
+    private func parseChapterPage(_ document: LoadedHTML, contentType: BookContentType) async throws -> ParsedChapterPage {
         do {
-            return try await parser.parseChapterPage(document)
+            return try await parser.parseChapterPage(document, contentType: contentType)
         } catch {
-            return try await retryChapterParsingWithRenderedDOM(document, originalError: error)
+            return try await retryChapterParsingWithRenderedDOM(document, originalError: error, contentType: contentType)
         }
     }
 
-    private func parseCatalogPage(_ document: LoadedHTML) async throws -> ParsedBookCatalog {
+    private func parseCatalogPage(_ document: LoadedHTML, contentType: BookContentType) async throws -> ParsedBookCatalog {
         do {
-            return try await parser.parseCatalogPage(document)
+            return try await parser.parseCatalogPage(document, contentType: contentType)
         } catch {
-            return try await retryCatalogParsingWithRenderedDOM(document, originalError: error)
+            return try await retryCatalogParsingWithRenderedDOM(document, originalError: error, contentType: contentType)
         }
     }
 
-    private func staticCatalog(in document: LoadedHTML) async throws -> ParsedBookCatalog? {
-        if try await hasHighConfidenceChapterContent(in: document) {
+    private func staticCatalog(in document: LoadedHTML, contentType: BookContentType) async throws -> ParsedBookCatalog? {
+        if try await hasHighConfidenceChapterContent(in: document, contentType: contentType) {
             return nil
         }
         do {
-            let catalog = try await parser.parseCatalogPage(document)
+            let catalog = try await parser.parseCatalogPage(document, contentType: contentType)
             // Two or more chapter entries distinguish a catalog from a chapter page's navigation links.
             return catalog.chapters.count > 1 ? catalog : nil
         } catch NovelParsingError.catalogNeedsExpansion {
             // A static preview is not a complete catalog. Use the existing
             // bounded JavaScript DOM fallback before choosing the first chapter.
-            return try await parseCatalogPage(document)
+            return try await parseCatalogPage(document, contentType: contentType)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -250,9 +268,9 @@ final class NovelImportCoordinator {
         }
     }
 
-    private func hasHighConfidenceChapterContent(in document: LoadedHTML) async throws -> Bool {
+    private func hasHighConfidenceChapterContent(in document: LoadedHTML, contentType: BookContentType) async throws -> Bool {
         do {
-            let chapter = try await parser.parseChapterPage(document)
+            let chapter = try await parser.parseChapterPage(document, contentType: contentType)
             return await processingWorker.isHighConfidenceChapter(chapter)
         } catch is CancellationError {
             throw CancellationError()
@@ -263,28 +281,30 @@ final class NovelImportCoordinator {
 
     private func retryChapterParsingWithRenderedDOM(
         _ document: LoadedHTML,
-        originalError: any Error
+        originalError: any Error,
+        contentType: BookContentType
     ) async throws -> ParsedChapterPage {
         guard document.retrievalKind == .urlSession,
               let fallbackLoader = loader as? any RenderedDOMFallbackLoading else {
             throw originalError
         }
         let renderedDocument = try await fallbackLoader.loadRenderedDOM(document.finalURL)
-        let page = try await parser.parseChapterPage(renderedDocument)
+        let page = try await parser.parseChapterPage(renderedDocument, contentType: contentType)
         fallbackLoader.promoteRenderedDOMHost(for: renderedDocument.finalURL)
         return page
     }
 
     private func retryCatalogParsingWithRenderedDOM(
         _ document: LoadedHTML,
-        originalError: any Error
+        originalError: any Error,
+        contentType: BookContentType
     ) async throws -> ParsedBookCatalog {
         guard document.retrievalKind == .urlSession,
               let fallbackLoader = loader as? any RenderedDOMFallbackLoading else {
             throw originalError
         }
         let renderedDocument = try await fallbackLoader.loadRenderedDOM(document.finalURL)
-        let catalog = try await parser.parseCatalogPage(renderedDocument)
+        let catalog = try await parser.parseCatalogPage(renderedDocument, contentType: contentType)
         fallbackLoader.promoteRenderedDOMHost(for: renderedDocument.finalURL)
         return catalog
     }
@@ -311,7 +331,7 @@ final class NovelImportCoordinator {
     private func hasExplicitBookPath(_ pathComponents: [Substring]) -> Bool {
         guard pathComponents.count >= 3 else { return false }
         let collection = pathComponents[pathComponents.count - 3].lowercased()
-        return ["book", "books", "novel", "novels", "serial", "fiction", "story", "stories"].contains(collection)
+        return ["book", "books", "novel", "novels", "serial", "fiction", "story", "stories", "comic", "comics", "manga", "manhua"].contains(collection)
     }
 
     private func normalizedIdentityComponent(_ value: String) -> String {

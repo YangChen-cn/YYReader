@@ -2,7 +2,11 @@
 
 当前源码已支持漫画，现有 GitHub 安装包尚未包含此功能。Windows 暂未实现漫画阅读。
 
-点击添加网址，粘贴漫画章节或目录链接。导入后从书架打开，选择要阅读的章节即可。
+点击添加网址，粘贴漫画章节或目录链接。Mac / iOS 都可选择 **自动识别（默认）／文字小说／漫画**。自动模式沿用专用适配器优先的顺序；小说模式只解析文字正文；漫画模式先走专用适配，不匹配的站点使用轻量通用漫画解析。
+
+选择会保存到本机书籍，后续章节、目录刷新、预取、离线下载和重新打开都会沿用。旧书默认自动识别。书架点击书籍直接恢复阅读位置，目录从阅读菜单打开。
+
+通用漫画解析只接受明确阅读容器或有章节证据的语义容器，按 DOM 顺序读取普通与懒加载图片，过滤广告、Logo、封面缩略图、占位图及重复地址。不会把整个网页的图片都当正文；证据不足会报错。目录保持网站 DOM 顺序，漫画翻话优先使用页面明确给出的上下话链接。
 
 - **上下滚动**：图片按章节顺序排列，滑到章末可进入下一话。
 - **左右翻页**：每张图片是一页，左右滑动或点击翻页按钮；Mac 也支持左右方向键。Mac 在漫画顶部切换阅读方式，iOS 在阅读设置中切换。
@@ -25,6 +29,7 @@ Mac 设置的“缓存”页、iOS 设置的“本地缓存管理”可查看总
 | 站点 | 示例 | 结果 |
 | --- | --- | --- |
 | 瓜子漫画 | [黑执事_a，第 60 话](https://www.guazimanhua.com/chapter.php?id=1474108) | 31 张图片，219 个章节；使用完整目录网格，避免 JSON-LD 的 50 条预览截断。 |
+| 漫画站 | [约翰爱蒂特](https://www.manhuazhan.com/comic/406872) | 27 条目录记录；首话 150 张图片。专用适配读取网站正常脚本提供的完整列表，避免只取得视口附近的图片。 |
 | 再漫画 | [高分少女，第 02 话](https://manhua.zaimanhua.com/view/gaofenshaonv/9320/20003) | 10 张图片，95 个章节；沿用网页的公开接口，保留连载与单行本分组次序。 |
 | 好多漫 | [为您奉上复仇之酒](https://www.haoduoman.com/manhua/68217) | 51 个章节，首话 79 张图片；正常执行网站脚本后提取地址，手机与桌面域名合并为同一书籍。 |
 
@@ -32,7 +37,11 @@ Mac 设置的“缓存”页、iOS 设置的“本地缓存管理”可查看总
 
 ## 实现与后续交接
 
-Mac 与 iOS 共用 `GuaziMangaAdapter`、`ZaiMangaAdapter`、`HaoduoMangaAdapter`、`MangaImageCache` 和 `MangaReaderView`。适配器沿用 `NovelSourceAdapter` 接口，解析结果增加 `imageURLs`，小说调用默认传空数组。
+Mac 与 iOS 共用 `GuaziMangaAdapter`、`ZaiMangaAdapter`、`HaoduoMangaAdapter`、`ManhuazhanMangaAdapter`、`GenericMangaAdapter`、`MangaImageCache` 和 `MangaReaderView`。适配器沿用 `NovelSourceAdapter` 接口，解析结果增加 `imageURLs`，小说调用默认传空数组。
+
+`Book.importContentType` 保存用户选择的 `auto / novel / manga`，`resolvedContentType` 记录实际解析结果；两字段均有 `auto` 默认值，供 SwiftData 对旧数据库自动迁移。章节是否有缓存仍以实际文字或图片列表判断，不能因用户选择“漫画”就标成已缓存。重新选择类型导入同一本书后，不符合该类型的旧章节缓存会重新加载，解析失败不覆盖旧内容。
+
+这两个类型字段是本机偏好，不加入同步或书架传输协议。Windows 若接入内容类型选择，可沿用三个字符串值和解析路由；无需为此更改共享快照 schema。
 
 SwiftData 的 `Chapter` 增加 `imageSourceURLs`（默认空数组）与 `imagesCachedAt`（可为空），兼容已有小说记录。`isCached` 表示已取得文字或漫画图片列表；漫画的 `isAvailableOffline` 另外要求图片下载完成。后台下载与清理缓存均维护这些字段。
 
@@ -47,3 +56,7 @@ Windows 若增加此功能，需要扩展本地章节模型和解析结果、图
 `MangaParserTests` 使用自造 HTML / JSON 和一像素 PNG，覆盖图片顺序、广告排除、带查询参数的章节身份、完整目录、分组次序、手机域名、图片解码、缓存清理及 SwiftData 持久化。测试不依赖实时网站。
 
 人工检查：在两端打开上述任一示例，切换两种阅读方式，前后切换章节，再返回书架重新打开，确认恢复到同一图片；缓存当前章后断网检查图片是否可读。
+
+## 外部方案参考
+
+本次检查了 [gallery-dl](https://github.com/mikf/gallery-dl)、[Aidoku 源接口](https://github.com/Aidoku/aidoku-rs) 和已归档的 [manga-py](https://github.com/manga-py/manga-py)。它们采用站点适配或模板规则，不能作为无需维护的万能识别器。当前保留 SwiftSoup、专用 Adapter 与现有 WebKit 数据提取流程，不引入 Python / Rust 运行环境，也未复制这些项目的代码。

@@ -15,4 +15,5 @@ struct NovelImportResult: Sendable {
     let previousChapterURL: URL?
     let nextChapterURL: URL?
     var imageURLs: [URL] = []
+    var contentType: BookContentType = .auto
 }

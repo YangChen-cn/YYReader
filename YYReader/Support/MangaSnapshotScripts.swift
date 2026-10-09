@@ -4,8 +4,21 @@ enum MangaSnapshotScripts {
     static let capture = #"""
     (() => {
       const host = location.hostname.toLowerCase();
-      if (!(host === 'haoduoman.com' || host.endsWith('.haoduoman.com')))
-        return document.documentElement.outerHTML;
+      if (host === 'manhuazhan.com' || host.endsWith('.manhuazhan.com')) {
+        // The normal site script has already decoded its public reader list.
+        if (typeof newImgs === 'undefined' || !Array.isArray(newImgs))
+          return document.documentElement.outerHTML;
+        const imageURLs = newImgs.map(item => item && typeof item.url === 'string' ? item.url : null)
+          .filter(value => value && /^https?:\/\//.test(value));
+        const root = document.documentElement.cloneNode(true);
+        const metadata = document.createElement('script');
+        metadata.type = 'application/json';
+        metadata.id = 'yyreader-manga-images';
+        metadata.textContent = JSON.stringify({ imageURLs }).replace(/</g, '\\u003c');
+        root.appendChild(metadata);
+        return root.outerHTML;
+      }
+      if (!(host === 'haoduoman.com' || host.endsWith('.haoduoman.com'))) return document.documentElement.outerHTML;
       const config = typeof params === 'object' && params !== null ? params : null;
       if (!config || config.comic_status === 'down' || !Array.isArray(config.chapter_images))
         return document.documentElement.outerHTML;

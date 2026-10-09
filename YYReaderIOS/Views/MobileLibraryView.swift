@@ -12,6 +12,7 @@ struct MobileLibraryView: View {
     @State private var readingBookID: UUID?
     @State private var showingURL = false
     @State private var pendingURL: String?
+    @State private var pendingContentType = BookContentType.auto
     @State private var showingSettings = false
     @State private var showingFile = false
     @State private var importingText = true
@@ -34,7 +35,7 @@ struct MobileLibraryView: View {
                 }
             }
             .sheet(isPresented: $showingURL, onDismiss: submitPendingURL) {
-                AddURLSheet { pendingURL = $0 }
+                AddURLSheet { url, type in pendingURL = url; pendingContentType = type }
             }
             .sheet(isPresented: $showingSettings) { MobileSettingsView() }
             .sheet(item: $transfer.pendingImport) { pending in
@@ -285,7 +286,7 @@ struct MobileLibraryView: View {
     private func submitPendingURL() {
         guard let pendingURL else { return }
         self.pendingURL = nil
-        store.startImportURL(pendingURL)
+        store.startImportURL(pendingURL, contentType: pendingContentType)
     }
 
     private func importFile(_ url: URL) {

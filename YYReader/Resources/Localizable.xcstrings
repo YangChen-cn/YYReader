@@ -423,6 +423,21 @@
     },
     "深灰阅读背景" : {
       "extractionState" : "manual"
+    },
+    "内容类型" : {
+      "extractionState" : "manual"
+    },
+    "自动识别" : {
+      "extractionState" : "manual"
+    },
+    "文字小说" : {
+      "extractionState" : "manual"
+    },
+    "正在下载并识别书籍…" : {
+      "extractionState" : "manual"
+    },
+    "没有找到可靠的漫画正文图片。请使用漫画章节或目录网址，或改用自动识别。" : {
+      "extractionState" : "manual"
     }
   },
   "version" : "1.0"

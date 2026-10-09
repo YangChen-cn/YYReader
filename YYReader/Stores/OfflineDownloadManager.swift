@@ -8,6 +8,7 @@ final class OfflineDownloadManager {
     private let modelContext: ModelContext
     private let coordinator: NovelImportCoordinator
     private let persistence: OfflineChapterPersistence
+    private let imageCache: MangaImageCache
     private var task: Task<Void, Never>?
 
     private(set) var completedCount = 0
@@ -15,10 +16,11 @@ final class OfflineDownloadManager {
     private(set) var failedCount = 0
     private(set) var failureMessage: String?
 
-    init(modelContext: ModelContext, coordinator: NovelImportCoordinator) {
+    init(modelContext: ModelContext, coordinator: NovelImportCoordinator, imageCache: MangaImageCache = .shared) {
         self.modelContext = modelContext
         self.coordinator = coordinator
         self.persistence = OfflineChapterPersistence(modelContainer: modelContext.container)
+        self.imageCache = imageCache
     }
 
     var isDownloading: Bool { task != nil }
@@ -36,9 +38,10 @@ final class OfflineDownloadManager {
         failedCount = 0
         failureMessage = nil
 
+        let contentType = book.preferredContentType
         task = Task { [weak self] in
             guard let self else { return }
-            await download(items)
+            await download(items, contentType: contentType)
             task = nil
         }
     }
@@ -91,7 +94,7 @@ final class OfflineDownloadManager {
         )
     }
 
-    private func download(_ items: [OfflineDownloadItem]) async {
+    private func download(_ items: [OfflineDownloadItem], contentType: BookContentType) async {
         var failures: [String] = []
         for item in items {
             guard !Task.isCancelled else { return }
@@ -104,10 +107,10 @@ final class OfflineDownloadManager {
             }
 
             do {
-                let result = try await coordinator.loadChapterContent(from: url)
+                let result = try await coordinator.loadChapterContent(from: url, contentType: contentType)
                 try Task.checkCancellation()
                 for imageURL in result.imageURLs {
-                    _ = try await MangaImageCache.shared.original(at: imageURL, referer: url)
+                    _ = try await imageCache.original(at: imageURL, referer: url)
                     try Task.checkCancellation()
                 }
                 let cachedAt = Date.now
@@ -139,6 +142,7 @@ final class OfflineDownloadManager {
     ) throws {
         let descriptor = FetchDescriptor<Chapter>(predicate: #Predicate { $0.id == chapterID })
         guard let chapter = try modelContext.fetch(descriptor).first else { return }
+        chapter.book?.resolvedContentType = result.imageURLs.isEmpty ? BookContentType.novel.rawValue : BookContentType.manga.rawValue
         chapter.title = result.title
         chapter.replaceBodyText(result.bodyText)
         chapter.replaceImages(result.imageURLs)
@@ -164,6 +168,7 @@ final class OfflineDownloadManager {
     ) throws {
         let descriptor = FetchDescriptor<Chapter>(predicate: #Predicate { $0.id == chapterID })
         guard let chapter = try modelContext.fetch(descriptor).first else { return }
+        chapter.book?.resolvedContentType = result.imageURLs.isEmpty ? BookContentType.novel.rawValue : BookContentType.manga.rawValue
         chapter.title = result.title
         chapter.replaceBodyText(result.bodyText)
         chapter.replaceImages(result.imageURLs)

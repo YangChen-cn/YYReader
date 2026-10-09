@@ -58,6 +58,11 @@ actor NovelProcessingWorker {
             appendWithoutBoundaryDuplicate(page.paragraphs, to: &paragraphs)
         }
 
+        var seenImages = Set<URL>()
+        let images = pages.flatMap(\.imageURLs).filter { seenImages.insert($0).inserted }
+        guard !images.isEmpty || paragraphs.contains(where: { $0.contains { !$0.isWhitespace } }) else {
+            throw NovelParsingError.noReadableContent
+        }
         return ChapterLoadResult(
             title: firstPage.title,
             bookTitle: firstPage.bookTitle,
@@ -67,7 +72,7 @@ actor NovelProcessingWorker {
             bodyText: paragraphs.joined(separator: "\n\n"),
             previousChapterURL: firstPage.previousChapterURL,
             nextChapterURL: nextChapterOverride ?? finalPage.nextChapterURL,
-            imageURLs: pages.flatMap(\.imageURLs)
+            imageURLs: images
         )
     }
 

@@ -10,6 +10,7 @@ struct LibraryRootView: View {
     @State private var isReading = false
     @State private var showingAddURL = false
     @State private var pendingURL: String?
+    @State private var pendingContentType = BookContentType.auto
     @State private var showingAppearancePopover = false
     @State private var showingAppearanceInspector = false
     @State private var showingDownloadProgress = false
@@ -109,7 +110,7 @@ struct LibraryRootView: View {
             }
         }
         .sheet(isPresented: $showingAddURL, onDismiss: submitPendingURL) {
-            AddURLSheet { pendingURL = $0 }
+            AddURLSheet { url, type in pendingURL = url; pendingContentType = type }
         }
         .sheet(item: $bookshelfTransfer.pendingImport) { pendingImport in
             BookshelfTransferPreviewSheet(
@@ -196,7 +197,7 @@ struct LibraryRootView: View {
     private func submitPendingURL() {
         guard let pendingURL else { return }
         self.pendingURL = nil
-        store.startImportURL(pendingURL)
+        store.startImportURL(pendingURL, contentType: pendingContentType)
     }
     private func confirmDelete() { confirmingDelete = true }
     private func importBookshelf() { bookshelfTransfer.chooseImportFile(for: store) }

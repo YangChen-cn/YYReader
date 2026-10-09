@@ -206,13 +206,13 @@ final class LibraryStore {
         readerScrollRequest = nil
     }
 
-    func startImportURL(_ input: String) {
+    func startImportURL(_ input: String, contentType: BookContentType = .auto) {
         guard !isLoading else { return }
         let requestID = UUID()
         importRequestID = requestID
         importTask = Task { [weak self] in
             guard let self else { return }
-            await importURL(input, requestID: requestID)
+            await importURL(input, contentType: contentType, requestID: requestID)
             finishImport(requestID: requestID)
         }
     }
@@ -255,7 +255,7 @@ final class LibraryStore {
         catalogRefreshTask = Task { [weak self] in
             guard let self else { return }
             await performLoading("正在获取完整目录…", requestID: requestID) {
-                let catalog = try await coordinator.refreshCatalog(from: catalogURL) { [weak self] pageNumber in
+                let catalog = try await coordinator.refreshCatalog(from: catalogURL, contentType: book.preferredContentType) { [weak self] pageNumber in
                     guard self?.catalogRefreshRequestID == requestID else { return }
                     self?.loadingMessage = "正在获取完整目录…（第 \(pageNumber) 页）"
                 }
@@ -514,13 +514,13 @@ final class LibraryStore {
         attachPendingContinuousChapterIfSafe()
     }
 
-    private func importURL(_ input: String, requestID: UUID) async {
+    private func importURL(_ input: String, contentType: BookContentType, requestID: UUID) async {
         guard let url = normalizedURL(from: input) else {
             presentedError = PresentedError(message: NovelParsingError.unsupportedURL.localizedDescription)
             return
         }
-        await performLoading("正在下载并识别小说…", requestID: requestID) {
-            let result = try await coordinator.importNovel(from: url)
+        await performLoading("正在下载并识别书籍…", requestID: requestID) {
+            let result = try await coordinator.importNovel(from: url, contentType: contentType)
             try Task.checkCancellation()
             guard importRequestID == requestID else { throw CancellationError() }
             guard flushPendingProgress() else { return }
@@ -663,7 +663,7 @@ final class LibraryStore {
             return
         }
         await performLoading("正在刷新目录…", requestID: requestID) {
-            let catalog = try await coordinator.refreshCatalog(from: url) { [weak self] pageNumber in
+            let catalog = try await coordinator.refreshCatalog(from: url, contentType: book.preferredContentType) { [weak self] pageNumber in
                 guard self?.catalogRefreshRequestID == requestID else { return }
                 self?.loadingMessage = "正在刷新目录…（第 \(pageNumber) 页）"
             }
@@ -716,7 +716,7 @@ final class LibraryStore {
         if chapter.book == nil, let book = selectedBook {
             chapter.book = book
         }
-        if chapter.isManga || (chapter.isCached && !readerSession.paragraphs(for: chapter).isEmpty) {
+        if (chapter.isManga && chapter.isCached) || (chapter.isCached && !readerSession.paragraphs(for: chapter).isEmpty) {
             return
         }
         if chapter.isAvailableOffline,
@@ -731,7 +731,7 @@ final class LibraryStore {
         }
         guard let url = URL(string: chapter.sourceURL) else { return }
         do {
-            let result = try await coordinator.loadChapterContent(from: url)
+            let result = try await coordinator.loadChapterContent(from: url, contentType: (chapter.book ?? selectedBook)?.preferredContentType ?? .auto)
             apply(result, to: chapter)
             try? modelContext.save()
         } catch {
@@ -750,7 +750,7 @@ final class LibraryStore {
             try Task.checkCancellation()
             if !next.isCached {
                 guard let url = URL(string: next.sourceURL) else { break }
-                let result = try await coordinator.loadChapterContent(from: url)
+                let result = try await coordinator.loadChapterContent(from: url, contentType: (next.book ?? chapter.book ?? selectedBook)?.preferredContentType ?? .auto)
                 try Task.checkCancellation()
                 guard !result.imageURLs.isEmpty else { break }
                 apply(result, to: next)
@@ -1139,7 +1139,7 @@ final class LibraryStore {
         }
         await performLoading("正在加载章节…") {
             do {
-                let result = try await coordinator.loadChapterContent(from: url)
+                let result = try await coordinator.loadChapterContent(from: url, contentType: (chapter.book ?? selectedBook)?.preferredContentType ?? .auto)
                 apply(result, to: chapter)
                 try modelContext.save()
                 updateChapterNavigationSnapshot()
@@ -1202,7 +1202,7 @@ final class LibraryStore {
                     attachPendingContinuousChapterIfSafe()
                     return
                 }
-                let result = try await coordinator.loadChapterContent(from: url)
+                let result = try await coordinator.loadChapterContent(from: url, contentType: (chapter.book ?? selectedBook)?.preferredContentType ?? .auto)
                 guard !Task.isCancelled,
                       continuousLoadTasks[chapter.id]?.id == loadID else { return }
                 apply(result, to: chapter)
@@ -1254,7 +1254,7 @@ final class LibraryStore {
             guard let self else { return }
             defer { finishContinuousTailProbe(chapterID: chapter.id, probeID: probeID) }
             do {
-                let result = try await coordinator.loadChapterContent(from: url)
+                let result = try await coordinator.loadChapterContent(from: url, contentType: (chapter.book ?? selectedBook)?.preferredContentType ?? .auto)
                 guard !Task.isCancelled,
                       continuousTailProbeTasks[chapter.id]?.id == probeID else { return }
                 chapter.title = result.title
@@ -1469,6 +1469,10 @@ final class LibraryStore {
     }
 
     private func existingNeighbor(of chapter: Chapter, offset: Int) -> Chapter? {
+        // Generic comic catalogs may list newest chapters first. Explicit
+        // chapter navigation is stronger evidence than that display order.
+        if chapter.isManga, let linkedURL = offset > 0 ? chapter.nextURL : chapter.previousURL,
+           let linked = chapterForURL(linkedURL), linked.id != chapter.id { return linked }
         guard let index = chapterIndexByID[chapter.id] else {
             return nil
         }
@@ -1493,6 +1497,8 @@ final class LibraryStore {
         )
         if book.modelContext == nil { modelContext.insert(book) }
 
+        book.importContentType = result.contentType.rawValue
+        book.resolvedContentType = result.imageURLs.isEmpty ? BookContentType.novel.rawValue : BookContentType.manga.rawValue
         book.title = result.bookTitle
         book.author = result.author
         book.hasCatalog = result.hasCatalog
@@ -1555,6 +1561,7 @@ final class LibraryStore {
     }
 
     private func apply(_ result: ChapterLoadResult, to chapter: Chapter) {
+        chapter.book?.resolvedContentType = result.imageURLs.isEmpty ? BookContentType.novel.rawValue : BookContentType.manga.rawValue
         chapter.title = result.title
         chapter.replaceBodyText(result.bodyText)
         chapter.replaceImages(result.imageURLs)

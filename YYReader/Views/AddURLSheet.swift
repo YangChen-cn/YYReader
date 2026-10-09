@@ -1,10 +1,11 @@
 import SwiftUI
 
 struct AddURLSheet: View {
-    let onSubmit: @MainActor (String) -> Void
+    let onSubmit: @MainActor (String, BookContentType) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var url = ""
     @State private var submitting = false
+    @State private var contentType = BookContentType.auto
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -14,6 +15,12 @@ struct AddURLSheet: View {
 
             Text("粘贴小说章节、漫画章节或目录网址。")
                 .foregroundStyle(.secondary)
+
+            Picker("内容类型", selection: $contentType) {
+                ForEach(BookContentType.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("import.contentType")
 
             TextField("https://example.com/book/chapter.html", text: $url)
                 #if os(iOS)
@@ -46,7 +53,7 @@ struct AddURLSheet: View {
         guard !submitting else { return }
         submitting = true
         let submittedURL = url
-        onSubmit(submittedURL)
+        onSubmit(submittedURL, contentType)
         dismiss()
     }
 }

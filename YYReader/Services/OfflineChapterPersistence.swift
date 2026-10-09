@@ -6,6 +6,7 @@ actor OfflineChapterPersistence {
     func persist(_ result: ChapterLoadResult, chapterID: UUID, cachedAt: Date) throws {
         let descriptor = FetchDescriptor<Chapter>(predicate: #Predicate { $0.id == chapterID })
         guard let chapter = try modelContext.fetch(descriptor).first else { return }
+        chapter.book?.resolvedContentType = result.imageURLs.isEmpty ? BookContentType.novel.rawValue : BookContentType.manga.rawValue
         chapter.title = result.title
         chapter.replaceBodyText(result.bodyText)
         chapter.replaceImages(result.imageURLs)

@@ -73,13 +73,19 @@ final class Chapter {
     }
 
     var isCached: Bool {
+        if book?.preferredContentType == .novel && isManga { return false }
+        if book?.preferredContentType == .manga && !isManga { return false }
         if isManga { return true }
         guard let bodyText, !bodyText.isEmpty else { return false }
         return bodyText.contains { !$0.isWhitespace }
     }
 
     var isAvailableOffline: Bool {
-        isManga ? imagesCachedAt != nil : cachedAt != nil
+        if book?.preferredContentType == .novel && isManga { return false }
+        if book?.preferredContentType == .manga || book?.isManga == true {
+            return isManga && imagesCachedAt != nil
+        }
+        return isManga ? imagesCachedAt != nil : cachedAt != nil
     }
 
     var isLocalText: Bool {
