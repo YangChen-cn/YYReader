@@ -1,11 +1,11 @@
 <div align="center">
   <img src="YYReader/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128@2x.png" width="120" height="120" alt="YYReader 图标">
   <h1>YYReader</h1>
-  <p><strong>原生、安静、适合长时间阅读的跨平台小说阅读器</strong></p>
+  <p><strong>在 Mac、iPhone、iPad 和 Windows 上，安静地读一本小说。</strong></p>
   <p>粘贴章节网页，YYReader 会识别书籍、目录与正文，并以系统原生控件呈现干净的阅读界面。</p>
 
   <p>
-    <a href="https://github.com/YangChen-cn/YYReader/releases/tag/v1.3.0"><img src="https://img.shields.io/badge/release-v1.3.0-2ea44f?style=flat-square" alt="Release v1.3.0"></a>
+    <a href="https://github.com/YangChen-cn/YYReader/releases/tag/v1.3.0"><img src="https://img.shields.io/badge/desktop-v1.3.0-2ea44f?style=flat-square" alt="桌面版 1.3.0"></a>
     <img src="https://img.shields.io/badge/macOS-15%2B-111111?style=flat-square&logo=apple" alt="macOS 15+">
     <a href="https://github.com/YangChen-cn/YYReader/releases/tag/ios-v1.0.0"><img src="https://img.shields.io/badge/iOS-v1.0.0-007AFF?style=flat-square&logo=apple" alt="iOS 1.0.0"></a>
     <img src="https://img.shields.io/badge/Windows-10%201809%2B-0078D4?style=flat-square&logo=windows11" alt="Windows 10 1809+">
@@ -22,9 +22,9 @@
 | **iOS / iPadOS** | [下载 YYReader iOS 1.0.0 IPA](https://github.com/YangChen-cn/YYReader/releases/download/ios-v1.0.0/YYReader-iOS-1.0.0-resign.ipa)，需用侧载工具签名 | iOS / iPadOS 18 或更高版本 |
 | **Windows** | [下载 YYReader 1.3.0 x64 安装程序](https://github.com/YangChen-cn/YYReader/releases/download/v1.3.0/YYReader-Setup-x64-1.3.0.exe) | x64 Windows 10 1809 或更高版本，推荐 Windows 11 |
 
-也可以前往 [YYReader 1.3.0 Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.3.0) 查看校验信息和完整发布说明。
+发布说明与校验信息：[桌面版 1.3.0](https://github.com/YangChen-cn/YYReader/releases/tag/v1.3.0) · [iOS 1.0.0](https://github.com/YangChen-cn/YYReader/releases/tag/ios-v1.0.0)。
 
-iOS 1.0.0 已更新安装包（构建号11），补充书架与设置布局优化、文件夹同步权限和左右翻页加载修复。关于页显示作者 YangChen 与 GitHub 地址。iOS 使用独立版本号，首个正式版本为 [iOS 1.0.0](https://github.com/YangChen-cn/YYReader/releases/tag/ios-v1.0.0)。IPA 为 arm64 Release 未签名包，可通过 SideStore 等工具签名安装与续签；操作见 [iOS 安装说明](docs/IOS_DEVELOPMENT.md#使用-sidestore-在手机端安装与续签)。
+**iOS 1.0.0（构建号11）已完成 iPhone 真机安装与阅读验证。** 下载 IPA 后，使用自己的侧载工具重新签名安装；SideStore 的安装与续签配置见 [iOS 安装说明](docs/IOS_DEVELOPMENT.md#使用-sidestore-在手机端安装与续签)。
 
 ## 界面预览
 
@@ -42,6 +42,17 @@ YYReader 在 macOS、iOS / iPadOS 上使用 SwiftUI，在 Windows 上使用 WinU
     <td align="center"><sub>沉浸阅读、主题、字体与版式调节</sub></td>
   </tr>
 </table>
+
+<h3 align="center">iOS / iPadOS</h3>
+
+<p align="center">
+  <img src="docs/images/yyreader-ios-bookshelf.png" width="300" alt="YYReader iPhone 真机书架：彩色书封、书名作者、离线状态与阅读进度">
+</p>
+<p align="center">iPhone 真机书架 · 书名、作者、缓存状态与阅读进度一目了然</p>
+
+- **随手继续阅读**：彩色书封与章节进度，轻点打开、长按管理；空书架提供网址与 TXT 导入入口。
+- **两种阅读方式**：上下滚动或左右翻页；左右翻页时轻点正文中央显示菜单，分页只处理当前章。
+- **跨设备接续**：选择共享文件夹同步书架与进度，也可导入、导出书架文件；正文缓存保留在各设备本机。
 
 <h3 align="center">Windows</h3>
 

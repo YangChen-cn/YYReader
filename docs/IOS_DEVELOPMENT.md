@@ -70,7 +70,7 @@ YYReader 的 `resign.ipa` 可以交给 SideStore 重新签名。SideStore 的 [�
 3. SideStore 会尝试后台刷新已安装 App；免费账号签名通常为7天，仍需确保其后台刷新与 LocalDevVPN 配置可用，定期检查 My Apps 中的剩余天数，也可点剩余天数手动刷新。iOS 的后台调度不保证每次自动刷新成功。
 4. 更新 YYReader 时使用同一账号，在 SideStore 导入新版 IPA 覆盖安装，保留已有 App。对于已由其他工具安装的版本，官方 FAQ 也建议保留原 App 再导入同一或新版 IPA；迁移前可先导出 `.yyreader` 书架文件。
 
-按官方 FAQ，免费账号同时可激活3个 App（包含 SideStore 自己），YYReader 占1个名额。上述为兼容性检查和官方流程说明，本机没有连接真机，尚未实际验证 SideStore 安装或续签。
+按官方 FAQ，免费账号同时可激活3个 App（包含 SideStore 自己），YYReader 占1个名额。作者已于2026年10月9日完成发布版 IPA 重新签名、iPhone 安装、启动和正文阅读，并提供共享文件夹同步已启用及同步时间的真机截图。上述 SideStore 操作为兼容性与官方流程说明，此次反馈未确认使用哪种侧载工具，也未验证自动续签。
 
 ## 文件与同步
 
