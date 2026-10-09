@@ -18,6 +18,7 @@ struct MangaReaderView: View {
     @State private var isScrubbing = false
     @State private var restoringScroll = true
     @State private var ratios: [String: Double] = [:]
+    @State private var cachedRatiosReady = false
     @State private var loadedPages = Set<Int>()
     @State private var canvasSize = CGSize.zero
     @State private var scrollPosition = ScrollPosition(idType: Int.self)
@@ -67,7 +68,11 @@ struct MangaReaderView: View {
                         turn: { turn($0, layout: layout) }, toggleControls: toggleControls,
                         didLoad: { index, ratio in imageLoaded(index: index, ratio: ratio, pages: pages) })
                     #else
-                    pagedCanvas(pages: pages, layout: layout, group: group, size: geometry.size)
+                    if cachedRatiosReady {
+                        pagedCanvas(pages: pages, layout: layout, group: group, size: geometry.size)
+                    } else {
+                        ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                     #endif
                 } else {
                     scrollingCanvas(pages: pages, aspectRatios: aspectRatios, size: geometry.size)
@@ -83,7 +88,10 @@ struct MangaReaderView: View {
         }
         .background(desktop && darkBackground ? Color(white: 0.10) : Color.clear)
         .environment(\.colorScheme, desktop && darkBackground ? .dark : colorScheme)
-        .task(id: chapter.contentRevision) { await refreshRatios(pages) }
+        .task(id: chapter.contentRevision) {
+            await refreshRatios(pages)
+            if !Task.isCancelled { cachedRatiosReady = true }
+        }
         .task(id: store.readerScrollRequest?.id) {
             guard usesPages else { return }
             if let index = requestedPageIndex(total: pages.count) { seek(to: index) }

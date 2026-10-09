@@ -26,6 +26,12 @@ struct MangaImageLoadingTests {
         #expect(MangaImageTestProtocol.requests(url) == 1)
         let metadata = await cache.cachedAspectRatios(for: [url])
         #expect(metadata[url.absoluteString] == displayed.aspectRatio)
+        // A new reader can obtain the original's dimensions before any thumbnail work.
+        let reopened = MangaImageCache(directory: directory, session: session())
+        let diskMetadata = await reopened.cachedAspectRatios(for: [url])
+        #expect(diskMetadata[url.absoluteString] == displayed.aspectRatio)
+        #expect(await reopened.cachedThumbnailCount == 0)
+        #expect(MangaImageTestProtocol.requests(url) == 1)
     }
 
     @Test func abandonedSlowPageDoesNotBlockNewPageOrRepopulateCache() async throws {

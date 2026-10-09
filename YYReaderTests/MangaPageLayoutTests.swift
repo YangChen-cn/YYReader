@@ -44,6 +44,12 @@ struct MangaPageLayoutTests {
         #expect(after.group(containing: 5) == 4..<6)
     }
 
+    @Test func unknownDimensionsAreNotAssumedToBePortraitSpreads() {
+        let layout = MangaPageLayout(aspectRatios: [nil, 0.7, nil, 0.7, 0.7], mode: .double,
+                                     firstPageAlone: false, viewport: wide)
+        #expect(layout.groups == [0..<1, 1..<2, 2..<3, 3..<5])
+    }
+
     @Test func fitKeepsBothDimensionsInsideCanvasWithoutStretching() {
         for ratios in [[0.7, 0.8], [1.8], [0.7]] {
             let height = MangaPageLayout.fittedHeight(ratios: ratios, viewport: wide)
@@ -87,6 +93,20 @@ struct MangaPageLayoutTests {
         let resized = try #require(MangaWindowWidthBridge.narrowedFrame(current: CGRect(x: -800, y: 70, width: 1100, height: 800), visible: screen))
         #expect(resized.width == 600)
         #expect(resized.maxX <= screen.maxX && resized.minX >= screen.minX)
+    }
+
+    @Test @MainActor func leavingVerticalModeRestoresWidthAndKeepsCurrentHeight() throws {
+        let screen = CGRect(x: 100, y: 40, width: 1440, height: 900)
+        let original = CGRect(x: 200, y: 70, width: 1200, height: 800)
+        var narrowed = try #require(MangaWindowWidthBridge.narrowedFrame(current: original, visible: screen))
+        narrowed.size.height = 700
+        let restored = MangaWindowWidthBridge.restoredFrame(current: narrowed, originalWidth: original.width, visible: screen)
+        #expect(restored.width == original.width)
+        #expect(restored.midX == original.midX)
+        #expect(restored.height == 700)
+        let smallerScreen = CGRect(x: 100, y: 40, width: 1000, height: 900)
+        let clamped = MangaWindowWidthBridge.restoredFrame(current: narrowed, originalWidth: original.width, visible: smallerScreen)
+        #expect(clamped.width == 1000 && clamped.minX == smallerScreen.minX)
     }
     #endif
 }

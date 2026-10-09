@@ -16,8 +16,8 @@ struct MangaPageLayout: Equatable, Sendable {
         var index = 0
         while index < aspectRatios.count {
             let canPair = double && !(firstPageAlone && index == 0)
-                && (aspectRatios[index] ?? 0.7) < 1
-                && index + 1 < aspectRatios.count && (aspectRatios[index + 1] ?? 0.7) < 1
+                && aspectRatios[index].map { $0 < 1 } == true
+                && index + 1 < aspectRatios.count && aspectRatios[index + 1].map { $0 < 1 } == true
             let end = index + (canPair ? 2 : 1)
             result.append(index..<end)
             index = end

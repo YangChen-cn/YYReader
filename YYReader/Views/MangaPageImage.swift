@@ -64,7 +64,12 @@ struct MangaPageImage: View {
                 guard requestID == token else { return }
                 #if os(iOS)
                 guard let native = UIImage(data: payload.data) else { throw HTMLLoadError.invalidResponse }
-                image = Image(uiImage: native)
+                // Prepare pixels away from the animation's display work. PNG data
+                // in the thumbnail cache alone does not guarantee eager decoding.
+                let prepared = await native.byPreparingForDisplay() ?? native
+                try Task.checkCancellation()
+                guard requestID == token else { return }
+                image = Image(uiImage: prepared)
                 #else
                 guard let native = NSImage(data: payload.data) else { throw HTMLLoadError.invalidResponse }
                 image = Image(nsImage: native)

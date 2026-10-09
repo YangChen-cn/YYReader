@@ -19,17 +19,18 @@ struct MobileMangaPager: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(-1...1, id: \.self) { neighbor in
-                let index = pageIndex + neighbor
+            // Original indices keep the already displayed neighbor alive when
+            // it becomes the current page, avoiding three new image decodes per turn.
+            ForEach(Array((pageIndex - 1)...(pageIndex + 1)), id: \.self) { index in
                 ZStack {
                     if pages.indices.contains(index) {
                         MangaPageImage(url: pages[index], referer: referer, pageNumber: index + 1,
                             imageCache: imageCache, allowsZoom: false) { didLoad(index, $0) }
                             .padding(.vertical, 4)
                             .id(pages[index])
-                    } else if neighbor < 0 && hasPrevious {
+                    } else if index < pageIndex && hasPrevious {
                         Label("上一话", systemImage: "chevron.left")
-                    } else if neighbor > 0 && hasNext {
+                    } else if index > pageIndex && hasNext {
                         Label("下一话", systemImage: "chevron.right")
                     }
                 }
@@ -61,8 +62,8 @@ struct MobileMangaPager: View {
                 case .first: showingZoom = true
                 case let .second(tap):
                     switch MangaPageLayout.tap(at: tap.location.x, width: size.width) {
-                    case .backward: animateTurn(-1)
-                    case .forward: animateTurn(1)
+                    case .backward: turnImmediately(-1)
+                    case .forward: turnImmediately(1)
                     case .controls: toggleControls()
                     }
                 }
@@ -78,8 +79,8 @@ struct MobileMangaPager: View {
         .onDisappear { cancelTransition() }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("manga.canvas")
-        .accessibilityAction(named: "上一页") { animateTurn(-1) }
-        .accessibilityAction(named: "下一页") { animateTurn(1) }
+        .accessibilityAction(named: "上一页") { turnImmediately(-1) }
+        .accessibilityAction(named: "下一页") { turnImmediately(1) }
         .accessibilityAction(named: "放大图片") { showingZoom = true }
     }
 
@@ -102,6 +103,16 @@ struct MobileMangaPager: View {
                 cancelTransition()
                 turn(direction)
             }
+        }
+    }
+
+    private func turnImmediately(_ direction: Int) {
+        guard animationID == nil, canTurn(direction) else { return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            cancelTransition()
+            turn(direction)
         }
     }
 

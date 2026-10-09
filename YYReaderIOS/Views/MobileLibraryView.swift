@@ -9,6 +9,7 @@ struct MobileLibraryView: View {
     @State private var columns = NavigationSplitViewVisibility.all
     @State private var navigationID = UUID()
     @State private var isReading = false
+    @State private var readingBookID: UUID?
     @State private var showingURL = false
     @State private var pendingURL: String?
     @State private var showingSettings = false
@@ -101,8 +102,12 @@ struct MobileLibraryView: View {
                 }
             }
             .onChange(of: store.selectedBookID) { _, id in
+                // An explicit bookshelf tap already opened this book's reader.
+                // Do not let the deferred selection notification send it back to the catalog.
+                if isReading, id == readingBookID { return }
                 let returnToBookshelf = id == nil && isReading
                 isReading = false
+                readingBookID = nil
                 store.endReaderPresentation()
                 if returnToBookshelf {
                     compactColumn = .sidebar
@@ -131,9 +136,11 @@ struct MobileLibraryView: View {
                         .listRowSeparator(.hidden)
                 }
                 ForEach(store.books) { book in
-                    NavigationLink(value: book.id) {
+                    Button { openBook(book.id) } label: {
                         MobileBookCardView(book: book)
                     }
+                    .buttonStyle(.plain)
+                    .tag(book.id)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 8))
@@ -210,7 +217,8 @@ struct MobileLibraryView: View {
             // Re-selecting the open book would rebuild the reader window while the
             // regular-width layout shows it next to the bookshelf.
             guard newValue != store.selectedBookID else { return }
-            store.selectBook(newValue)
+            if let newValue { openBook(newValue) }
+            else { store.selectBook(nil) }
         })
     }
 
@@ -222,15 +230,30 @@ struct MobileLibraryView: View {
     private func openChapter(_ id: UUID) {
         guard store.selectedChapterID == id else { return }
         store.beginReaderPresentation()
+        readingBookID = store.selectedBookID
         isReading = true
         compactColumn = .detail
         columns = .detailOnly
+    }
+
+    private func openBook(_ id: UUID) {
+        guard !(isReading && readingBookID == id) else { return }
+        if store.selectedBookID != id { store.selectBook(id) }
+        guard store.selectedBookID == id else { return }
+        guard let chapterID = store.selectedChapterID else {
+            compactColumn = .content
+            columns = .all
+            return
+        }
+        store.requestReaderScroll(.restore)
+        openChapter(chapterID)
     }
 
     private func showLibrary() {
         guard store.flushPendingProgress() else { return }
         if sizeClass == .compact { store.selectBook(nil) }
         isReading = false
+        readingBookID = nil
         store.resetContinuousReaderWindow()
         store.endReaderPresentation()
         compactColumn = .sidebar
@@ -247,6 +270,7 @@ struct MobileLibraryView: View {
         compactColumn = .content
         if sizeClass == .compact {
             isReading = false
+            readingBookID = nil
             store.resetContinuousReaderWindow()
             store.endReaderPresentation()
             navigationID = UUID()
