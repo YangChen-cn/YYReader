@@ -30,7 +30,12 @@ actor MangaImageCache {
     private var thumbnails: [String: Thumbnail] = [:]
     private var thumbnailRecency: UInt64 = 0
     private var thumbnailBytes = 0
-    private var thumbnailTasks: [String: Task<MangaImagePayload, any Error>] = [:]
+    private struct ThumbnailWork {
+        let id: UUID
+        let task: Task<MangaImagePayload, any Error>
+        var waiters: Set<UUID>
+    }
+    private var thumbnailTasks: [String: ThumbnailWork] = [:]
     /// Bumped by `removeAll()` so work started before a cache clear cannot
     /// repopulate the memory cache afterwards.
     private var thumbnailGeneration = 0
@@ -47,26 +52,63 @@ actor MangaImageCache {
     }
 
     func image(at url: URL, referer: URL) async throws -> MangaImagePayload {
+        try Task.checkCancellation()
         let key = url.absoluteString
         let generation = thumbnailGeneration
         if let cached = takeThumbnail(forKey: key) { return cached }
-        if let running = thumbnailTasks[key] {
-            // Share the in-flight decode instead of starting a second one. A
-            // cancelled reader stops waiting, but the shared work continues for
-            // whoever still needs the page.
-            let payload = try await running.value
-            try Task.checkCancellation()
-            return payload
+        let waiter = UUID()
+        let work: ThumbnailWork
+        if var running = thumbnailTasks[key] {
+            running.waiters.insert(waiter)
+            thumbnailTasks[key] = running
+            work = running
+        } else {
+            let created = ThumbnailWork(id: UUID(), task: Task { try await self.makeThumbnail(at: url, referer: referer) },
+                                        waiters: [waiter])
+            thumbnailTasks[key] = created
+            work = created
         }
+        defer { releaseThumbnailWaiter(key: key, workID: work.id, waiter: waiter, cancel: false) }
+        return try await withTaskCancellationHandler {
+            let payload = try await work.task.value
+            try Task.checkCancellation()
+            if generation == thumbnailGeneration, thumbnailTasks[key]?.id == work.id { store(payload, forKey: key) }
+            return payload
+        } onCancel: {
+            Task { await self.releaseThumbnailWaiter(key: key, workID: work.id, waiter: waiter, cancel: true) }
+        }
+    }
 
-        let task = Task { try await self.makeThumbnail(at: url, referer: referer) }
-        thumbnailTasks[key] = task
-        defer { thumbnailTasks[key] = nil }
-        let payload = try await task.value
-        try Task.checkCancellation()
-        guard generation == thumbnailGeneration else { return payload }
-        store(payload, forKey: key)
-        return payload
+    private func releaseThumbnailWaiter(key: String, workID: UUID, waiter: UUID, cancel: Bool) {
+        guard var work = thumbnailTasks[key], work.id == workID else { return }
+        work.waiters.remove(waiter)
+        if work.waiters.isEmpty {
+            // Keep shared work only while another visible page still needs it.
+            // Rapid jumps must not queue obsolete downloads ahead of the new page.
+            if cancel { work.task.cancel() }
+            thumbnailTasks[key] = nil
+        } else { thumbnailTasks[key] = work }
+    }
+
+    /// Read dimensions from cached file headers, without downloading or decoding
+    /// the chapter. Prefetched originals therefore reserve their real height.
+    func cachedAspectRatios(for urls: [URL]) -> [String: Double] {
+        var result: [String: Double] = [:]
+        for url in urls {
+            if let thumbnail = thumbnails[url.absoluteString] {
+                result[url.absoluteString] = thumbnail.payload.aspectRatio
+                continue
+            }
+            let file = fileURL(url)
+            guard FileManager.default.fileExists(atPath: file.path),
+                  let source = CGImageSourceCreateWithURL(file as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                  let width = properties[kCGImagePropertyPixelWidth] as? Double,
+                  let height = properties[kCGImagePropertyPixelHeight] as? Double, width > 0, height > 0 else { continue }
+            let orientation = properties[kCGImagePropertyOrientation] as? Int ?? 1
+            result[url.absoluteString] = (5...8).contains(orientation) ? height / width : width / height
+        }
+        return result
     }
 
     private func makeThumbnail(at url: URL, referer: URL) async throws -> MangaImagePayload {
@@ -183,6 +225,8 @@ actor MangaImageCache {
     }
 
     func removeAll() async throws {
+        for work in thumbnailTasks.values { work.task.cancel() }
+        thumbnailTasks.removeAll()
         let running = tail
         running?.cancel()
         _ = await running?.result
@@ -197,6 +241,7 @@ actor MangaImageCache {
 
     func remove(_ urls: [URL]) throws {
         for url in Set(urls) {
+            thumbnailTasks.removeValue(forKey: url.absoluteString)?.task.cancel()
             if let existing = thumbnails.removeValue(forKey: url.absoluteString) {
                 thumbnailBytes -= existing.payload.data.count
             }
@@ -207,6 +252,7 @@ actor MangaImageCache {
 
     /// Test and diagnostic hook: how many display thumbnails are in memory.
     var cachedThumbnailCount: Int { thumbnails.count }
+    var activeThumbnailWaiterCount: Int { thumbnailTasks.values.reduce(0) { $0 + $1.waiters.count } }
 
     private func cachedData(at url: URL) throws -> Data? {
         let file = fileURL(url)

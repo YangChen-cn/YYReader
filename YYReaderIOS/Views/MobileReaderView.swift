@@ -15,14 +15,9 @@ struct MobileReaderView: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
+        GeometryReader { _ in
             ReaderView(store: store, keyboardNavigationEnabled: false, showsPagingControls: controlsVisible,
-                       loadsChapterAutomatically: false)
-                .simultaneousGesture(SpatialTapGesture().onEnded { value in
-                    guard usesPages, value.location.x > geometry.size.width * 0.3,
-                          value.location.x < geometry.size.width * 0.7 else { return }
-                    controlsVisible.toggle()
-                })
+                       loadsChapterAutomatically: false, togglePagingControls: { controlsVisible.toggle() })
                 .accessibilityAction(named: "显示阅读选项") { controlsVisible = true }
         }
             .navigationTitle(store.selectedChapter?.title ?? "阅读")

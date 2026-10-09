@@ -4,6 +4,7 @@ struct MobilePagedReaderView: View {
     let store: LibraryStore
     let chapter: Chapter
     var showsControls = true
+    var toggleControls: () -> Void = {}
     @AppStorage(ReaderPreferenceKeys.fontFamily) private var fontFamily = ReaderFontFamily.serif.rawValue
     @AppStorage(ReaderPreferenceKeys.fontSize) private var fontSize = 20.0
     @AppStorage(ReaderPreferenceKeys.lineSpacing) private var lineSpacing = ReaderLineSpacingPreset.comfortable.value
@@ -53,6 +54,14 @@ struct MobilePagedReaderView: View {
                     }
                     .scrollTargetLayout()
                 }
+                .simultaneousGesture(SpatialTapGesture().onEnded { tap in
+                    guard !pagination.isPaginating else { return }
+                    switch MangaPageLayout.tap(at: tap.location.x, width: geometry.size.width) {
+                    case .backward: turnBackward()
+                    case .forward: turnForward()
+                    case .controls: toggleControls()
+                    }
+                })
                 .scrollTargetBehavior(.paging)
                 .scrollPosition(id: $visiblePageID)
                 .scrollIndicators(.hidden)
