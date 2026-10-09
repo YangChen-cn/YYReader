@@ -37,6 +37,7 @@ final class LibraryStore {
     private var progressSaveRequestID: UUID?
     private var continuousLoadTasks: [UUID: ContinuousLoad] = [:]
     private var continuousLoadFailures: Set<UUID> = []
+    private(set) var chapterLoadFailures: [UUID: String] = [:]
     private var continuousTailProbeTasks: [UUID: ContinuousTailProbe] = [:]
     private var continuousTailProbeStates: [UUID: ContinuousReaderTailProbeState] = [:]
     private var visibleChapterDebounceTask: Task<Void, Never>?
@@ -696,6 +697,14 @@ final class LibraryStore {
         await ensureChapterLoaded(chapter)
     }
 
+    /// Failure message for the chapter the reader is waiting on, if its last load
+    /// attempt failed. The reader shows it with a retry action instead of leaving
+    /// the loading spinner up forever.
+    var selectedChapterLoadFailure: String? {
+        guard let selectedChapterID else { return nil }
+        return chapterLoadFailures[selectedChapterID]
+    }
+
     func materializeChapterBody(_ chapter: Chapter) async {
         if chapter.book == nil, let book = selectedBook {
             chapter.book = book
@@ -1080,6 +1089,9 @@ final class LibraryStore {
     }
 
     private func ensureChapterLoaded(_ chapter: Chapter) async {
+        // A new attempt owns the reader's failure state, so a retry shows the
+        // loading spinner instead of the previous failure.
+        chapterLoadFailures.removeValue(forKey: chapter.id)
         if chapter.book == nil, let book = selectedBook {
             chapter.book = book
         }
@@ -1092,18 +1104,40 @@ final class LibraryStore {
             return
         }
         guard (chapter.book ?? selectedBook)?.sourceKind == .web else {
-            presentedError = PresentedError(message: "这本本地 TXT 尚未在此设备保存正文，请重新导入同一 TXT 文件。")
+            let message = "这本本地 TXT 尚未在此设备保存正文，请重新导入同一 TXT 文件。"
+            chapterLoadFailures[chapter.id] = message
+            presentedError = PresentedError(message: message)
             return
         }
-        guard let url = URL(string: chapter.sourceURL) else { return }
-        await performLoading("正在加载章节…") {
-            let result = try await coordinator.loadChapterContent(from: url)
-            apply(result, to: chapter)
-            try modelContext.save()
-            updateChapterNavigationSnapshot()
-            refreshReaderSession()
-            schedulePrefetch(after: chapter)
+        guard let url = URL(string: chapter.sourceURL) else {
+            chapterLoadFailures[chapter.id] = "章节地址无效。"
+            return
         }
+        await performLoading("正在加载章节…") {
+            do {
+                let result = try await coordinator.loadChapterContent(from: url)
+                apply(result, to: chapter)
+                try modelContext.save()
+                updateChapterNavigationSnapshot()
+                refreshReaderSession()
+                schedulePrefetch(after: chapter)
+                chapterLoadFailures.removeValue(forKey: chapter.id)
+            } catch {
+                chapterLoadFailures[chapter.id] = Self.loadFailureMessage(for: error)
+                throw error
+            }
+        }
+    }
+
+    private static func loadFailureMessage(for error: any Error) -> String {
+        if error is CancellationError { return "章节加载被中断，可重试。" }
+        if let loadError = error as? HTMLLoadError, case .cancelled = loadError {
+            return "章节加载被中断，可重试。"
+        }
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+            return "章节加载被中断，可重试。"
+        }
+        return error.localizedDescription
     }
 
     private func startOfflineDownload(_ scope: OfflineDownloadScope) {

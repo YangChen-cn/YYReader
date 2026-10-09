@@ -52,6 +52,16 @@ struct ReaderView: View {
                         systemImage: "doc.text.magnifyingglass",
                         description: Text("请在此设备重新导入同一 TXT 文件。书架同步不会传输小说正文。")
                     )
+                } else if let failure = store.selectedChapterLoadFailure {
+                    ContentUnavailableView {
+                        Label("章节加载失败", systemImage: "exclamationmark.triangle")
+                    } description: {
+                        Text(failure)
+                    } actions: {
+                        Button("重试") { retrySelectedChapter() }
+                            .accessibilityIdentifier("reader.retryChapter")
+                    }
+                    .accessibilityIdentifier("reader.chapterLoadFailed")
                 } else if store.selectedChapter != nil {
                     ProgressView("正在准备章节…")
                         .accessibilityIdentifier("reader.preparingChapter")
@@ -79,6 +89,12 @@ struct ReaderView: View {
                 )
             }
         }
+    }
+
+    private func retrySelectedChapter() {
+        // iOS loads chapters from MobileReaderView, so the retry drives the load
+        // itself instead of relying on the spinner branch's task.
+        Task { await store.ensureSelectedChapterLoaded() }
     }
 
     private var showsProgressOverlay: Bool {

@@ -1126,6 +1126,43 @@ struct LibraryStoreTests {
     }
 
     @Test
+    func failedChapterLoadSurfacesRetryableFailureUntilNextAttempt() async throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        let chapterURL = try #require(URL(string: "https://example.com/failure/1.html"))
+        let book = Book(
+            title: "加载失败回归",
+            author: "测试作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/failure/"
+        )
+        let chapter = Chapter(sourceURL: chapterURL.absoluteString, title: "第1章", sortIndex: 1, book: book)
+        book.chapters = [chapter]
+        book.currentChapterID = chapter.id
+        context.insert(book)
+        context.insert(chapter)
+        try context.save()
+
+        let loader = MockHTMLLoader(
+            documents: [chapterURL: genericCataloglessChapter(title: "第1章", body: "重试后的正文")],
+            failuresBeforeSuccess: [chapterURL: 1]
+        )
+        let store = LibraryStore(modelContext: context, coordinator: NovelImportCoordinator(loader: loader))
+        store.restoreSelection(bookID: book.id, chapterID: chapter.id)
+
+        await store.ensureSelectedChapterLoaded()
+        // The reader keeps a failure state with a retry action instead of an
+        // endless "正在准备章节…" spinner.
+        #expect(store.selectedChapterLoadFailure != nil)
+        #expect(store.readerSession.entries.isEmpty)
+
+        await store.ensureSelectedChapterLoaded()
+        #expect(store.selectedChapterLoadFailure == nil)
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapter.id])
+    }
+
+    @Test
     func prepareContinuousReadingKeepsAttachedChapterAfterScrollCommit() async throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
