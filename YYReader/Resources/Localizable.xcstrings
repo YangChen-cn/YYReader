@@ -438,6 +438,33 @@
     },
     "没有找到可靠的漫画正文图片。请使用漫画章节或目录网址，或改用自动识别。" : {
       "extractionState" : "manual"
+    },
+    "原生小说与漫画阅读器" : {
+      "extractionState" : "manual"
+    },
+    "版本 1.4.0" : {
+      "extractionState" : "manual"
+    },
+    "添加网址时选择自动、小说或漫画。" : {
+      "extractionState" : "manual"
+    },
+    "漫画自动双页、快速跳页与深灰背景。" : {
+      "extractionState" : "manual"
+    },
+    "默认预取，按书籍查看与清理缓存。" : {
+      "extractionState" : "manual"
+    },
+    "恢复阅读位置，共享书架与进度。" : {
+      "extractionState" : "manual"
+    },
+    "本次更新" : {
+      "extractionState" : "manual"
+    },
+    "漫画阅读与导入选择" : {
+      "extractionState" : "manual"
+    },
+    "YangChen" : {
+      "extractionState" : "manual"
     }
   },
   "version" : "1.0"

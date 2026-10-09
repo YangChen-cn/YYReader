@@ -97,6 +97,7 @@ struct MobileSettingsView: View {
                 Section("关于") {
                     LabeledContent("YYReader", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")
                     LabeledContent("作者", value: "YangChen")
+                    LabeledContent("本次更新", value: "漫画阅读与导入选择")
                     if let repositoryURL = URL(string: "https://github.com/YangChen-cn/YYReader") {
                         Link("github.com/YangChen-cn/YYReader", destination: repositoryURL)
                     }
