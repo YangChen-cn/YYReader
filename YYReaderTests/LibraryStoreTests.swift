@@ -11,6 +11,34 @@ private final class FetchFailureSwitch {
 @MainActor
 struct LibraryStoreTests {
     @Test
+    func syncKeepsUnselectedBookshelfAndRestoresProgressOnlyWhenBookIsOpened() throws {
+        let container = try ModelContainer(for: Book.self, Chapter.self,
+                                           configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let loader = MockHTMLLoader(documents: [:])
+        let store = LibraryStore(modelContext: container.mainContext, coordinator: NovelImportCoordinator(loader: loader))
+        let record = SyncBookRecord(sourceURL: "https://example.com/startup/", title: "启动同步测试", author: "作者",
+            currentChapterURL: "https://example.com/startup/17.html", currentChapterIndex: 17,
+            paragraphIndex: 7, progress: 0.3, updatedAt: Date(timeIntervalSince1970: 100))
+        try store.applySyncRecords([record])
+        #expect(store.books.count == 1)
+        #expect(store.selectedBookID == nil)
+        #expect(store.selectedChapterID == nil)
+        #expect(loader.requestedURLs.isEmpty)
+        let book = try #require(store.books.first)
+        store.selectBook(book.id)
+        #expect(store.selectedChapter?.sortIndex == 17)
+        #expect(store.selectedChapter?.topParagraphIndex == 7)
+        #expect(store.selectedChapter?.readingProgress == 0.3)
+        store.selectBook(nil)
+        var changed = record
+        changed.title = "更新后的书名"
+        changed.updatedAt = Date(timeIntervalSince1970: 200)
+        try store.applySyncRecords([changed])
+        #expect(store.selectedBookID == nil)
+        #expect(store.selectedChapterID == nil)
+    }
+
+    @Test
     func refreshBooksKeepsExistingStateWhenFetchFails() throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
@@ -1095,6 +1123,59 @@ struct LibraryStoreTests {
             try await Task.sleep(for: .milliseconds(260))
             #expect(store.selectedChapterID == chapters[index + 1].id)
         }
+    }
+
+    @Test
+    func prepareContinuousReadingKeepsAttachedChapterAfterScrollCommit() async throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        let book = Book(
+            title: "跳页回归",
+            author: "测试作者",
+            sourceHost: "example.com",
+            catalogURL: "https://example.com/book/jump/"
+        )
+        let chapters = (1...5).map { index in
+            Chapter(
+                sourceURL: "https://example.com/book/jump/\(index).html",
+                title: "第\(index)章",
+                sortIndex: index,
+                bodyText: "第\(index)章的跳页回归测试正文。",
+                cachedAt: .now,
+                book: book
+            )
+        }
+        book.chapters = chapters
+        book.currentChapterID = chapters[0].id
+        context.insert(book)
+        for chapter in chapters { context.insert(chapter) }
+        try context.save()
+
+        let store = LibraryStore(modelContext: context, coordinator: NovelImportCoordinator(loader: MockHTMLLoader(documents: [:])))
+        store.restoreSelection(bookID: book.id, chapterID: chapters[0].id)
+        store.configureContinuousReading(true)
+        store.prepareContinuousReading()
+        store.beginReaderScrollTransaction()
+        store.prepareContinuousChapterAttachment(after: chapters[0].id)
+        store.endReaderScrollTransaction(topVisibleChapterID: chapters[0].id)
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id, chapters[1].id])
+
+        // The reader re-prepares when the committed chapter changes. The chapter
+        // it scrolled away from must stay attached, otherwise the viewport is
+        // left in the middle of the chapter it just scrolled into.
+        store.beginReaderScrollTransaction()
+        store.updateVisibleReaderPosition(chapterID: chapters[1].id, paragraphIndex: 0, total: 1)
+        try await Task.sleep(for: .milliseconds(260))
+        #expect(store.selectedChapterID == chapters[1].id)
+        store.prepareContinuousReadingIfNeeded()
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[0].id, chapters[1].id])
+
+        // An explicit catalog selection still rebuilds the window around it.
+        store.selectChapter(chapters[4].id, scrollIntent: .chapterTop)
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[4].id])
+        store.prepareContinuousReadingIfNeeded()
+        #expect(store.readerSession.entries.map(\.chapter.id) == [chapters[4].id])
     }
 
     @Test

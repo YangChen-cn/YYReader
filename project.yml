@@ -86,6 +86,8 @@ targets:
         excludes:
           - SyncFolderPicker.swift
       - path: YYReader/Support
+      - path: YYReader/Views/LocalCacheManagementView.swift
+      - path: YYReader/Views/MangaReaderView.swift
       - path: YYReader/Views/ReaderView.swift
       - path: YYReader/Views/ReaderContentView.swift
       - path: YYReader/Views/ReaderParagraphView.swift
@@ -129,7 +131,8 @@ targets:
         CFBundleDisplayName: YYReader
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        UILaunchScreen: {}
+        UILaunchScreen:
+          UIColorName: LaunchBackground
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
           UIApplicationSceneConfigurations: {}

@@ -3,6 +3,7 @@ import Observation
 @MainActor
 @Observable
 final class AppServices {
+    weak var libraryStore: LibraryStore?
     let verificationStore: WebVerificationStore
     let importCoordinator: NovelImportCoordinator
     let folderSync: FolderSyncController

@@ -14,4 +14,5 @@ struct NovelImportResult: Sendable {
     let bodyText: String
     let previousChapterURL: URL?
     let nextChapterURL: URL?
+    var imageURLs: [URL] = []
 }

@@ -20,8 +20,8 @@ struct MobileBookCardView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 HStack(spacing: 10) {
-                    Label(book.isLocalText ? "本地 TXT" : "网页小说", systemImage: book.isLocalText ? "doc.text" : "globe")
-                    if chapter?.cachedAt != nil {
+                    Label(book.isLocalText ? "本地 TXT" : (book.isManga ? "漫画" : "网页小说"), systemImage: book.isLocalText ? "doc.text" : (book.isManga ? "photo.stack" : "globe"))
+                    if chapter?.isAvailableOffline == true {
                         Label("可离线阅读", systemImage: "checkmark.circle")
                     }
                 }

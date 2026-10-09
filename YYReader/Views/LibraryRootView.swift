@@ -25,6 +25,9 @@ struct LibraryRootView: View {
                 libraryNavigation
             }
         }
+        .onChange(of: store.selectedBookID) { _, id in
+            if id == nil && isReading { showLibrary() }
+        }
         .toolbar(removing: .sidebarToggle)
         .toolbar {
             if isReading {

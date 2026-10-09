@@ -2,6 +2,49 @@ import XCTest
 
 final class MobileReaderUITests: XCTestCase {
     @MainActor
+    func testRelaunchStartsOnBookshelfAndKeepsBookChapter() {
+        continueAfterFailure = false
+        let app = launchLibrary(extraArguments: ["--ui-testing-relaunch"])
+        XCTAssertTrue(app.buttons["ios.addMenu"].waitForExistence(timeout: 10))
+        app.staticTexts["山间来信"].firstMatch.tap()
+        let chapter = app.buttons["ios.chapter.2"]
+        XCTAssertTrue(chapter.waitForExistence(timeout: 5))
+        chapter.tap()
+        XCTAssertTrue(app.buttons["ios.readerMenu"].waitForExistence(timeout: 5))
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["ios.addMenu"].waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertFalse(app.buttons["ios.continueReading"].exists)
+        app.staticTexts["山间来信"].firstMatch.tap()
+        let current = app.buttons["ios.continueReading"]
+        XCTAssertTrue(current.waitForExistence(timeout: 5))
+        XCTAssertTrue(current.staticTexts["第2章 石桥"].exists)
+    }
+
+    @MainActor
+    func testSystemDarkAndPaperThemeStayConsistentAcrossNavigation() {
+        continueAfterFailure = false
+        // The single test simulator is configured to system Dark by the test command.
+        for (arguments, expected) in [([String](), "dark"), (["--ui-testing-theme-sepia"], "light")] {
+            let app = launchLibrary(extraArguments: arguments)
+            let scene = app.descendants(matching: .any)["ios.libraryScene"]
+            XCTAssertTrue(app.buttons["ios.addMenu"].waitForExistence(timeout: 10))
+            expectation(for: NSPredicate(format: "value == %@", expected), evaluatedWith: scene)
+            waitForExpectations(timeout: 5)
+            app.staticTexts["山间来信"].firstMatch.tap()
+            XCTAssertTrue(app.buttons["ios.continueReading"].waitForExistence(timeout: 5))
+            XCTAssertEqual(scene.value as? String, expected)
+            app.buttons["ios.chapter.1"].tap()
+            XCTAssertTrue(app.buttons["ios.readerMenu"].waitForExistence(timeout: 5))
+            XCTAssertEqual(scene.value as? String, expected)
+            app.buttons["书架"].tap()
+            XCTAssertTrue(app.buttons["ios.addMenu"].waitForExistence(timeout: 5))
+            XCTAssertEqual(scene.value as? String, expected)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testEmptyBookshelfHasUsefulActions() {
         let app = launchLibrary(extraArguments: ["--ui-testing-empty"])
         let empty = app.descendants(matching: .any)["ios.emptyBookshelf"]

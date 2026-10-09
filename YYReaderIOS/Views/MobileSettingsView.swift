@@ -74,9 +74,12 @@ struct MobileSettingsView: View {
                     }
                 }
                 Section {
-                    Toggle("预取下一章", isOn: $prefetch)
+                    Toggle("自动预取", isOn: $prefetch)
+                    if let store = services.libraryStore {
+                        NavigationLink("本地缓存管理") { LocalCacheManagementView(store: store) }
+                    }
                 } header: { Text("离线阅读") } footer: {
-                    Text("读过的章节会保存在本机。更多下载选项在阅读菜单中，方便离线时继续阅读。")
+                    Text("小说最多预取 3 章，漫画最多预取 10 张图片。更多下载选项在阅读菜单中。")
                 }
                 Section {
                     Button("选择共享文件夹", systemImage: "folder") { choosingFolder = true }

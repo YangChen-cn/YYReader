@@ -5,20 +5,23 @@ struct MobileLibrarySceneView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AppServices.self) private var services
-    @AppStorage(ReaderPreferenceKeys.lastReadingBookID) private var bookID = ""
-    @AppStorage(ReaderPreferenceKeys.lastReadingChapterID) private var chapterID = ""
+    @Environment(\.colorScheme) private var colorScheme
     @State private var store: LibraryStore?
 
     var body: some View {
         Group {
             if let store {
                 MobileLibraryView(store: store)
-                    .onChange(of: store.selectedBookID) { _, id in bookID = id?.uuidString ?? "" }
-                    .onChange(of: store.selectedChapterID) { _, id in chapterID = id?.uuidString ?? "" }
             } else {
                 ProgressView("正在打开书架…")
             }
         }
+        #if DEBUG
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("ios.libraryScene")
+        .accessibilityValue(ProcessInfo.processInfo.arguments.contains("--ui-testing")
+                            ? (colorScheme == .dark ? "dark" : "light") : "")
+        #endif
         .task {
             guard store == nil else { return }
             #if DEBUG
@@ -33,10 +36,13 @@ struct MobileLibrarySceneView: View {
                 coordinator: coordinator,
                 folderSync: services.folderSync
             )
-            library.restoreSelection(bookID: UUID(uuidString: bookID), chapterID: UUID(uuidString: chapterID))
+            // Start on the bookshelf. Each Book retains its chapter and progress;
+            // selecting it later restores the reading position without opening a
+            // catalog automatically during app startup.
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--ui-testing"),
-               !ProcessInfo.processInfo.arguments.contains("--ui-testing-empty") {
+               !ProcessInfo.processInfo.arguments.contains("--ui-testing-empty"),
+               !(ProcessInfo.processInfo.arguments.contains("--ui-testing-relaunch") && !library.books.isEmpty) {
                 do {
                     let largeCatalog = ProcessInfo.processInfo.arguments.contains("--ui-testing-large-catalog")
                     let sample = largeCatalog || ProcessInfo.processInfo.arguments.contains("--ui-testing-pagination")
@@ -80,6 +86,7 @@ struct MobileLibrarySceneView: View {
             }
             #endif
             store = library
+            services.libraryStore = library
             services.folderSync.attach(to: library)
             #if DEBUG
             let arguments = ProcessInfo.processInfo.arguments

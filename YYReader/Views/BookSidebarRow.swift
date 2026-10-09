@@ -14,7 +14,7 @@ struct BookSidebarRow: View {
                     .lineLimit(1)
             }
         } icon: {
-            Image(systemName: "book.closed")
+            Image(systemName: book.isManga ? "photo.stack" : "book.closed")
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)

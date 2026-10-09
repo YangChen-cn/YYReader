@@ -4,7 +4,6 @@ struct MobileReaderView: View {
     let store: LibraryStore
     let showLibrary: () -> Void
     let showCatalog: () -> Void
-    @AppStorage(ReaderPreferenceKeys.theme) private var themeName = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.presentationMode) private var mode = ReaderPresentationMode.normal.rawValue
     @AppStorage(ReaderPreferenceKeys.pageTurnMode) private var pageTurnMode = ReaderPageTurnMode.verticalScroll.rawValue
     @State private var showingSettings = false
@@ -12,7 +11,7 @@ struct MobileReaderView: View {
     @State private var chapterLoadTask: Task<Void, Never>?
 
     private var usesPages: Bool {
-        pageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue && mode == ReaderPresentationMode.normal.rawValue
+        pageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue && (mode == ReaderPresentationMode.normal.rawValue || store.selectedChapter?.isManga == true)
     }
 
     var body: some View {
@@ -29,8 +28,6 @@ struct MobileReaderView: View {
             .navigationTitle(store.selectedChapter?.title ?? "阅读")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(usesPages && !controlsVisible ? .hidden : .visible, for: .navigationBar)
-            .preferredColorScheme(mode == ReaderPresentationMode.academicPaper.rawValue
-                                  ? .light : ReaderTheme(rawValue: themeName)?.preferredColorScheme)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("书架", systemImage: "books.vertical", action: showLibrary)
@@ -111,7 +108,11 @@ struct MobileReaderView: View {
         chapterLoadTask = Task {
             await store.ensureSelectedChapterLoaded()
             guard !Task.isCancelled, store.selectedChapterID == chapterID else { return }
-            store.prepareContinuousReading()
+            // Continuous scrolling commits the visible chapter while the reader
+            // window keeps the previous one attached; rebuilding the session here
+            // would drop that content and leave the viewport in the middle of the
+            // chapter the reader just scrolled into.
+            store.prepareContinuousReadingIfNeeded()
         }
     }
 }

@@ -67,6 +67,7 @@ struct LibrarySceneView: View {
         persistedBookID = storedBookID
         persistedChapterID = storedChapterID
         store = newStore
+        services.libraryStore = newStore
         services.folderSync.attach(to: newStore)
     }
 }

@@ -21,6 +21,7 @@ final class Book {
     /// `hasCatalog` distinguishes an actual catalog URL from a derived source-book URL.
     var sourceBookURL: String { catalogURL }
     var sourceKind: BookSourceKind { BookSourceKind.resolve(sourceBookURL) }
+    var isManga: Bool { sourceHost == "guazimanhua.com" || sourceHost.hasSuffix(".guazimanhua.com") || sourceHost == "manhua.zaimanhua.com" || sourceHost == "haoduoman.com" || sourceHost.hasSuffix(".haoduoman.com") }
     var isLocalText: Bool { sourceKind == .localText }
 
     init(

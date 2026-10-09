@@ -24,7 +24,7 @@ final class NovelImportCoordinator {
         guard ["http", "https"].contains(inputURL.scheme?.lowercased() ?? "") else {
             throw NovelParsingError.unsupportedURL
         }
-        let firstDocument = try await loader.load(inputURL)
+        let firstDocument = try await loadSourceDocument(inputURL)
         if let catalog = try await staticCatalog(in: firstDocument) {
             return try await importCatalog(catalog, from: firstDocument)
         }
@@ -72,7 +72,8 @@ final class NovelImportCoordinator {
             chapterURL: chapter.chapterURL,
             bodyText: chapter.bodyText,
             previousChapterURL: chapter.previousChapterURL,
-            nextChapterURL: chapter.nextChapterURL
+            nextChapterURL: chapter.nextChapterURL,
+            imageURLs: chapter.imageURLs
         )
     }
 
@@ -102,7 +103,8 @@ final class NovelImportCoordinator {
             chapterURL: chapter.chapterURL,
             bodyText: chapter.bodyText,
             previousChapterURL: chapter.previousChapterURL,
-            nextChapterURL: chapter.nextChapterURL
+            nextChapterURL: chapter.nextChapterURL,
+            imageURLs: chapter.imageURLs
         )
     }
 
@@ -116,7 +118,7 @@ final class NovelImportCoordinator {
             throw NovelParsingError.unsupportedURL
         }
 
-        let firstDocument = try await loader.load(inputURL)
+        let firstDocument = try await loadSourceDocument(inputURL)
         return try await loadChapterContent(from: firstDocument)
     }
 
@@ -133,7 +135,7 @@ final class NovelImportCoordinator {
                 throw NovelParsingError.unsupportedURL
             }
             guard visitedPages.insert(nextPage).inserted else { throw NovelParsingError.paginationLoop }
-            let document = try await loader.load(nextPage)
+            let document = try await loadSourceDocument(nextPage)
             let parsed = try await parseChapterPage(document)
             if let originalNumber = HTMLParsingSupport.chapterNumber(in: firstPage.title),
                let incomingNumber = HTMLParsingSupport.chapterNumber(in: parsed.title),
@@ -163,7 +165,7 @@ final class NovelImportCoordinator {
     }
 
     private func loadCatalogPage(at url: URL) async throws -> ParsedBookCatalog {
-        let document = try await loader.load(url)
+        let document = try await loadSourceDocument(url)
         return try await parseCatalogPage(document)
     }
 
@@ -184,7 +186,7 @@ final class NovelImportCoordinator {
             let pageKey = URLCanonicalizer.canonicalString(pageURL.absoluteString)
             guard visited.insert(pageKey).inserted else { throw NovelParsingError.paginationLoop }
             onPageStarted?(visited.count)
-            let document = try await loader.load(pageURL)
+            let document = try await loadSourceDocument(pageURL)
             try checkCatalogDeadline(startedAt: startedAt, clock: clock)
             let page = try await parseCatalogPage(document)
             pages.append(page)
@@ -204,6 +206,13 @@ final class NovelImportCoordinator {
         if startedAt.duration(to: clock.now) >= catalogRefreshTimeout {
             throw NovelParsingError.catalogRefreshTimedOut
         }
+    }
+
+    private func loadSourceDocument(_ url: URL) async throws -> LoadedHTML {
+        let dataURL = await parser.dataURL(for: url)
+        let response = try await loader.load(dataURL ?? url)
+        let finalURL = await parser.canonicalSourceURL(dataURL == nil ? response.finalURL : url)
+        return LoadedHTML(requestedURL: url, finalURL: finalURL, html: response.html, retrievalKind: response.retrievalKind)
     }
 
     private func parseChapterPage(_ document: LoadedHTML) async throws -> ParsedChapterPage {

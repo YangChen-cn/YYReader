@@ -66,11 +66,13 @@ actor NovelProcessingWorker {
             chapterURL: canonicalChapterURL(sourceURL),
             bodyText: paragraphs.joined(separator: "\n\n"),
             previousChapterURL: firstPage.previousChapterURL,
-            nextChapterURL: nextChapterOverride ?? finalPage.nextChapterURL
+            nextChapterURL: nextChapterOverride ?? finalPage.nextChapterURL,
+            imageURLs: pages.flatMap(\.imageURLs)
         )
     }
 
     func isHighConfidenceChapter(_ chapter: ParsedChapterPage) -> Bool {
+        if !chapter.imageURLs.isEmpty { return true }
         let bodyLength = chapter.paragraphs.reduce(into: 0) { $0 += $1.count }
         if bodyLength >= 180 { return true }
         return bodyLength >= 60

@@ -124,7 +124,7 @@ final class WebKitHostSession: NSObject {
                 contentWorld: .page
             )
             guard self.activeLoad?.id == activeLoad.id else { return }
-            let result = try await webView.evaluateJavaScript("document.documentElement.outerHTML")
+            let result = try await webView.evaluateJavaScript(MangaSnapshotScripts.capture)
             guard self.activeLoad?.id == activeLoad.id else { return }
             guard let html = result as? String, !html.isEmpty, let finalURL = webView.url else {
                 throw HTMLLoadError.invalidResponse

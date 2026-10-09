@@ -27,6 +27,11 @@ struct ReaderView: View {
 
             Group {
                 if let chapter, chapter.isCached {
+                    if chapter.isManga {
+                        MangaReaderView(store: store, chapter: chapter, showsControls: showsPagingControls,
+                                        keyboardNavigationEnabled: keyboardNavigationEnabled)
+                            .id(chapter.id)
+                    } else {
                     #if os(iOS)
                     if pageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue && !isAcademic {
                         MobilePagedReaderView(store: store, chapter: chapter, showsControls: showsPagingControls)
@@ -40,6 +45,7 @@ struct ReaderView: View {
                         keyboardNavigationEnabled: keyboardNavigationEnabled
                     )
                     #endif
+                    }
                 } else if store.selectedBook?.isLocalText == true {
                     ContentUnavailableView(
                         "缺少本地正文",
@@ -62,8 +68,11 @@ struct ReaderView: View {
             }
             .foregroundStyle(isAcademic ? Color(white: 0.12) : theme.foreground)
         }
+        .onDisappear {
+            if store.selectedChapter?.isManga == true { store.endReaderPresentation() }
+        }
         .overlay(alignment: .bottom) {
-            if store.selectedChapter != nil && showsProgressOverlay {
+            if store.selectedChapter != nil && store.selectedChapter?.isManga != true && showsProgressOverlay {
                 ReaderReadingProgressFooter(
                     text: isAcademic ? store.academicFooterText : store.readerProgressText,
                     foreground: isAcademic ? Color(white: 0.30) : theme.accent

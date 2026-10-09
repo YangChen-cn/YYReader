@@ -8,11 +8,11 @@ struct AddURLSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Label("添加小说网页", systemImage: "link")
+            Label("添加阅读网页", systemImage: "link")
                 .font(.title2)
                 .bold()
 
-            Text("粘贴任意章节 URL。YYReader 会识别小说、目录和章节分页。")
+            Text("粘贴小说章节、漫画章节或目录网址。")
                 .foregroundStyle(.secondary)
 
             TextField("https://example.com/book/chapter.html", text: $url)
@@ -23,7 +23,7 @@ struct AddURLSheet: View {
                 #endif
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(submit)
-                .accessibilityLabel("小说章节网址")
+                .accessibilityLabel("章节或目录网址")
                 .accessibilityIdentifier("chapterURL")
 
             HStack {

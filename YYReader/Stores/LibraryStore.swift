@@ -25,6 +25,7 @@ final class LibraryStore {
     private let coordinator: NovelImportCoordinator
     private let folderSync: FolderSyncController?
     private let progressSaveDelay: Duration
+    private var mangaCleanupBookIDs = Set<UUID>()
     private var prefetchTask: Task<Void, Never>?
     private var prefetchRequestID: UUID?
     private var prefetchOriginChapterID: UUID?
@@ -127,6 +128,7 @@ final class LibraryStore {
     }
 
     func endReaderPresentation() {
+        if let chapter = selectedChapter { trimReadMangaCache(after: chapter) }
         isReaderPresented = false
         guard !deferredRemoteTombstones.isEmpty else { return }
         let records = Array(deferredRemoteTombstones.values)
@@ -154,6 +156,7 @@ final class LibraryStore {
             selectedBookID = previousID
             return
         }
+        if selectedBookID != id, let chapter = selectedChapter { trimReadMangaCache(after: chapter) }
         cancelContinuousTailProbes()
         selectedBookID = id
         rebuildSelectedBookChapters()
@@ -266,15 +269,19 @@ final class LibraryStore {
 
     func deleteOfflineCache() {
         guard let book = selectedBook, book.sourceKind == .web else { return }
+        offlineDownloads.cancel()
         let retainedChapterID = selectedChapterID
         let chapters = book.chapters.filter { $0.id != retainedChapterID }
         let chapterIDs = chapters.map(\.id)
+        let imageURLs = chapters.flatMap(\.imageSourceURLs).compactMap(URL.init(string:))
         Task { [weak self] in
             guard let self else { return }
             do {
+                try await MangaImageCache.shared.remove(imageURLs)
                 try await offlineDownloads.clearPersistedBodies(chapterIDs: chapterIDs)
                 for chapter in chapters {
                     chapter.replaceBodyText(nil)
+                    chapter.replaceImages([])
                     chapter.cachedAt = nil
                 }
                 try modelContext.save()
@@ -283,6 +290,42 @@ final class LibraryStore {
                 presentedError = PresentedError(message: "删除离线缓存失败：\(error.localizedDescription)")
             }
         }
+    }
+
+    func localCacheSummary(imageCache: MangaImageCache = .shared) async throws -> LocalCacheSummary {
+        let entries = try await offlineDownloads.cacheEntries()
+        return try await imageCache.cacheSummary(for: entries)
+    }
+
+    func clearLocalCache(bookID: UUID? = nil, imageCache: MangaImageCache = .shared) async throws {
+        let targets = books.filter { $0.sourceKind == .web && (bookID == nil || $0.id == bookID) }
+        guard !targets.isEmpty || bookID == nil else { return }
+        guard flushPendingProgress() else { throw LocalTextImportError.persistenceFailed }
+        cancelPrefetch()
+        cancelContinuousTailProbes()
+        await offlineDownloads.cancelAndWait()
+        let chapters = targets.flatMap(\.chapters)
+        let ids = Set(chapters.map(\.id))
+        for id in ids { continuousLoadTasks.removeValue(forKey: id)?.task.cancel() }
+        if targets.contains(where: { $0.id == selectedBookID }) {
+            selectBook(nil)
+            readerSession.reset(around: nil)
+        }
+        let imageURLs = chapters.flatMap(\.imageSourceURLs).compactMap(URL.init(string:))
+        if bookID == nil { try await imageCache.removeAll() }
+        else {
+            let protected = Set(books.filter { $0.id != bookID }.flatMap(\.chapters).flatMap(\.imageSourceURLs))
+            try await imageCache.remove(imageURLs.filter { !protected.contains($0.absoluteString) })
+        }
+        try await offlineDownloads.clearPersistedBodies(chapterIDs: Array(ids))
+        for chapter in chapters {
+            chapter.replaceBodyText(nil)
+            chapter.replaceImages([])
+            chapter.cachedAt = nil
+        }
+        try modelContext.save()
+        readerSession.clearParagraphCache()
+        refreshReaderSession()
     }
 
     func configureContinuousReading(_ isEnabled: Bool) {
@@ -301,6 +344,19 @@ final class LibraryStore {
     func prepareContinuousReading() {
         refreshReaderSession()
         prefetchNextContinuousChapterIfNeeded()
+    }
+
+    /// Prepares the reader for a chapter change that did not come from continuous
+    /// scrolling. A continuous commit leaves the previous chapters attached, so
+    /// when the selected chapter is already part of the window the window is
+    /// already prepared: rebuilding it would drop the content above the viewport
+    /// and leave the reader in the middle of the chapter it just scrolled into.
+    func prepareContinuousReadingIfNeeded() {
+        if let selectedChapterID,
+           readerSession.entries.contains(where: { $0.id == selectedChapterID }) {
+            return
+        }
+        prepareContinuousReading()
     }
 
     func resetContinuousReaderWindow() {
@@ -644,7 +700,7 @@ final class LibraryStore {
         if chapter.book == nil, let book = selectedBook {
             chapter.book = book
         }
-        if chapter.isCached, !readerSession.paragraphs(for: chapter).isEmpty {
+        if chapter.isManga || (chapter.isCached && !readerSession.paragraphs(for: chapter).isEmpty) {
             return
         }
         if chapter.isAvailableOffline,
@@ -664,6 +720,50 @@ final class LibraryStore {
             try? modelContext.save()
         } catch {
             continuousLoadFailures.insert(chapter.id)
+        }
+    }
+
+    /// Collect at most ten images ahead, loading only additional chapter lists
+    /// needed to fill that window. This never decodes or downloads an entire book.
+    func mangaPrefetchImages(after chapter: Chapter, pageIndex: Int, limit: Int = 10) async throws -> [URL] {
+        guard chapter.isManga, limit > 0 else { return [] }
+        var images = Array(chapter.imageSourceURLs.dropFirst(pageIndex + 1).prefix(limit)).compactMap(URL.init(string:))
+        var current = chapter
+        var visited = Set([chapter.id])
+        while images.count < limit, let next = neighbor(of: current, offset: 1), visited.insert(next.id).inserted {
+            try Task.checkCancellation()
+            if !next.isCached {
+                guard let url = URL(string: next.sourceURL) else { break }
+                let result = try await coordinator.loadChapterContent(from: url)
+                try Task.checkCancellation()
+                guard !result.imageURLs.isEmpty else { break }
+                apply(result, to: next)
+                try modelContext.save()
+            }
+            guard next.isManga else { break }
+            images += next.imageSourceURLs.prefix(limit - images.count).compactMap(URL.init(string:))
+            current = next
+        }
+        return images
+    }
+
+    private func trimReadMangaCache(after chapter: Chapter) {
+        guard chapter.isManga, let book = chapter.book,
+              mangaCleanupBookIDs.insert(book.id).inserted else { return }
+        let records = book.chapters.filter(\.isManga).map {
+            MangaChapterCacheRecord(id: $0.id, imageURLs: $0.imageSourceURLs.compactMap(URL.init(string:)), lastReadAt: $0.lastReadAt)
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            defer { mangaCleanupBookIDs.remove(book.id) }
+            do {
+                let removed = Set(try await MangaImageCache.shared.trimReadChapters(records, currentChapterID: chapter.id))
+                guard !removed.isEmpty, book.modelContext != nil else { return }
+                for item in book.chapters where removed.contains(item.id) { item.imagesCachedAt = nil }
+                try modelContext.save()
+            } catch {
+                presentedError = PresentedError(message: "清理漫画缓存失败：\(error.localizedDescription)")
+            }
         }
     }
 
@@ -717,6 +817,8 @@ final class LibraryStore {
         guard flushPendingProgress() else { return false }
         let deletionRecord = syncRecord(for: book, deletedAt: .now)
         readerScrollRequest = nil
+        let imageURLs = book.chapters.flatMap(\.imageSourceURLs).compactMap(URL.init(string:))
+        offlineDownloads.cancel()
         modelContext.delete(book)
         do {
             try modelContext.save()
@@ -724,6 +826,10 @@ final class LibraryStore {
             modelContext.rollback()
             presentedError = PresentedError(message: "删除小说失败：\(error.localizedDescription)")
             return false
+        }
+        Task { [weak self] in
+            do { try await MangaImageCache.shared.remove(imageURLs) }
+            catch { self?.presentedError = PresentedError(message: "清理漫画图片失败：\(error.localizedDescription)") }
         }
         refreshBooks()
         selectedBookID = books.first?.id
@@ -898,7 +1004,8 @@ final class LibraryStore {
         guard modelContext.hasChanges else { return }
         try modelContext.save()
         refreshBooks()
-        selectedBookID = books.contains { $0.id == previousBookID } ? previousBookID : books.first?.id
+        selectedBookID = previousBookID == nil ? nil
+            : (books.contains { $0.id == previousBookID } ? previousBookID : books.first?.id)
         rebuildSelectedBookChapters()
         let synchronizedPositionChanged = selectedBookID == previousBookID
             && selectedBookReadingPositionChanged(
@@ -1357,6 +1464,7 @@ final class LibraryStore {
         }
         chapter.title = result.chapterTitle
         chapter.replaceBodyText(result.bodyText)
+        chapter.replaceImages(result.imageURLs)
         chapter.previousURL = result.previousChapterURL?.absoluteString
         chapter.nextURL = result.nextChapterURL?.absoluteString
         chapter.cachedAt = .now
@@ -1391,6 +1499,7 @@ final class LibraryStore {
     private func apply(_ result: ChapterLoadResult, to chapter: Chapter) {
         chapter.title = result.title
         chapter.replaceBodyText(result.bodyText)
+        chapter.replaceImages(result.imageURLs)
         chapter.previousURL = result.previousChapterURL?.absoluteString
         chapter.nextURL = result.nextChapterURL?.absoluteString
         chapter.cachedAt = .now

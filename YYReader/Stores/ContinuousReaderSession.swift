@@ -60,6 +60,8 @@ final class ContinuousReaderSession {
         paragraphCache.paragraphs(for: chapter)
     }
 
+    func clearParagraphCache() { paragraphCache.removeAll() }
+
     var cachedParagraphChapterCount: Int { paragraphCache.count }
 
 }

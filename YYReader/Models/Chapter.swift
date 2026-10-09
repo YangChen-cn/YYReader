@@ -8,6 +8,8 @@ final class Chapter {
     var title: String
     var sortIndex: Int
     var bodyText: String?
+    var imageSourceURLs: [String] = []
+    var imagesCachedAt: Date?
     @Transient var contentRevision: Int = 0
     var previousURL: String?
     var nextURL: String?
@@ -57,13 +59,23 @@ final class Chapter {
         contentRevision &+= 1
     }
 
+    var isManga: Bool { !imageSourceURLs.isEmpty }
+
+    func replaceImages(_ urls: [URL]) {
+        let sources = urls.map(\.absoluteString)
+        if sources.isEmpty || sources != imageSourceURLs { imagesCachedAt = nil }
+        imageSourceURLs = sources
+        contentRevision &+= 1
+    }
+
     var isCached: Bool {
+        if isManga { return true }
         guard let bodyText, !bodyText.isEmpty else { return false }
         return bodyText.contains { !$0.isWhitespace }
     }
 
     var isAvailableOffline: Bool {
-        cachedAt != nil
+        isManga ? imagesCachedAt != nil : cachedAt != nil
     }
 
     var isLocalText: Bool {

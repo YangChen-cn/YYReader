@@ -47,6 +47,14 @@ final class OfflineDownloadManager {
         task?.cancel()
     }
 
+    func cancelAndWait() async {
+        let running = task
+        running?.cancel()
+        await running?.value
+    }
+
+    func cacheEntries() async throws -> [LocalBookCacheEntry] { try await persistence.cacheEntries() }
+
     func dismissFailure() {
         guard !isDownloading else { return }
         failureMessage = nil
@@ -98,6 +106,10 @@ final class OfflineDownloadManager {
             do {
                 let result = try await coordinator.loadChapterContent(from: url)
                 try Task.checkCancellation()
+                for imageURL in result.imageURLs {
+                    _ = try await MangaImageCache.shared.original(at: imageURL, referer: url)
+                    try Task.checkCancellation()
+                }
                 let cachedAt = Date.now
                 if item.isCurrentChapter {
                     try persistCurrentChapter(result, chapterID: item.chapterID, cachedAt: cachedAt)
@@ -129,6 +141,8 @@ final class OfflineDownloadManager {
         guard let chapter = try modelContext.fetch(descriptor).first else { return }
         chapter.title = result.title
         chapter.replaceBodyText(result.bodyText)
+        chapter.replaceImages(result.imageURLs)
+        chapter.imagesCachedAt = result.imageURLs.isEmpty ? nil : cachedAt
         chapter.previousURL = result.previousChapterURL?.absoluteString
         chapter.nextURL = result.nextChapterURL?.absoluteString
         chapter.cachedAt = cachedAt
@@ -152,6 +166,8 @@ final class OfflineDownloadManager {
         guard let chapter = try modelContext.fetch(descriptor).first else { return }
         chapter.title = result.title
         chapter.replaceBodyText(result.bodyText)
+        chapter.replaceImages(result.imageURLs)
+        chapter.imagesCachedAt = result.imageURLs.isEmpty ? nil : cachedAt
         chapter.previousURL = result.previousChapterURL?.absoluteString
         chapter.nextURL = result.nextChapterURL?.absoluteString
         chapter.cachedAt = cachedAt

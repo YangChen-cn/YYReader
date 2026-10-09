@@ -9,4 +9,5 @@ struct ParsedChapterPage: Sendable {
     let previousChapterURL: URL?
     let nextChapterURL: URL?
     let nextPageURL: URL?
+    var imageURLs: [URL] = []
 }

@@ -100,9 +100,15 @@ struct MobileLibraryView: View {
                     if store.deleteSelectedBook() { showLibrary() }
                 }
             }
-            .onChange(of: store.selectedBookID) { _, _ in
+            .onChange(of: store.selectedBookID) { _, id in
+                let returnToBookshelf = id == nil && isReading
                 isReading = false
                 store.endReaderPresentation()
+                if returnToBookshelf {
+                    compactColumn = .sidebar
+                    columns = .all
+                    if sizeClass == .compact { navigationID = UUID() }
+                }
             }
             .onOpenURL { url in
                 if url.isFileURL {
