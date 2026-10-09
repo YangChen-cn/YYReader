@@ -10,21 +10,66 @@ struct MangaImagePayload: Sendable {
 
 /// Disk-backed original images; decoding and thumbnail creation stay off the UI actor.
 /// One request runs at a time, including explicit offline downloads.
+/// Display-sized thumbnails are also kept in a bounded memory cache: decoding and
+/// PNG-encoding a 2400px page on every reappearance is far more expensive than
+/// holding the encoded bytes while a chapter is being read.
 actor MangaImageCache {
     static let shared = MangaImageCache()
+
+    private struct Thumbnail {
+        let payload: MangaImagePayload
+        var lastUsed: UInt64
+    }
+
     private let directory: URL
     private let session: URLSession
     private let limiter = HostRateLimiter(defaultMinimumDelay: .milliseconds(180))
+    private let thumbnailByteLimit: Int
     private var tail: Task<Data, any Error>?
     private var retryAfter: Date?
+    private var thumbnails: [String: Thumbnail] = [:]
+    private var thumbnailRecency: UInt64 = 0
+    private var thumbnailBytes = 0
+    private var thumbnailTasks: [String: Task<MangaImagePayload, any Error>] = [:]
+    /// Bumped by `removeAll()` so work started before a cache clear cannot
+    /// repopulate the memory cache afterwards.
+    private var thumbnailGeneration = 0
 
-    init(directory: URL? = nil, session: URLSession = .shared) {
+    init(
+        directory: URL? = nil,
+        session: URLSession = .shared,
+        thumbnailByteLimit: Int = 64 * 1024 * 1024
+    ) {
         self.directory = directory ?? URL.applicationSupportDirectory
             .appending(path: "YYReader/MangaImages", directoryHint: .isDirectory)
         self.session = session
+        self.thumbnailByteLimit = max(thumbnailByteLimit, 0)
     }
 
     func image(at url: URL, referer: URL) async throws -> MangaImagePayload {
+        let key = url.absoluteString
+        let generation = thumbnailGeneration
+        if let cached = takeThumbnail(forKey: key) { return cached }
+        if let running = thumbnailTasks[key] {
+            // Share the in-flight decode instead of starting a second one. A
+            // cancelled reader stops waiting, but the shared work continues for
+            // whoever still needs the page.
+            let payload = try await running.value
+            try Task.checkCancellation()
+            return payload
+        }
+
+        let task = Task { try await self.makeThumbnail(at: url, referer: referer) }
+        thumbnailTasks[key] = task
+        defer { thumbnailTasks[key] = nil }
+        let payload = try await task.value
+        try Task.checkCancellation()
+        guard generation == thumbnailGeneration else { return payload }
+        store(payload, forKey: key)
+        return payload
+    }
+
+    private func makeThumbnail(at url: URL, referer: URL) async throws -> MangaImagePayload {
         let data = try await original(at: url, referer: referer)
         try Task.checkCancellation()
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
@@ -41,7 +86,30 @@ actor MangaImageCache {
         else { throw HTMLLoadError.invalidResponse }
         CGImageDestinationAddImage(destination, thumbnail, nil)
         guard CGImageDestinationFinalize(destination) else { throw HTMLLoadError.invalidResponse }
+        try Task.checkCancellation()
         return MangaImagePayload(data: output as Data, aspectRatio: Double(thumbnail.width) / Double(thumbnail.height))
+    }
+
+    private func takeThumbnail(forKey key: String) -> MangaImagePayload? {
+        guard var entry = thumbnails[key] else { return nil }
+        thumbnailRecency &+= 1
+        entry.lastUsed = thumbnailRecency
+        thumbnails[key] = entry
+        return entry.payload
+    }
+
+    private func store(_ payload: MangaImagePayload, forKey key: String) {
+        guard payload.data.count <= thumbnailByteLimit else { return }
+        thumbnailRecency &+= 1
+        if let existing = thumbnails.updateValue(Thumbnail(payload: payload, lastUsed: thumbnailRecency), forKey: key) {
+            thumbnailBytes -= existing.payload.data.count
+        }
+        thumbnailBytes += payload.data.count
+        while thumbnailBytes > thumbnailByteLimit,
+              let oldest = thumbnails.min(by: { $0.value.lastUsed < $1.value.lastUsed }) {
+            thumbnailBytes -= oldest.value.payload.data.count
+            thumbnails[oldest.key] = nil
+        }
     }
 
     func original(at url: URL, referer: URL) async throws -> Data {
@@ -119,6 +187,9 @@ actor MangaImageCache {
         running?.cancel()
         _ = await running?.result
         tail = nil
+        thumbnailGeneration &+= 1
+        thumbnails.removeAll()
+        thumbnailBytes = 0
         if FileManager.default.fileExists(atPath: directory.path) {
             try FileManager.default.removeItem(at: directory)
         }
@@ -126,10 +197,16 @@ actor MangaImageCache {
 
     func remove(_ urls: [URL]) throws {
         for url in Set(urls) {
+            if let existing = thumbnails.removeValue(forKey: url.absoluteString) {
+                thumbnailBytes -= existing.payload.data.count
+            }
             let file = fileURL(url)
             if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
         }
     }
+
+    /// Test and diagnostic hook: how many display thumbnails are in memory.
+    var cachedThumbnailCount: Int { thumbnails.count }
 
     private func cachedData(at url: URL) throws -> Data? {
         let file = fileURL(url)

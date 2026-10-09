@@ -16,6 +16,10 @@ final class Chapter {
     var cachedAt: Date?
     var lastReadAt: Date?
     var topParagraphIndex: Int
+    /// Paged reading only: offset inside `topParagraphIndex` of the first
+    /// character on the visible page. Local detail — the sync protocol stays
+    /// paragraph-based, and other platforms keep reading the paragraph alone.
+    var topUTF16Offset: Int = 0
     var readingProgress: Double
     var book: Book?
 

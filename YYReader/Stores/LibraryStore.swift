@@ -427,11 +427,17 @@ final class LibraryStore {
         return continuousLoadTasks[next.id] == nil ? .idle : .loading
     }
 
-    func updateVisibleReaderPosition(chapterID: UUID, paragraphIndex: Int, total: Int) {
+    func updateVisibleReaderPosition(
+        chapterID: UUID,
+        paragraphIndex: Int,
+        utf16Offset: Int = 0,
+        total: Int
+    ) {
         guard let chapter = chapterByID[chapterID] else { return }
         updateProgress(
             chapterID: chapterID,
             paragraphIndex: paragraphIndex,
+            utf16Offset: utf16Offset,
             total: total,
             updatesCurrentChapter: !continuousReadingEnabled
         )
@@ -586,6 +592,7 @@ final class LibraryStore {
             let paragraphCount = chapter.paragraphs.count
             if chapter.topParagraphIndex >= paragraphCount {
                 chapter.topParagraphIndex = max(paragraphCount - 1, 0)
+                chapter.topUTF16Offset = 0
                 chapter.readingProgress = paragraphCount > 1
                     ? Double(chapter.topParagraphIndex) / Double(paragraphCount - 1)
                     : 0
@@ -756,6 +763,21 @@ final class LibraryStore {
         return images
     }
 
+    /// Manga pages reach disk one at a time; once every image of a chapter is
+    /// present the chapter counts as offline-readable. The flag is saved
+    /// explicitly because the progress debounce can have nothing pending, which
+    /// used to leave the chapter looking uncached after a relaunch.
+    func markChapterImagesCached(_ chapter: Chapter) {
+        guard chapter.imagesCachedAt == nil else { return }
+        chapter.imagesCachedAt = .now
+        do {
+            try modelContext.save()
+        } catch {
+            chapter.imagesCachedAt = nil
+            presentedError = PresentedError(message: "保存离线缓存状态失败：\(error.localizedDescription)")
+        }
+    }
+
     private func trimReadMangaCache(after chapter: Chapter) {
         guard chapter.isManga, let book = chapter.book,
               mangaCleanupBookIDs.insert(book.id).inserted else { return }
@@ -796,12 +818,14 @@ final class LibraryStore {
     private func updateProgress(
         chapterID: UUID,
         paragraphIndex: Int,
+        utf16Offset: Int = 0,
         total: Int,
         updatesCurrentChapter: Bool
     ) {
         guard paragraphIndex >= 0,
               let chapter = chapterByID[chapterID] else { return }
         chapter.topParagraphIndex = max(0, paragraphIndex)
+        chapter.topUTF16Offset = max(0, utf16Offset)
         chapter.readingProgress = total > 1
             ? min(max(Double(paragraphIndex) / Double(total - 1), 0), 1)
             : 0
@@ -1777,6 +1801,9 @@ final class LibraryStore {
         book.currentChapterID = chapter.id
         if transfer.paragraphIndex != nil || transfer.progress != nil {
             chapter.topParagraphIndex = max(transfer.paragraphIndex ?? 0, 0)
+            // Transfers and sync records are paragraph-based, so a locally saved
+            // in-paragraph offset does not describe the incoming position.
+            chapter.topUTF16Offset = 0
             chapter.readingProgress = min(max(transfer.progress ?? 0, 0), 1)
             chapter.lastReadAt = importedAt
         }
@@ -1827,6 +1854,7 @@ final class LibraryStore {
             return
         }
         chapter.topParagraphIndex = incomingParagraph
+        chapter.topUTF16Offset = 0
         chapter.readingProgress = incomingProgress
         chapter.lastReadAt = mergedLastReadAt
         book.currentChapterID = chapter.id

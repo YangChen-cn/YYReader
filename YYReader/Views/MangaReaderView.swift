@@ -219,10 +219,11 @@ struct MangaReaderView: View {
     }
 
     private func markOfflineIfComplete(_ pages: [URL]) async {
-        if chapter.imagesCachedAt == nil, await MangaImageCache.shared.containsAll(pages) {
-            chapter.imagesCachedAt = .now
-            _ = store.flushPendingProgress()
-        }
+        guard chapter.imagesCachedAt == nil,
+              await MangaImageCache.shared.containsAll(pages) else { return }
+        // The store owns the flag so it can persist it (and report a failure)
+        // even when no reading progress is pending.
+        store.markChapterImagesCached(chapter)
     }
 }
 

@@ -132,7 +132,7 @@ struct MobilePagedReaderView: View {
             anchorOffset = fragment.utf16Offset
         } else if !hasPrepared {
             anchorParagraph = chapter.topParagraphIndex
-            anchorOffset = 0
+            anchorOffset = chapter.topUTF16Offset
         }
         // Viewport changes must not be mistaken for a swipe across a chapter boundary.
         userIsPaging = false
@@ -149,7 +149,11 @@ struct MobilePagedReaderView: View {
         case .chapterBottom:
             visiblePageID = pagination.pages.last?.id
         case .restore:
-            visiblePageID = MobileReadingPage.pageID(containingParagraph: chapter.topParagraphIndex, in: pagination.pages)
+            visiblePageID = MobileReadingPage.pageID(
+                containingParagraph: chapter.topParagraphIndex,
+                utf16Offset: chapter.topUTF16Offset,
+                in: pagination.pages
+            )
         }
         store.consumeReaderScrollRequest(request.id)
     }
@@ -161,6 +165,7 @@ struct MobilePagedReaderView: View {
         anchorParagraph = fragment.paragraphIndex
         anchorOffset = fragment.utf16Offset
         store.updateVisibleReaderPosition(chapterID: chapter.id, paragraphIndex: fragment.paragraphIndex,
+                                          utf16Offset: fragment.utf16Offset,
                                           total: store.readerSession.paragraphs(for: chapter).count)
     }
 

@@ -1126,6 +1126,44 @@ struct LibraryStoreTests {
     }
 
     @Test
+    func mangaCacheCompletionIsPersistedWithoutPendingProgress() async throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)
+        let context = container.mainContext
+        context.autosaveEnabled = false
+        let book = Book(
+            title: "漫画缓存回归",
+            author: "测试作者",
+            sourceHost: "guazimanhua.com",
+            catalogURL: "https://www.guazimanhua.com/comic.php?id=1"
+        )
+        let chapter = Chapter(
+            sourceURL: "https://www.guazimanhua.com/comic/1.html",
+            title: "第1话",
+            sortIndex: 1,
+            book: book
+        )
+        chapter.replaceImages([URL(string: "https://img.example.com/1.jpg")!])
+        book.chapters = [chapter]
+        book.currentChapterID = chapter.id
+        context.insert(book)
+        context.insert(chapter)
+        try context.save()
+
+        let store = LibraryStore(modelContext: context, coordinator: NovelImportCoordinator(loader: MockHTMLLoader(documents: [:])))
+        try #require(chapter.imagesCachedAt == nil)
+
+        store.markChapterImagesCached(chapter)
+        let markedAt = try #require(chapter.imagesCachedAt)
+        // Saving is what keeps "可离线阅读" after a relaunch; there is no pending
+        // reading progress to piggyback on.
+        #expect(!context.hasChanges)
+
+        store.markChapterImagesCached(chapter)
+        #expect(chapter.imagesCachedAt == markedAt)
+    }
+
+    @Test
     func failedChapterLoadSurfacesRetryableFailureUntilNextAttempt() async throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Book.self, Chapter.self, configurations: configuration)

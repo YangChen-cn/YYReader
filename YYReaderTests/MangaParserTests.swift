@@ -124,6 +124,39 @@ struct MangaParserTests {
         #expect(!(await cache.containsAll([url])))
     }
 
+    @Test func repeatedDisplayReusesTheDecodedThumbnailAndClearsWithTheCache() async throws {
+        let directory = URL.temporaryDirectory.appending(path: "YYReaderMangaThumbTest-\(UUID())")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = URL(string: "https://invalid.example/thumb.png")!
+        let digest = SHA256.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
+        let file = directory.appending(path: digest)
+        let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC")!
+        try png.write(to: file)
+
+        let cache = MangaImageCache(directory: directory)
+        let first = try await cache.image(at: url, referer: chapterURL)
+        #expect(await cache.cachedThumbnailCount == 1)
+
+        // The file is gone, so only the memory cache can serve this page: it must
+        // not decode and PNG-encode the same image again on every reappearance.
+        try FileManager.default.removeItem(at: file)
+        let second = try await cache.image(at: url, referer: chapterURL)
+        #expect(second.data == first.data)
+        #expect(second.aspectRatio == first.aspectRatio)
+
+        try await cache.remove([url])
+        #expect(await cache.cachedThumbnailCount == 0)
+
+        // A cache with no room must still return the page, just without keeping it.
+        try png.write(to: file)
+        let bounded = MangaImageCache(directory: directory, thumbnailByteLimit: 0)
+        _ = try await bounded.image(at: url, referer: chapterURL)
+        #expect(await bounded.cachedThumbnailCount == 0)
+        try await bounded.removeAll()
+        #expect(await bounded.cachedThumbnailCount == 0)
+    }
+
     @Test func prefetchWindowIsTenImagesAcrossChaptersAndDoesNotMarkThemRead() async throws {
         let container = try ModelContainer(for: Book.self, Chapter.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         let book = Book(title: "预取漫画", author: "作者", sourceHost: "www.guazimanhua.com", catalogURL: catalogURL.absoluteString)
