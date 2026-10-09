@@ -10,6 +10,7 @@ enum ReaderPreferenceKeys {
     static let paragraphIndent = "reader.paragraphIndent"
     static let continuousReading = "reader.continuousReading"
     static let pageTurnMode = "reader.pageTurnMode"
+    static let mangaPageTurnMode = "reader.mangaPageTurnMode"
     static let mangaPageLayout = "reader.mangaPageLayout"
     static let mangaFirstPageAlone = "reader.mangaFirstPageAlone"
     static let mangaDarkBackground = "reader.mangaDarkBackground"

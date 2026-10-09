@@ -83,7 +83,7 @@ struct ReaderView: View {
             if store.selectedChapter?.isManga == true { store.endReaderPresentation() }
         }
         .overlay(alignment: .bottom) {
-            if store.selectedChapter != nil && store.selectedChapter?.isManga != true && showsProgressOverlay {
+            if showsPagingControls && store.selectedChapter != nil && store.selectedChapter?.isManga != true && showsProgressOverlay {
                 ReaderReadingProgressFooter(
                     text: isAcademic ? store.academicFooterText : store.readerProgressText,
                     foreground: isAcademic ? Color(white: 0.30) : theme.accent

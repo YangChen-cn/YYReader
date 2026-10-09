@@ -4,6 +4,7 @@ struct LibraryRootView: View {
     @Bindable var store: LibraryStore
     @AppStorage(ReaderPreferenceKeys.theme) private var themeName = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentationModeName = ReaderPresentationMode.normal.rawValue
+    @AppStorage(ReaderPreferenceKeys.mangaPageTurnMode) private var mangaPageTurnMode = ReaderPageTurnMode.mangaDefault.rawValue
     @State private var libraryColumnVisibility: NavigationSplitViewVisibility = .all
     @State private var readerColumnVisibility: NavigationSplitViewVisibility = .detailOnly
     @State private var isReading = false
@@ -25,6 +26,8 @@ struct LibraryRootView: View {
                 libraryNavigation
             }
         }
+        .frame(minWidth: isReadingMangaVertically ? 600 : 900, minHeight: 600)
+        .background { MangaWindowWidthBridge(enabled: isReadingMangaVertically).allowsHitTesting(false) }
         .onChange(of: store.selectedBookID) { _, id in
             if id == nil && isReading { showLibrary() }
         }
@@ -36,6 +39,7 @@ struct LibraryRootView: View {
                     showingDownloadProgress: $showingDownloadProgress,
                     canManageBook: store.selectedBook != nil,
                     isAcademicMode: isAcademicMode,
+                    isManga: store.selectedChapter?.isManga == true,
                     canRefreshCatalog: store.canRefreshSelectedCatalog,
                     canDownloadEntireBook: store.canDownloadEntireBook,
                     canDownloadCurrentChapter: store.canDownloadCurrentChapter,
@@ -180,6 +184,11 @@ struct LibraryRootView: View {
             toggleAppearance: toggleAppearance,
             toggleAcademicMode: toggleAcademicMode
         ))
+    }
+
+    private var isReadingMangaVertically: Bool {
+        isReading && store.selectedChapter?.isManga == true
+            && mangaPageTurnMode == ReaderPageTurnMode.verticalScroll.rawValue
     }
 
     private func showAddURL() { showingAddURL = true }

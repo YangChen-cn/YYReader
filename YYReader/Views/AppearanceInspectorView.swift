@@ -27,11 +27,7 @@ struct AppearanceInspectorView: View {
             }
 
             Form {
-                Section("高级阅读设置") {
-                    Text("日常调整请使用工具栏中的 Aa。这里保留精确排版控制。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                MangaReadingSettings()
 
                 Section("主题") {
                     ReaderThemePicker(selection: $theme)

@@ -4,6 +4,14 @@ enum ReaderPageTurnMode: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    static var mangaDefault: Self {
+        #if os(macOS)
+        .horizontalPages
+        #else
+        .verticalScroll
+        #endif
+    }
+
     var title: String {
         switch self {
         case .verticalScroll: "上下滚动"

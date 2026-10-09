@@ -189,11 +189,11 @@ struct MangaParserTests {
     #if os(macOS)
     @Test func mangaHorizontalReaderRoutesArrowEventsWithoutRequiringImageFocus() async throws {
         let defaults = UserDefaults.standard
-        let originalMode = defaults.object(forKey: ReaderPreferenceKeys.pageTurnMode)
-        defaults.set(ReaderPageTurnMode.horizontalPages.rawValue, forKey: ReaderPreferenceKeys.pageTurnMode)
+        let originalMode = defaults.object(forKey: ReaderPreferenceKeys.mangaPageTurnMode)
+        defaults.set(ReaderPageTurnMode.horizontalPages.rawValue, forKey: ReaderPreferenceKeys.mangaPageTurnMode)
         defer {
-            if let originalMode { defaults.set(originalMode, forKey: ReaderPreferenceKeys.pageTurnMode) }
-            else { defaults.removeObject(forKey: ReaderPreferenceKeys.pageTurnMode) }
+            if let originalMode { defaults.set(originalMode, forKey: ReaderPreferenceKeys.mangaPageTurnMode) }
+            else { defaults.removeObject(forKey: ReaderPreferenceKeys.mangaPageTurnMode) }
         }
         let container = try ModelContainer(for: Book.self, Chapter.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         let book = Book(title: "键盘漫画", author: "作者", sourceHost: "www.guazimanhua.com", catalogURL: catalogURL.absoluteString)

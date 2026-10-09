@@ -5,6 +5,7 @@ struct ReaderToolbar: ToolbarContent {
     @Binding var showingDownloadProgress: Bool
     let canManageBook: Bool
     let isAcademicMode: Bool
+    let isManga: Bool
     let canRefreshCatalog: Bool
     let canDownloadEntireBook: Bool
     let canDownloadCurrentChapter: Bool
@@ -34,19 +35,21 @@ struct ReaderToolbar: ToolbarContent {
         }
 
         ToolbarItemGroup(placement: .primaryAction) {
-            Button(
+            if !isManga { Button(
                 isAcademicMode ? "退出论文伪装" : "论文伪装模式",
                 systemImage: isAcademicMode ? "graduationcap.fill" : "graduationcap",
                 action: toggleAcademicMode
             )
             .help(isAcademicMode ? "恢复普通阅读" : "切换为学术论文外观")
+            }
 
-            Button("阅读外观", systemImage: "textformat.size") {
+            Button("阅读设置", systemImage: "gearshape") {
                 showingAppearancePopover.toggle()
             }
-            .help("阅读外观")
+            .labelStyle(.iconOnly)
+            .help("阅读设置")
             .popover(isPresented: $showingAppearancePopover, arrowEdge: .top) {
-                ReaderAppearancePopover(showAdvancedSettings: showAdvancedAppearance)
+                ReaderAppearancePopover(isManga: isManga, showAdvancedSettings: showAdvancedAppearance)
             }
 
             if hasDownloadStatus {

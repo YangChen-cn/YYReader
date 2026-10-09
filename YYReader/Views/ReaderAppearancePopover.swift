@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ReaderAppearancePopover: View {
+    var isManga = false
     @AppStorage(ReaderPreferenceKeys.fontFamily) private var fontFamily = ReaderFontFamily.serif.rawValue
     @AppStorage(ReaderPreferenceKeys.fontSize) private var fontSize = 20.0
     @AppStorage(ReaderPreferenceKeys.lineSpacing) private var lineSpacing = ReaderLineSpacingPreset.comfortable.value
@@ -14,6 +15,16 @@ struct ReaderAppearancePopover: View {
     let showAdvancedSettings: () -> Void
 
     var body: some View {
+        if isManga {
+            Form { MangaReadingSettings() }
+                .formStyle(.grouped)
+                .frame(width: 360, height: 300)
+        } else {
+            novelSettings
+        }
+    }
+
+    private var novelSettings: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Button {

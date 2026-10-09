@@ -61,4 +61,32 @@ struct MangaPageLayoutTests {
         #expect(MangaPageLayout.tap(at: 200, width: 400) == .controls)
         #expect(MangaPageLayout.tap(at: 380, width: 400) == .forward)
     }
+
+    @Test func swipesRejectVerticalAndShortDragsButAcceptQuickFlicks() {
+        #expect(MangaPageLayout.swipeDirection(translation: CGSize(width: -120, height: 10), predictedWidth: -140, viewportWidth: 400) == 1)
+        #expect(MangaPageLayout.swipeDirection(translation: CGSize(width: 120, height: 10), predictedWidth: 140, viewportWidth: 400) == -1)
+        #expect(MangaPageLayout.swipeDirection(translation: CGSize(width: -25, height: 5), predictedWidth: -150, viewportWidth: 400) == 1)
+        #expect(MangaPageLayout.swipeDirection(translation: CGSize(width: -25, height: 5), predictedWidth: -30, viewportWidth: 400) == nil)
+        #expect(MangaPageLayout.swipeDirection(translation: CGSize(width: 30, height: 100), predictedWidth: 150, viewportWidth: 400) == nil)
+        #expect(MangaPageLayout.swipeDirection(translation: CGSize(width: 5, height: 0), predictedWidth: 150, viewportWidth: 400) == nil)
+    }
+
+    #if os(macOS)
+    @Test @MainActor func verticalMangaWindowUsesHalfScreenWithoutMovingItsHeight() throws {
+        let screen = CGRect(x: 100, y: 40, width: 1440, height: 900)
+        let current = CGRect(x: 200, y: 70, width: 1200, height: 800)
+        let resized = try #require(MangaWindowWidthBridge.narrowedFrame(current: current, visible: screen))
+        #expect(resized.width == 720)
+        #expect(resized.height == current.height && resized.minY == current.minY)
+        #expect(resized.midX == current.midX)
+        #expect(MangaWindowWidthBridge.narrowedFrame(current: CGRect(x: 200, y: 70, width: 680, height: 800), visible: screen) == nil)
+    }
+
+    @Test @MainActor func narrowingStaysOnTheCurrentDisplayAndKeepsAUsableMinimum() throws {
+        let screen = CGRect(x: -1200, y: 40, width: 1200, height: 900)
+        let resized = try #require(MangaWindowWidthBridge.narrowedFrame(current: CGRect(x: -800, y: 70, width: 1100, height: 800), visible: screen))
+        #expect(resized.width == 600)
+        #expect(resized.maxX <= screen.maxX && resized.minX >= screen.minX)
+    }
+    #endif
 }

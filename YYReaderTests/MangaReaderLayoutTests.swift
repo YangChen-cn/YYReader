@@ -14,7 +14,7 @@ private final class MangaLayoutWindow: NSWindow {
 struct MangaReaderLayoutTests {
     @Test func keyboardResizeAndModeChangesKeepRawPageAndBoundedRendering() async throws {
         let defaults = UserDefaults.standard
-        let keys = [ReaderPreferenceKeys.pageTurnMode, ReaderPreferenceKeys.mangaPageLayout,
+        let keys = [ReaderPreferenceKeys.mangaPageTurnMode, ReaderPreferenceKeys.mangaPageLayout,
                     ReaderPreferenceKeys.mangaFirstPageAlone, ReaderPreferenceKeys.prefetchNext]
         let original = keys.map { defaults.object(forKey: $0) }
         defer {

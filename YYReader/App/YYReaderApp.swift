@@ -26,7 +26,7 @@ struct YYReaderApp: App {
         WindowGroup("YYReader", id: "library") {
             LibrarySceneView()
                 .environment(services)
-                .frame(minWidth: 900, minHeight: 600)
+                .frame(minHeight: 600)
         }
         .defaultSize(width: 1240, height: 820)
         .modelContainer(modelContainer)

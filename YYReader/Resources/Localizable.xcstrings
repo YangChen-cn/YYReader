@@ -366,6 +366,63 @@
     },
     "阅读设置" : {
       "extractionState" : "manual"
+    },
+    "小说" : {
+      "extractionState" : "manual"
+    },
+    "漫画" : {
+      "extractionState" : "manual"
+    },
+    "小说翻页方式" : {
+      "extractionState" : "manual"
+    },
+    "漫画翻页方式" : {
+      "extractionState" : "manual"
+    },
+    "左右翻页可滑动或点击两侧，中间轻点显示菜单。漫画双击图片可放大。" : {
+      "extractionState" : "manual"
+    },
+    "放大图片" : {
+      "extractionState" : "manual"
+    },
+    "放大" : {
+      "extractionState" : "manual"
+    },
+    "缩小" : {
+      "extractionState" : "manual"
+    },
+    "还原" : {
+      "extractionState" : "manual"
+    },
+    "关闭" : {
+      "extractionState" : "manual"
+    },
+    "上一话" : {
+      "extractionState" : "manual"
+    },
+    "下一话" : {
+      "extractionState" : "manual"
+    },
+    "第 %lld 页" : {
+      "extractionState" : "manual"
+    },
+    "漫画阅读方式" : {
+      "extractionState" : "manual"
+    },
+    "小说阅读方式" : {
+      "extractionState" : "manual"
+    },
+    "显示选项" : {
+      "extractionState" : "manual"
+    },
+    "漫画布局" : {
+      "extractionState" : "manual"
+    },
+    "首图单页" : {
+      "extractionState" : "manual"
+    },
+    "深灰阅读背景" : {
+      "extractionState" : "manual"
     }
   },
   "version" : "1.0"

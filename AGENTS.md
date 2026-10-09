@@ -1,219 +1,79 @@
-# YYReader 仓库协作规范
+# YYReader 协作规范
 
-本文件适用于仓库根目录及其全部子目录。用户当前请求优先于本文件；若子目录以后出现更具体的 `AGENTS.md`，则该文件只覆盖对应子目录。
-本项目主要是为个人使用，不需要使用太工程化的操作，避免过度工程化。
+适用于仓库及全部子目录；更具体的子目录规范仅覆盖对应目录，用户当前要求优先。本项目主要供个人使用，优先简单、稳定、可复用的实现，避免过度工程。
 
-## 项目目标
+## 工作范围与验证
 
-YYReader 是一个原生 macOS 小说阅读器：用户输入章节网页 URL，应用下载和解析网页，将不同站点的内容转换为统一的 `Book` / `Chapter` 数据模型，并用 SwiftUI 原生界面显示正文。
+- 只做指定任务和平台，不顺手扩展功能、引入框架或改造流程。共用代码确实影响其他平台时，才说明理由并扩大检查范围。
+- 功能改动只运行风险相称的最小相关测试；通过后无新变化或具体问题就停止。全量测试仅用于重大或影响范围不明的核心改动、明确回归问题，或用户要求。
+- UI 的布局、动画和手势默认交给用户人工验收，提供简短步骤；不要反复调试 XCUITest 来代替人工看界面。用户要求停止自动验证后，不再继续相关测试。
+- 仅改文档、版本号、About 文案、下载链接或打包配置时，不重跑功能测试，不启动 App、模拟器或浏览器。已通过的检查和源码未变的产物直接复用。
+- 每个耗时操作都必须有具体目的，不以“保险起见”重复构建或检查。普通开发不生成 Release、IPA 或 DMG；仅在用户要求打包、发布或检查发布流程时生成。
+- Computer Use 默认禁用；仅在当前请求明确授权，或人工验证客观无法完成且用户同意时使用。
+- iOS 始终复用用户正在使用的一台模拟器，覆盖 App 并保留数据；未经要求不新建、不同时启动第二台。
 
-首要原则：
+## 工程与命令
 
-- 正文阅读器必须使用 SwiftUI `ScrollView`、`LazyVStack` 和 `Text`，不得使用 `WKWebView` 渲染正文。
-- `WKWebView` 只允许用于 Cloudflare、JavaScript 验证及获取验证后的最终 HTML。
-- 不自动解决 CAPTCHA，不绕过登录、付费墙或网站访问控制。
-- 启迪小说（`qidiy.com`）是专用适配站点；其他站点走通用解析，失败时必须返回可理解的错误。
+- macOS 15+、iOS 18+；Swift 6 严格并发、SwiftUI、SwiftData、SwiftSoup **2.13.5**。Mac 只构建 `arm64`，除非用户另有要求；保留 App Sandbox，不额外扩大权限。
+- `project.yml` 是工程配置唯一来源。不要手改 `project.pbxproj`；配置或源文件列表变化后运行 `xcodegen generate`，保留生成的工程改动。
+- 目录沿用现有职责：`Views` 界面、`Stores` UI 编排、`Services` 网络与缓存、`Parsing` 解析、`Persistence` 持久化、`Support` 共用辅助；主要类型保持单一职责。
 
-## 技术基线
+| 用途 | 命令 |
+| --- | --- |
+| 生成工程 | `xcodegen generate` |
+| Mac Debug 交付与运行 | `./script/build_and_run.sh run` |
+| iOS 模拟器更新 | `YYREADER_SIMULATOR_ID=<当前模拟器UDID> ./script/build_ios.sh simulator` |
+| Mac 发布打包 | `./script/package_release.sh` |
+| iOS 发布打包 | `./script/build_ios.sh release` |
 
-- macOS 15+
-- Swift 6 语言模式与严格并发检查
-- SwiftUI
-- SwiftData
-- SwiftSoup 2.13.5（精确版本）
-- XcodeGen 维护工程配置
-- App Sandbox 仅开放出站网络权限
-- 仅构建 Apple 芯片 `arm64`，除非用户明确要求 Universal 或 Intel 版本
+Mac Debug 必须经现有脚本便携化、签名后交付 `dist/YYReader.app`，不直接交付 DerivedData 里的 App。仅做 iOS / Windows 任务时不运行 Mac 脚本。测试按需使用 `xcodebuild test -only-testing:目标/测试类`，不得把全量测试当成默认步骤。
 
-`project.yml` 是工程配置的唯一来源。不要直接修改 `YYReader.xcodeproj/project.pbxproj`；修改 `project.yml` 后运行 `xcodegen generate`，并提交重新生成的 `.xcodeproj`。
+## Swift 与原生界面
 
-## 常用命令
+- UI 状态、Store 与 SwiftData `ModelContext` 隔离到 `@MainActor`；可变缓存、网络队列和同步 I/O 使用 actor。不要用 `Task.detached` 绕过隔离；必要的 `@unchecked Sendable` 必须说明保护方式。
+- 异步操作传播取消，旧请求不得覆盖新页面。取消不弹失败提示；前台错误不得用 `try?` 静默吞掉，预取失败可忽略但需说明。
+- 小说正文用 SwiftUI `ScrollView`、`LazyVStack`、`Text`；漫画用原生 `Image`。`WKWebView` 仅用于网页验证、公开脚本执行及提取内容，不能渲染阅读正文。
+- Mac 沿用原生 `NavigationSplitView`、工具栏、菜单、Settings 和 Inspector；仅在必要时做窄边界 AppKit bridge。空状态使用 `ContentUnavailableView`，不自绘窗口框架。
+- 段落、图片和滚动锚点保持稳定身份，恢复进度不随视图重建丢失。按钮有可读标签，兼顾键盘、VoiceOver、字体放大、对比度和减少动态效果。
+- 文案简洁，避免说明小字堆积；About 保留版本、作者 **YangChen** 和仓库链接。新增文案维护字符串目录。
 
-生成工程：
+## 漫画阅读约定
 
-```bash
-xcodegen generate
-```
+- 漫画与小说独立保存阅读方式；漫画默认 **Mac 左右翻页、iOS 上下滚动**，保留用户后续选择。
+- Mac 支持自动 / 单页 / 双页；宽窗口自动组合两张竖图，窄窗口单页。横图独占、支持首图单页与奇数尾页，双页不跨章。等比完整显示、居中，页间有区分，工具栏不得遮挡图片。
+- 页码与持久化进度始终使用原始图片索引；分组、窗口缩放、模式切换和重新打开不改写位置。跨章前进到首页、后退到末页；Slider 拖动只预览，松手才跳转。
+- iOS 左右翻页支持点击两侧和跟手滑动动画，中间点击切换工具栏；上下滚动也能切换标题栏与进度栏，但不强制点击翻页。双击图片进入放大查看，支持捏合与拖动，避免与翻页手势冲突。Mac 保留鼠标和键盘翻页、自然滚轮与触控板滚动。
+- 连续滚动保留 `LazyVStack` 和锚点恢复，宽度随窗口适配；普通页留小间距、长条尽量连续，优先用已知宽高比占位以减少跳动。
+- 只渲染可见页和有限相邻页，复用缩略图内存缓存、原图磁盘缓存与预取，不加载整本图片。纯布局改动不修改 SwiftData schema、同步协议或解析器，不引入大型依赖。
 
-构建并运行 Debug：
+## 加载、解析与缓存
 
-```bash
-./script/build_and_run.sh run
-```
+- 静态 HTML 优先 `URLSessionHTMLLoader`；检查 HTTP 状态、重定向、编码、challenge 和取消。同域串行限速，429 尊重 `Retry-After`，不紧密重试。
+- 不绕过 CAPTCHA、登录、付费墙或访问控制。同次导入同域最多展示一次人工验证，继续拒绝则停止；验证可取消、有限等待，并把 Cookie / 真实 User-Agent 同步到后续请求。
+- 所有站点沿用 `NovelSourceAdapter`，专用适配优先于通用解析，不在 UI 写站点判断或 CSS selector；通用解析优先结构化元数据、语义正文与导航关系，再用正文密度评分。只适配能正常访问的示例；403 或无响应的跳过，不反复尝试。
+- 分页只跟随解析出的同源链接，以 visited 防循环；章节最多 20 页、目录最多 200 页。合并去除边界重复、广告和分页噪声；错误区分请求失败、正文或目录缺失、循环等原因。
+- 章节 URL 规范化不能误合并不同章节；目录按页面与 DOM 顺序排序，不能只按标题章节号。书籍按规范目录 URL 或稳定的 `sourceBookURL` 去重，章节按规范章节 URL 去重，合并保留缓存和进度。
+- 打开书籍只读本地目录，过期不自动刷新全目录；刷新由导入或用户主动触发，可取消。切章、关闭或退出前持久化段落 / 图片索引及阅读比例；删除书籍级联清理章节与缓存。
+- 默认开启预取：小说最多 3 章，漫画提前缓存最多 10 张图片。预取失败不影响当前阅读；用户主动下载沿用现有功能。
+- 每本漫画磁盘缓存预算 **512 MB**；退出或切书时优先清理最早读过的章节，保留当前章和未读预取 / 下载内容，受保护内容超预算时不强删。缓存管理可清空全部或单本，保留书架、进度和本地 TXT。
 
-macOS 日常开发、人工验收和需要交付给用户运行的 Mac Debug App 必须使用上述脚本。仅做 iOS 或 Windows 任务时不要求运行它。不要把直接调用
-`xcodebuild build` 生成的 `DerivedData/Build/Products/*/YYReader.app` 当作可运行交付；
-该命令仅可用于自动化构建校验。脚本会更新 `dist/YYReader.app`，完成便携化、签名和校验后，
-再从临时副本启动它。
+## 文件夹同步与书架传输
 
-运行完整测试：
+- 用户选择任意共享文件夹，不硬编码云盘路径。Mac 用 `NSOpenPanel`，iOS 用系统文件夹选择器；保存 security-scoped bookmark，配对开始 / 结束访问。iOS 选文件夹，不选 `mac.json`。
+- 同步目录固定 `YYReaderSync/`，各端只写自己的 `mac.json` / `ios.json` / `windows.json`；互读范围及格式以 `shared/sync/README.md`、`shared/sync/sync-snapshot-v2.schema.json` 为准，兼容 v1。
+- 按 canonical `sourceURL` 合并；阅读位置选更后章节，同章只前进，不以 `lastReadAt` 决策；元数据按 `updatedAt`、删除按 `deletedAt` tombstone。当前阅读书的远端删除延迟到退出或安全时机处理。
+- 同步只含书架、元数据和进度，不含正文、图片、Cookie 或验证状态；同目录临时文件原子替换。目录不可访问、文件无效或版本不支持时，不清空或覆盖本地书架。
+- 同步 I/O、编解码、合并在独立 actor，避开滚动热路径；本地进度 debounce 保存后再延迟 1～2 秒同步。对端签名变化才合并，低频轮询兜底，未变不重写，重复同步幂等。
+- 本地变化走 `publishLocal()`，只写本端快照，不读取对端或重建 Reader session；对端签名在合并落库成功后才确认，失败保留重试机会。
+- 手动传输遵循 `shared/bookshelf-transfer/bookshelf-transfer-v1.schema.json`；导入前预览新书、已存在、重复及无效条目，按规范来源合并并保留本地缓存。导出不含正文。
 
-```bash
-xcodebuild test \
-  -project YYReader.xcodeproj \
-  -scheme YYReader \
-  -destination 'platform=macOS,arch=arm64' \
-  -derivedDataPath DerivedData
-```
+## Git、测试与发布
 
-仅在用户明确要求发布新版本、制作安装包或校验发布流程时生成 arm64 Release：
+- 保留用户已有改动，不覆盖无关文件；提交前检查 `git status`、`git diff --check`、敏感信息和产物。不使用 `git reset --hard` 或强推，不擅自创建公开仓库。
+- 不提交 `DerivedData/`、`dist/`、Xcode 用户状态、网页抓取内容、Cookie 或临时文件；工程配置与生成的 `.xcodeproj` 保持一致。
+- 测试只覆盖本次风险与回归，fixture 使用精简自造内容，不依赖实时第三方网站、不提交完整版权章节。主观 UI 验收交给用户，不能声称编译通过等于界面通过。
+- 发布只更新指定平台版本，同步维护 `project.yml`、README、RELEASE_NOTES 和 About 可见内容，生成工程后提交，再推送 `main` 与对应版本标签。发布前确认仓库可见性。
+- Mac 发布 arm64、ad-hoc 签名 DMG，通过 `codesign --verify --strict` 和 DMG 完整性检查；iOS IPA 供 SideStore 等侧载工具自行重新签名。只检查目标平台版本、架构、资源、包完整性和校验值，不重复构建已有产物。
+- 图标与 Asset Catalog 必须进入目标资源；Mac 发布包含 `AppIcon.icns`、`Assets.car`，保持 `AppIcon` 配置。交付说明实际改动、必要检查结果和仍需人工验收的部分。
 
-```bash
-./script/package_release.sh
-```
-
-普通功能开发、修复、测试和 Debug 交付不得额外构建 Release，也不得生成 DMG。Release 产物位于
-`dist/YYReader-<version>-arm64.dmg`，不生成 ZIP。`DerivedData/` 与 `dist/` 不提交 Git。
-
-## 任务范围与避免无意义验证
-
-- 只完成用户指定的平台和任务。iOS 发布不得顺带构建、测试或启动 Mac / Windows，也不得生成 Mac DMG；其他平台同理。只有新的共用逻辑改动确实影响其他平台，且有具体验证理由，或用户明确要求时，才扩大范围。
-- 仅修改版本号、发布说明、下载链接、About 文案或打包配置时，复用同一份功能代码已有的测试结果，不重跑全量测试、XCUITest，也不启动 App、模拟器或浏览器。
-- 版本发布只做必要的目标平台打包，以及版本、架构、资源、包完整性和校验值检查。产物已经构建且源码未再变化时，直接使用该产物，不重复构建。
-- 功能修改按风险选择最小相关测试。只有重大功能新增、影响范围不明的核心逻辑变动、具体回归证据或用户明确要求时，才运行全量测试。相关检查通过后，没有新变化或新问题就停止验证并交付。
-- 不以“保险起见”“交付前必须”为由重复已经通过的检查。耗时操作必须能说明它要验证的具体变化；没有具体目的就不执行。
-- 不顺手扩展功能、补无关测试、引入框架或改造发布流程。本项目为个人使用，优先直接、简单、可复用的实现，避免过度工程。
-
-## 目录与职责
-
-- `YYReader/App`：App、Scene、菜单命令和应用入口。
-- `YYReader/Models`：SwiftData 模型与界面值类型。
-- `YYReader/Views`：SwiftUI 视图；主要视图保持单一职责。
-- `YYReader/Stores`：`@MainActor @Observable` 界面状态和用户操作编排。
-- `YYReader/Services`：网络加载、限速、验证、导入协调和缓存服务。
-- `YYReader/Parsing`：站点适配器、解析协议和统一解析结果。
-- `YYReader/Persistence`：持久化辅助代码（新增持久化设施放在此处）。
-- `YYReader/Support`：依赖装配、偏好键和跨模块辅助类型。
-- `YYReader/Resources`：Asset Catalog、字符串目录和其他应用资源。
-- `YYReaderTests`：解析、服务、SwiftData 和回归测试。
-- `script`：可重复执行的构建、运行和打包脚本。
-
-主要类型原则上每个文件一个，避免把网络、解析、持久化和视图状态混在同一类型中。
-
-## Swift 与并发规则
-
-- 所有 UI 状态、SwiftData `ModelContext` 使用和界面 Store 必须隔离在 `@MainActor`。
-- 网络限速、可变缓存和后台队列使用 actor 或其他明确隔离方式。
-- 不使用 `Task.detached` 绕过 actor 隔离。
-- 新增异步操作必须传播取消；取消是正常控制流，不应向用户显示失败弹窗。
-- 不用 `try?` 静默吞掉前台用户操作错误；只有预取等明确的机会性任务可以忽略失败，并写注释说明。
-- 避免不必要的 `@unchecked Sendable`；确需使用时说明被保护的不变量。
-- 优先使用现代 SwiftUI 和 Foundation API，部署目标允许时不保留旧系统兼容分支。
-
-## 网页加载和验证规则
-
-- 静态 HTML 优先通过 `URLSessionHTMLLoader` 下载。
-- 检查 HTTP 状态、最终重定向 URL、字符编码、Cloudflare challenge、429 和取消。
-- 同一域名请求必须串行并限速。
-- 429 必须尊重 `Retry-After`，不得紧密重试或并发重试。
-- WebKit 验证完成后，同步 Cookie 和真实 User-Agent 给后续静态请求。
-- 同一次导入中，同一域名最多展示一次人工验证；验证仍被拒绝时停止并显示明确错误，不得循环弹窗。
-- 验证面板必须能取消、失败重试，并有有限等待时间。
-- 不记录 Cookie、challenge token、完整 HTML 或用户隐私数据到日志。
-
-## 解析规则
-
-- 所有站点实现统一的 `NovelSourceAdapter`，不得在 UI 中写 CSS selector 或站点判断。
-- 专用适配器优先于 `GenericNovelAdapter`。
-- 只跟随解析得到的同源分页链接。
-- 章节分页使用 visited 集合防循环，最多 20 页。
-- 目录分页使用 visited 集合防循环，最多 200 页。
-- 合并分页时去除边界重复段落、页码提示、脚本调用、广告和“本章未完”等噪声。
-- 章节 URL 规范化必须只移除分页后缀，不得把不同章节错误合并。
-- 目录条目按网站目录的页面与 DOM 出现顺序生成全局位置；不得仅按标题中的章节号排序，因为番外或新卷可能从“第1章”重新编号。URL 去重时保留已有正文、进度和缓存时间。
-- 通用解析优先使用 JSON-LD、OpenGraph、语义标签和 `rel=prev/next`，再使用正文密度和中文标点评分。
-- 解析失败必须区分不支持 URL、正文缺失、目录缺失、分页循环和请求失败。
-
-## 数据与缓存规则
-
-- `Book` 保存书名、作者、来源、目录 URL、更新时间、当前章节和章节关系。
-- `Chapter` 保存规范 URL、标题、序号、纯文本正文、前后章节、缓存时间和阅读进度。
-- 有目录书籍以规范目录 URL 去重；无目录书籍以稳定的书籍级 `sourceBookURL` 去重，不能使用当前章节 URL 作为书籍身份。章节仍以规范章节 URL 去重。
-- 删除书籍必须级联删除章节和离线正文。
-- 阅读进度至少保存顶部段落索引和阅读比例；切换章节、关闭窗口或退出时持久化。
-- 首次阅读后缓存正文；下一章预取是机会性任务，失败不得影响当前阅读。
-- 切换书架书籍只读取本地缓存目录，不得因为缓存过期而自动刷新全目录。目录更新只能由导入流程或用户明确执行“刷新目录”触发；多页目录必须可取消。
-- 不在首版实现整本正文批量下载。
-
-## 文件夹同步规则
-
-- 文件夹同步不得绑定或硬编码 iCloud、Dropbox、OneDrive、Syncthing 等路径；用户必须通过 `NSOpenPanel` 选择任意共享文件夹。
-- App Sandbox 下保存并恢复 security-scoped bookmark，访问期间配对调用 `startAccessingSecurityScopedResource()` 与 `stopAccessingSecurityScopedResource()`。
-- 同步目录固定为 `YYReaderSync/`。Mac 只写 `mac.json`、读取 `windows.json`；Windows 端反向操作。
-- 两端遵循 `shared/sync/sync-snapshot-v2.schema.json`，并允许读取旧 v1。书籍按 canonical `sourceURL` 合并；阅读位置先按 `currentChapterIndex` 选更后章节，同章只接受更大的段落索引/进度，`lastReadAt` 不参与位置决策；元数据以 `updatedAt` 为准，删除以 `deletedAt` tombstone 为准。
-- 同步文件不得包含正文缓存、Cookie、WebKit 状态、验证令牌或其他隐私数据。
-- 写入必须使用同目录临时文件和原子替换；文件夹暂不可访问、文件无效或版本不支持时不得删除、覆盖或清空本地书架。
-- 同步 I/O、JSON 编解码与合并必须在独立 actor 中运行，不得进入 Reader 滚动热路径。阅读进度先完成本地 debounce 保存，再延迟 1～2 秒触发同步。
-- 监听对端文件变化，只有对端文件签名改变时才读取合并，并以低频轮询兜底；合并内容未变时不重写本端文件，重复同步必须幂等。
-- 本地书架和进度变化必须走独立 `publishLocal()`，只写 Mac 快照，不读取/解析 Windows 文件，不反向重建正在阅读的 Reader session。对端 signature 仅在完整同步读取、合并、落库成功后确认，失败不得阻断 watcher/轮询重试。当前阅读书的远端 tombstone 必须延迟到退出 Reader 或其他安全时机再刷新 UI。
-- 手动书架传输遵循 `shared/bookshelf-transfer/bookshelf-transfer-v1.schema.json`，兼容 Windows 的 `.yyreader`、普通 JSON 和剪贴板文本；导入前预览新书、已存在、无效与重复条目。
-- 手动导入按 canonical `sourceURL` 更新或新建书籍，保留本地正文缓存；导出仅包含书籍身份、元数据和阅读位置。
-
-## SwiftUI 与可访问性规则
-
-- 主窗口保持三栏 `NavigationSplitView`：书架、目录、阅读区。
-- 空状态使用原生 `ContentUnavailableView`。
-- 阅读正文使用稳定段落 ID，支持文字选择和滚动位置恢复。
-- 按钮保留可读文字标签或明确的 accessibility label，不仅依赖图标。
-- 支持键盘焦点、VoiceOver、增大字体、提高对比度和减少动态效果。
-- 使用原生工具栏、菜单、Settings 场景和 Inspector；仅在 SwiftUI 无法完成时使用窄边界 AppKit bridge。
-- 不引入自绘窗口框架或 Web 前端组件模拟 macOS 界面。
-
-## UI 验证与 Computer Use
-
-- iOS 调试和测试只复用用户正在使用的一台模拟器，直接覆盖 App 并保留数据；不得另开或同时启动第二台模拟器，除非用户明确要求。
-
-- 默认禁止使用 Computer Use 做日常 UI 验证、点击、输入或截图检查。
-- 优先使用单元测试、XCUITest、构建日志、静态检查和 accessibility identifier 验证可自动确认的行为。
-- 需要主观判断布局、动画、图标、Dock 或真实网站交互时，优先请用户在自己的 Mac 上手动验证，并给出简短、明确的验收步骤。
-- 只有用户在当前请求中明确要求使用 Computer Use，或手动验证客观上无法完成且用户先同意时，才可使用该能力。
-- 不得因为“方便”或“更快”自行启用 Computer Use。
-
-## 图标与资源
-
-- `YYReader/Resources/Assets.xcassets` 必须存在于 App Target 的 Resources Build Phase。
-- App Icon 集名固定为 `AppIcon`，构建设置保持 `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`。
-- Release 验收时确认 App 包含 `Contents/Resources/AppIcon.icns` 和 `Assets.car`，并检查 `CFBundleIconName`。
-- 修改字符串时优先更新字符串目录，为未来本地化保留结构。
-
-## 测试要求
-
-修改功能代码后运行风险相称的相关测试；是否运行完整测试遵循“任务范围与避免无意义验证”，交付和发布本身不构成重跑理由。
-
-至少覆盖：
-
-- 启迪小说双页章节合并、噪声清理、上下章和多页目录。
-- 示例元数据：全职法师、乱、第1章 世界大变和下一章。
-- 通用解析的 JSON-LD、语义正文、非标准容器和导航文本。
-- 相对 URL、重复分页、循环分页、正文缺失、乱码、403 challenge、429 与取消。
-- SwiftData 去重、目录更新、缓存、进度恢复和删除级联。
-- 添加 URL、错误重试、目录搜索、章节切换、主题和离线恢复等核心状态流程；界面交互由用户手动验收。
-
-Fixture 必须精简且使用自造段落，不提交完整版权章节内容。测试不得依赖实时第三方网站，因为 Cloudflare、限流和站点结构会变化。
-
-## Git 与交付规则
-
-- 保留用户已有改动，不覆盖或回滚不相关文件。
-- 提交前检查 `git status`、`git diff --check`、敏感信息和构建产物。
-- 不提交 `DerivedData/`、`dist/`、用户 Xcode 状态、Cookie、网页抓取内容或临时文件。
-- 提交 `project.yml` 和重新生成的 `YYReader.xcodeproj`，保证仓库可直接打开。
-- 默认不执行破坏性 Git 命令，不使用 `git reset --hard` 或强制推送。
-- GitHub 发布前确认仓库可见性；未经用户明确要求不创建公开仓库。
-- 仅在对应平台发布任务中执行 Release 验收；macOS Release 必须为 arm64、ad-hoc 签名，并通过
-  `codesign --verify --strict` 和 DMG 完整性检查。
-- 发布新版本时必须同步更新 `project.yml` 的版本号、`README.md`、`RELEASE_NOTES.md` 和 About 页可见的更新内容；运行 `xcodegen generate` 后提交重新生成的工程文件。
-- 发布流程必须记录 Release Notes。macOS 发布使用 `./script/package_release.sh` 生成并验证 DMG；iOS 发布使用 `./script/build_ios.sh release` 生成并验证 IPA，供侧载工具重新签名。只更新指定平台版本，随后创建对应版本标签并推送 `main` 与标签。
-
-## 完成标准
-
-只有同时满足以下条件才视为完成：
-
-- XcodeGen 可重新生成工程。
-- 仅在需要交付 Mac Debug App 的开发和修复任务中使用 `./script/build_and_run.sh run`；发布只要求指定平台的产物打包通过，不额外启动其他平台 App。
-- 本次变动必要的相关检查通过；功能代码未变时可复用此前通过的测试，不重复全量验证。
-- 发布任务中的 Release 二进制仅包含要求的架构；非发布任务不额外生成 Release 产物。
-- App Sandbox 权限正确。
-- App 图标和资源已进入 App 包。
-- 用户可随时停止导入，Cloudflare 和限流不会造成无限循环。
-- README、脚本和实际工程行为保持一致。
-- 需要主观 UI 判断的部分已经明确交给用户手动验收。
+更多实现细节按任务查阅 `docs/IOS_DEVELOPMENT.md`、`docs/MANGA_SUPPORT.md` 和 `shared/` 协议文档，不把全部说明堆进本文件。

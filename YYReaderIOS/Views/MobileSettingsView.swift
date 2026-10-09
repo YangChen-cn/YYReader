@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct MobileSettingsView: View {
+    var readingManga: Bool? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(AppServices.self) private var services
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -14,6 +15,7 @@ struct MobileSettingsView: View {
     @AppStorage(ReaderPreferenceKeys.paragraphIndent) private var indent = true
     @AppStorage(ReaderPreferenceKeys.continuousReading) private var continuous = false
     @AppStorage(ReaderPreferenceKeys.pageTurnMode) private var pageTurnMode = ReaderPageTurnMode.verticalScroll.rawValue
+    @AppStorage(ReaderPreferenceKeys.mangaPageTurnMode) private var mangaPageTurnMode = ReaderPageTurnMode.mangaDefault.rawValue
     @AppStorage(ReaderPreferenceKeys.prefetchNext) private var prefetch = true
     @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentation = ReaderPresentationMode.normal.rawValue
     @AppStorage(ReaderPreferenceKeys.academicColumnMode) private var columns = AcademicColumnMode.double.rawValue
@@ -24,17 +26,7 @@ struct MobileSettingsView: View {
         @Bindable var sync = services.folderSync
         NavigationStack {
             Form {
-                Section {
-                    Picker("翻页方式", selection: $pageTurnMode) {
-                        ForEach(ReaderPageTurnMode.allCases) { Text($0.title).tag($0.rawValue) }
-                    }
-                    .pickerStyle(.segmented)
-                    .accessibilityIdentifier("ios.pageTurnMode")
-                    Toggle("连续阅读", isOn: $continuous)
-                        .disabled(pageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue)
-                } header: { Text("阅读方式") } footer: {
-                    Text("上下滚动支持连续阅读。左右翻页时轻点正文中央显示菜单和页数，章末继续左滑进入下一章。学术论文使用上下滚动。")
-                }
+                readingOptions
                 Section("主题与字体") {
                     Picker("主题", selection: $theme) {
                         ForEach(ReaderTheme.allCases) { Text($0.title).tag($0.rawValue) }
@@ -133,5 +125,33 @@ struct MobileSettingsView: View {
         .alert(item: $pickerError) { error in
             Alert(title: Text("无法选择文件夹"), message: Text(error.message), dismissButton: .default(Text("好")))
         }
+    }
+
+    @ViewBuilder private var readingOptions: some View {
+        if let readingManga {
+            Section(readingManga ? "漫画阅读方式" : "小说阅读方式") {
+                pageTurnPicker(manga: readingManga)
+                if !readingManga { continuousReadingToggle }
+            }
+        } else {
+            Section("小说阅读方式") {
+                pageTurnPicker(manga: false)
+                continuousReadingToggle
+            }
+            Section("漫画阅读方式") { pageTurnPicker(manga: true) }
+        }
+    }
+
+    private func pageTurnPicker(manga: Bool) -> some View {
+        Picker("翻页方式", selection: manga ? $mangaPageTurnMode : $pageTurnMode) {
+            ForEach(ReaderPageTurnMode.allCases) { Text($0.title).tag($0.rawValue) }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier(manga ? "ios.mangaPageTurnMode" : "ios.pageTurnMode")
+    }
+
+    private var continuousReadingToggle: some View {
+        Toggle("连续阅读", isOn: $continuous)
+            .disabled(pageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue)
     }
 }

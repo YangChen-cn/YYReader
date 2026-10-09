@@ -10,13 +10,32 @@ struct MangaPageImage: View {
     let referer: URL
     let pageNumber: Int
     var imageCache: MangaImageCache = .shared
+    var allowsZoom = true
     let didLoad: (Double) -> Void
     @State private var image: Image?
     @State private var errorMessage: String?
     @State private var retry = 0
     @State private var requestID: UUID?
+    #if os(iOS)
+    @State private var showingZoom = false
+    #endif
 
     var body: some View {
+        #if os(iOS)
+        if allowsZoom {
+            pageContent
+                .onTapGesture(count: 2) { showingZoom = true }
+                .accessibilityAction(named: "放大图片") { showingZoom = true }
+                .fullScreenCover(isPresented: $showingZoom) {
+                    MobileMangaZoomView(url: url, referer: referer, pageNumber: pageNumber, imageCache: imageCache)
+                }
+        } else { pageContent }
+        #else
+        pageContent
+        #endif
+    }
+
+    private var pageContent: some View {
         ZStack {
             if let image {
                 image.resizable().aspectRatio(contentMode: .fit)

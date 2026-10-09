@@ -6,23 +6,34 @@ struct MobileReaderView: View {
     let showCatalog: () -> Void
     @AppStorage(ReaderPreferenceKeys.presentationMode) private var mode = ReaderPresentationMode.normal.rawValue
     @AppStorage(ReaderPreferenceKeys.pageTurnMode) private var pageTurnMode = ReaderPageTurnMode.verticalScroll.rawValue
+    @AppStorage(ReaderPreferenceKeys.mangaPageTurnMode) private var mangaPageTurnMode = ReaderPageTurnMode.mangaDefault.rawValue
     @State private var showingSettings = false
     @State private var controlsVisible = false
     @State private var chapterLoadTask: Task<Void, Never>?
 
     private var usesPages: Bool {
-        pageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue && (mode == ReaderPresentationMode.normal.rawValue || store.selectedChapter?.isManga == true)
+        if store.selectedChapter?.isManga == true {
+            return mangaPageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue
+        }
+        return pageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue && mode == ReaderPresentationMode.normal.rawValue
     }
 
     var body: some View {
-        GeometryReader { _ in
+        GeometryReader { geometry in
             ReaderView(store: store, keyboardNavigationEnabled: false, showsPagingControls: controlsVisible,
                        loadsChapterAutomatically: false, togglePagingControls: { controlsVisible.toggle() })
                 .accessibilityAction(named: "显示阅读选项") { controlsVisible = true }
+                .simultaneousGesture(TapGesture(count: 2).exclusively(before: SpatialTapGesture())
+                    .onEnded { value in
+                        guard !usesPages, case let .second(tap) = value,
+                              !(controlsVisible && tap.location.y > geometry.size.height - 44),
+                              MangaPageLayout.tap(at: tap.location.x, width: geometry.size.width) == .controls else { return }
+                        controlsVisible.toggle()
+                    }, including: usesPages ? .none : .all)
         }
             .navigationTitle(store.selectedChapter?.title ?? "阅读")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar(usesPages && !controlsVisible ? .hidden : .visible, for: .navigationBar)
+            .toolbar(controlsVisible ? .visible : .hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("书架", systemImage: "books.vertical", action: showLibrary)
@@ -31,7 +42,7 @@ struct MobileReaderView: View {
                     Menu("阅读选项", systemImage: "ellipsis.circle") {
                         Section("阅读") {
                             Button("目录", systemImage: "list.bullet", action: showCatalog)
-                            Button("阅读设置", systemImage: "textformat.size") { showingSettings = true }
+                            Button("阅读设置", systemImage: "gearshape") { showingSettings = true }
                         }
                         Section("加载与更新") {
                             Button("重试加载", systemImage: "arrow.clockwise") {
@@ -71,10 +82,14 @@ struct MobileReaderView: View {
                     .background(.bar)
                 }
             }
-            .sheet(isPresented: $showingSettings, onDismiss: { controlsVisible = false }) { MobileSettingsView() }
+            .sheet(isPresented: $showingSettings, onDismiss: { controlsVisible = false }) {
+                MobileSettingsView(readingManga: store.selectedChapter?.isManga == true)
+            }
             .onChange(of: pageTurnMode) { _, _ in
-                controlsVisible = false
-                loadCurrentChapter()
+                if store.selectedChapter?.isManga != true { readingModeChanged() }
+            }
+            .onChange(of: mangaPageTurnMode) { _, _ in
+                if store.selectedChapter?.isManga == true { readingModeChanged() }
             }
             .onChange(of: store.selectedChapterID) { _, _ in loadCurrentChapter() }
             .onChange(of: store.offlineDownloads.completedCount) { _, _ in
@@ -92,6 +107,11 @@ struct MobileReaderView: View {
                 store.flushPendingProgress()
                 store.endReaderPresentation()
             }
+    }
+
+    private func readingModeChanged() {
+        controlsVisible = false
+        loadCurrentChapter()
     }
 
     private func loadCurrentChapter() {

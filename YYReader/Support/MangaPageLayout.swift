@@ -57,4 +57,12 @@ struct MangaPageLayout: Equatable, Sendable {
         if x > width * 0.7 { return .forward }
         return .controls
     }
+
+    static func swipeDirection(translation: CGSize, predictedWidth: Double, viewportWidth: Double) -> Int? {
+        guard abs(translation.width) >= 12,
+              abs(translation.width) > abs(translation.height) * 1.3 else { return nil }
+        let distance = abs(predictedWidth) > abs(translation.width) ? predictedWidth : translation.width
+        guard abs(distance) >= max(44, viewportWidth * 0.2) else { return nil }
+        return distance < 0 ? 1 : -1
+    }
 }

@@ -7,7 +7,7 @@ struct MangaReaderView: View {
     var showsControls = true
     let imageCache: MangaImageCache
     var toggleControls: () -> Void = {}
-    @AppStorage(ReaderPreferenceKeys.pageTurnMode) private var pageTurnMode = ReaderPageTurnMode.verticalScroll.rawValue
+    @AppStorage(ReaderPreferenceKeys.mangaPageTurnMode) private var pageTurnMode = ReaderPageTurnMode.mangaDefault.rawValue
     @AppStorage(ReaderPreferenceKeys.prefetchNext) private var prefetch = true
     @AppStorage(ReaderPreferenceKeys.mangaPageLayout) private var layoutName = MangaPageLayout.Mode.automatic.rawValue
     @AppStorage(ReaderPreferenceKeys.mangaFirstPageAlone) private var firstPageAlone = true
@@ -55,20 +55,26 @@ struct MangaReaderView: View {
             firstPageAlone: firstPageAlone, viewport: canvasSize)
         let group = layout.group(containing: pageIndex)
         VStack(spacing: 0) {
-            #if os(macOS)
-            desktopOptions
-            #endif
             // Measure the space actually left by the native controls. Images
             // must fit this region rather than a manually estimated bar height.
             GeometryReader { geometry in
                 if usesPages {
+                    #if os(iOS)
+                    MobileMangaPager(pages: pages, referer: chapterURL, pageIndex: pageIndex,
+                        size: geometry.size, imageCache: imageCache,
+                        hasPrevious: store.chapterNavigationSnapshot.hasPrevious,
+                        hasNext: store.chapterNavigationSnapshot.hasNext,
+                        turn: { turn($0, layout: layout) }, toggleControls: toggleControls,
+                        didLoad: { index, ratio in imageLoaded(index: index, ratio: ratio, pages: pages) })
+                    #else
                     pagedCanvas(pages: pages, layout: layout, group: group, size: geometry.size)
+                    #endif
                 } else {
                     scrollingCanvas(pages: pages, aspectRatios: aspectRatios, size: geometry.size)
                 }
             }
             .onGeometryChange(for: CGSize.self) { $0.size } action: { canvasSize = $0 }
-            if showsControls || !usesPages {
+            if showsControls {
                 pagingControls(layout: layout, group: group, total: pages.count)
             }
         }
@@ -94,31 +100,6 @@ struct MangaReaderView: View {
         .onDisappear { _ = store.flushPendingProgress() }
         .accessibilityElement(children: .contain)
     }
-
-    #if os(macOS)
-    private var desktopOptions: some View {
-        HStack(spacing: 12) {
-            Picker("阅读方式", selection: $pageTurnMode) {
-                Text("上下滚动").tag(ReaderPageTurnMode.verticalScroll.rawValue)
-                Text("左右翻页").tag(ReaderPageTurnMode.horizontalPages.rawValue)
-            }.frame(width: 150)
-            if usesPages {
-                Picker("漫画布局", selection: $layoutName) {
-                    ForEach(MangaPageLayout.Mode.allCases) { Text($0.title).tag($0.rawValue) }
-                }.pickerStyle(.segmented).frame(width: 180)
-                    .accessibilityIdentifier("manga.layout")
-            }
-            Spacer(minLength: 4)
-            Menu("显示选项", systemImage: "slider.horizontal.3") {
-                Toggle("首图单页", isOn: $firstPageAlone)
-                Toggle("深灰阅读背景", isOn: $darkBackground)
-            }.fixedSize()
-        }
-        .controlSize(.small)
-        .padding(.horizontal, 12)
-        .frame(height: 34)
-    }
-    #endif
 
     private func pagedCanvas(pages: [URL], layout: MangaPageLayout, group: Range<Int>, size: CGSize) -> some View {
         let pageRatios = group.map { ratios[pages[$0].absoluteString] ?? 0.7 }
