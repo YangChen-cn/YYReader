@@ -26,13 +26,11 @@ struct MangaReaderView: View {
         self.showsControls = showsControls
         self.keyboardNavigationEnabled = keyboardNavigationEnabled
         let total = chapter.imageSourceURLs.count
-        let initial: Int
-        switch store.readerScrollRequest?.intent {
-        case .chapterTop: initial = 0
-        case .chapterBottom: initial = max(total - 1, 0)
-        default: initial = min(max(chapter.topParagraphIndex, 0), max(total - 1, 0))
-        }
-        _pageIndex = State(initialValue: initial)
+        _pageIndex = State(initialValue: Self.resolvedPageIndex(
+            request: store.readerScrollRequest,
+            chapter: chapter,
+            total: total
+        ) ?? min(max(chapter.topParagraphIndex, 0), max(total - 1, 0)))
     }
 
     var body: some View {
@@ -130,14 +128,25 @@ struct MangaReaderView: View {
                             proxy.scrollTo(pageIndex, anchor: .top)
                             restored = true
                         }
+                        .onChange(of: store.readerScrollRequest?.id) { _, _ in
+                            // A request can arrive while this view is already on
+                            // screen, e.g. "继续阅读" from the catalog on iPad.
+                            guard let index = requestedPageIndex(total: pages.count) else { return }
+                            pageIndex = index
+                            proxy.scrollTo(index, anchor: .top)
+                            restored = true
+                            consumePendingScrollRequest()
+                        }
                     }
                 }
             }
         }
-        .task {
-            if let request = store.readerScrollRequest, request.chapterID == chapter.id {
-                store.consumeReaderScrollRequest(request.id)
-            }
+        .task(id: store.readerScrollRequest?.id) {
+            // Paged mode shows a single page driven by pageIndex; the scrolling
+            // branch moves its own ScrollView above.
+            guard !usesPages, let index = requestedPageIndex(total: urls.count) else { return }
+            pageIndex = index
+            consumePendingScrollRequest()
         }
         .onChange(of: pageIndex) { _, _ in savePosition(total: pages.count) }
         .onDisappear { _ = store.flushPendingProgress() }
@@ -165,7 +174,32 @@ struct MangaReaderView: View {
         else { pageIndex = next }
     }
 
+    private func requestedPageIndex(total: Int) -> Int? {
+        Self.resolvedPageIndex(request: store.readerScrollRequest, chapter: chapter, total: total)
+    }
+
+    private static func resolvedPageIndex(
+        request: ReaderScrollRequest?,
+        chapter: Chapter,
+        total: Int
+    ) -> Int? {
+        guard let request, request.chapterID == chapter.id else { return nil }
+        switch request.intent {
+        case .chapterTop: return 0
+        case .chapterBottom: return max(total - 1, 0)
+        case .restore: return min(max(chapter.topParagraphIndex, 0), max(total - 1, 0))
+        }
+    }
+
+    private func consumePendingScrollRequest() {
+        guard let request = store.readerScrollRequest, request.chapterID == chapter.id else { return }
+        store.consumeReaderScrollRequest(request.id)
+    }
+
     private func savePosition(total: Int) {
+        // A stale view must not write back after the reader moved to another
+        // chapter: updateProgress also points the book at this chapter.
+        guard store.selectedChapterID == chapter.id else { return }
         store.updateProgress(chapterID: chapter.id, paragraphIndex: pageIndex, total: total)
     }
 

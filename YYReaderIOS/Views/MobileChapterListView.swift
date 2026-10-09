@@ -35,7 +35,14 @@ struct MobileChapterListView: View {
                 Section("章节目录 · \(store.sortedChapters.count) 章") {
                     ForEach(chapters) { chapter in
                         Button {
-                            store.selectChapter(chapter.id, scrollIntent: .chapterTop)
+                            // Re-selecting the open chapter would rebuild the reader
+                            // window and reset its saved position to the chapter top.
+                            // Resume from the reading position instead.
+                            if chapter.id == store.selectedChapterID {
+                                store.requestReaderScroll(.restore)
+                            } else {
+                                store.selectChapter(chapter.id, scrollIntent: .chapterTop)
+                            }
                             openChapter(chapter.id)
                         } label: {
                             ChapterListRow(chapter: chapter)

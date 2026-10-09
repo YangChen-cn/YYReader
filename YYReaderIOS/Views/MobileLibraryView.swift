@@ -206,7 +206,12 @@ struct MobileLibraryView: View {
     }
 
     private var bookSelection: Binding<UUID?> {
-        Binding(get: { store.selectedBookID }, set: { store.selectBook($0) })
+        Binding(get: { store.selectedBookID }, set: { newValue in
+            // Re-selecting the open book would rebuild the reader window while the
+            // regular-width layout shows it next to the bookshelf.
+            guard newValue != store.selectedBookID else { return }
+            store.selectBook(newValue)
+        })
     }
 
     private var verificationBinding: Binding<VerificationRequest?> {
