@@ -117,10 +117,20 @@ struct MobileLibraryView: View {
     private var navigation: some View {
         NavigationSplitView(columnVisibility: $columns, preferredCompactColumn: $compactColumn) {
             List(selection: bookSelection) {
+                if !store.books.isEmpty {
+                    Text("\(store.books.count) 本藏书 · 轻点打开，长按管理")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
                 ForEach(store.books) { book in
                     NavigationLink(value: book.id) {
-                        BookSidebarRow(book: book)
+                        MobileBookCardView(book: book)
                     }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 8))
                     .contextMenu {
                         Button("编辑信息", systemImage: "pencil") {
                             store.selectBook(book.id)
@@ -133,28 +143,32 @@ struct MobileLibraryView: View {
                     }
                 }
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color(.systemGroupedBackground))
             .overlay {
                 if store.books.isEmpty {
-                    ContentUnavailableView {
-                        Label("书架还是空的", systemImage: "books.vertical")
-                    } description: {
-                        Text("添加小说章节网址，或导入本地 TXT。")
-                    } actions: {
-                        Button("添加小说", systemImage: "plus") { showingURL = true }
-                    }
+                    MobileEmptyBookshelfView(addWeb: { showingURL = true }, importText: { chooseFile(text: true) },
+                                            importBookshelf: { chooseFile(text: false) })
                 }
             }
             .navigationTitle("书架")
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Menu("添加与传输", systemImage: "plus") {
-                        Button("添加网页", systemImage: "link") { showingURL = true }
-                        Button("导入 TXT", systemImage: "doc.text") { chooseFile(text: true) }
-                        Button("导入书架文件", systemImage: "square.and.arrow.down") { chooseFile(text: false) }
-                        Button("从剪贴板导入书架", systemImage: "doc.on.clipboard") { transfer.importFromClipboard(for: store) }
-                        Button("导出书架文件", systemImage: "square.and.arrow.up", action: exportBookshelf)
-                        Button("复制书架 JSON", systemImage: "doc.on.doc") { transfer.copyExportJSON(from: store) }
+                    Menu("添加", systemImage: "plus") {
+                        Section("添加小说") {
+                            Button("添加网页", systemImage: "link") { showingURL = true }
+                            Button("导入 TXT", systemImage: "doc.text") { chooseFile(text: true) }
+                        }
+                        Section("书架传输") {
+                            Button("导入书架文件", systemImage: "square.and.arrow.down") { chooseFile(text: false) }
+                            Button("从剪贴板导入书架", systemImage: "doc.on.clipboard") { transfer.importFromClipboard(for: store) }
+                            Button("导出书架文件", systemImage: "square.and.arrow.up", action: exportBookshelf)
+                            Button("复制书架 JSON", systemImage: "doc.on.doc") { transfer.copyExportJSON(from: store) }
+                        }
                     }
+                    .labelStyle(.titleAndIcon)
                     .disabled(store.isLoading || transfer.isWorking || textImport.isWorking)
                     .accessibilityIdentifier("ios.addMenu")
                 }

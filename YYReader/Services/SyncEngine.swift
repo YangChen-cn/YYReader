@@ -5,6 +5,11 @@ actor SyncEngine {
     static let macFileName = "mac.json"
     static let windowsFileName = "windows.json"
     static let localTextCapability = "local-txt-v1"
+    static func syncDirectory(in selectedFolder: URL) -> URL {
+        selectedFolder.lastPathComponent == directoryName
+            ? selectedFolder
+            : selectedFolder.appendingPathComponent(directoryName, isDirectory: true)
+    }
     private static let localCapabilities = [localTextCapability]
 
     private let device: SyncDevice
@@ -21,7 +26,7 @@ actor SyncEngine {
         includeLocalText: Bool,
         now: Date = .now
     ) throws -> Date {
-        let directory = selectedFolder.appendingPathComponent(Self.directoryName, isDirectory: true)
+        let directory = Self.syncDirectory(in: selectedFolder)
         try ensureDirectory(directory)
 
         let localURL = directory.appendingPathComponent(device.fileName)
@@ -47,7 +52,7 @@ actor SyncEngine {
         chapterRanksByBook: SyncMerger.ChapterRanksByBook = [:],
         now: Date = .now
     ) throws -> SyncResult {
-        let directory = selectedFolder.appendingPathComponent(Self.directoryName, isDirectory: true)
+        let directory = Self.syncDirectory(in: selectedFolder)
         try ensureDirectory(directory)
 
         let localURL = directory.appendingPathComponent(device.fileName)
@@ -93,7 +98,7 @@ actor SyncEngine {
     }
 
     func remoteFileSignatures(selectedFolder: URL) throws -> [SyncDevice: SyncFileSignature] {
-        let directory = selectedFolder.appendingPathComponent(Self.directoryName, isDirectory: true)
+        let directory = Self.syncDirectory(in: selectedFolder)
         var result: [SyncDevice: SyncFileSignature] = [:]
         for peer in device.peers {
             if let signature = try fileSignature(at: directory.appendingPathComponent(peer.fileName)) {
@@ -104,8 +109,7 @@ actor SyncEngine {
     }
 
     func windowsFileSignature(selectedFolder: URL) throws -> SyncFileSignature? {
-        let url = selectedFolder
-            .appendingPathComponent(Self.directoryName, isDirectory: true)
+        let url = Self.syncDirectory(in: selectedFolder)
             .appendingPathComponent(Self.windowsFileName)
         return try fileSignature(at: url)
     }
@@ -116,19 +120,33 @@ actor SyncEngine {
             guard isDirectory.boolValue else { throw SyncError.folderUnavailable }
             return
         }
-        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try SyncFileAccess.coordinate(at: directory, writing: true) { url in
+            try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
+        }
     }
 
     private func readSnapshotIfPresent(
         at url: URL,
         expectedDevice: SyncDevice
     ) throws -> SyncSnapshot? {
-        guard fileManager.fileExists(atPath: url.path) else { return nil }
-        let data = try Data(contentsOf: url)
-        return try SyncSnapshotCodec.decode(data, expectedDevice: expectedDevice)
+        do {
+            return try SyncFileAccess.coordinate(at: url, writing: false) { url in
+                guard fileManager.fileExists(atPath: url.path) else { return nil }
+                let data = try Data(contentsOf: url)
+                return try SyncSnapshotCodec.decode(data, expectedDevice: expectedDevice)
+            }
+        } catch where SyncFileAccess.isMissing(error) {
+            return nil
+        }
     }
 
     private func atomicWrite(_ data: Data, to destination: URL) throws {
+        try SyncFileAccess.coordinate(at: destination, writing: true) { url in
+            try writeAtomically(data, to: url)
+        }
+    }
+
+    private func writeAtomically(_ data: Data, to destination: URL) throws {
         let temporaryURL = destination
             .deletingLastPathComponent()
             .appendingPathComponent(".\(destination.lastPathComponent).\(UUID().uuidString).tmp")
@@ -151,12 +169,15 @@ actor SyncEngine {
     }
 
     private func fileSignature(at url: URL) throws -> SyncFileSignature? {
-        guard fileManager.fileExists(atPath: url.path) else { return nil }
-        let values = try url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
-        guard let modificationDate = values.contentModificationDate else { return nil }
-        return SyncFileSignature(
-            modificationDate: modificationDate,
-            fileSize: Int64(values.fileSize ?? 0)
-        )
+        do {
+            return try SyncFileAccess.coordinate(at: url, writing: false) { url in
+                guard fileManager.fileExists(atPath: url.path) else { return nil }
+                let values = try url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+                guard let modificationDate = values.contentModificationDate else { return nil }
+                return SyncFileSignature(modificationDate: modificationDate, fileSize: Int64(values.fileSize ?? 0))
+            }
+        } catch where SyncFileAccess.isMissing(error) {
+            return nil
+        }
     }
 }

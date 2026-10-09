@@ -3,21 +3,22 @@ import SwiftUI
 struct MobilePagedReaderView: View {
     let store: LibraryStore
     let chapter: Chapter
+    var showsControls = true
     @AppStorage(ReaderPreferenceKeys.fontFamily) private var fontFamily = ReaderFontFamily.serif.rawValue
     @AppStorage(ReaderPreferenceKeys.fontSize) private var fontSize = 20.0
     @AppStorage(ReaderPreferenceKeys.lineSpacing) private var lineSpacing = ReaderLineSpacingPreset.comfortable.value
     @AppStorage(ReaderPreferenceKeys.paragraphSpacing) private var paragraphSpacing = 0.60
     @AppStorage(ReaderPreferenceKeys.contentWidth) private var contentWidth = ReaderViewportLayout.defaultPreferredWidthEM
     @AppStorage(ReaderPreferenceKeys.paragraphIndent) private var indent = true
+    @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var textScale = 1.0
-    @State private var paginator = MobileTextPaginator()
-    @State private var pages: [MobileReadingPage] = []
+    @State private var pagination = MobilePaginationStore()
     @State private var visiblePageID: Int?
-    @State private var isPaginating = true
     @State private var anchorParagraph = 0
     @State private var anchorOffset = 0
     @State private var hasPrepared = false
+    @State private var userIsPaging = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,27 +28,27 @@ struct MobilePagedReaderView: View {
                 let layout = MobilePaginationLayout(
                     width: ReaderViewportLayout.effectiveContentWidth(preferredWidthEM: contentWidth,
                                                                       fontSize: fontSize * textScale,
-                                                                      viewportWidth: geometry.size.width),
-                    height: max(geometry.size.height - 24, 1), fontName: font.fontName,
+                                                                      viewportWidth: geometry.size.width).rounded(.down),
+                    height: max((geometry.size.height * displayScale).rounded(.down) / displayScale - 24, 1), fontName: font.fontName,
                     fontSize: font.pointSize, lineHeight: font.lineHeight,
                     lineSpacing: lineSpacing * fontSize * textScale,
                     paragraphSpacing: paragraphSpacing * fontSize * textScale, usesFirstLineIndent: indent
                 )
                 ScrollView(.horizontal) {
                     LazyHStack(spacing: 0) {
-                        if store.chapterNavigationSnapshot.hasPrevious {
+                        if !pagination.pages.isEmpty && store.chapterNavigationSnapshot.hasPrevious {
                             MobilePageChapterBoundary(title: "上一章", action: previousChapter)
                                 .frame(width: geometry.size.width, height: geometry.size.height)
                                 .id(-1)
                         }
-                        ForEach(pages) { page in
+                        ForEach(pagination.pages) { page in
                             MobileReaderPageView(page: page, layout: layout, viewportSize: geometry.size)
                                 .id(page.id)
                         }
-                        if store.chapterNavigationSnapshot.hasNext {
+                        if !pagination.pages.isEmpty && store.chapterNavigationSnapshot.hasNext {
                             MobilePageChapterBoundary(title: "下一章", action: nextChapter)
                                 .frame(width: geometry.size.width, height: geometry.size.height)
-                                .id(pages.count)
+                                .id(Int.max)
                         }
                     }
                     .scrollTargetLayout()
@@ -55,60 +56,77 @@ struct MobilePagedReaderView: View {
                 .scrollTargetBehavior(.paging)
                 .scrollPosition(id: $visiblePageID)
                 .scrollIndicators(.hidden)
-                .scrollDisabled(isPaginating)
+                .scrollDisabled(pagination.isPaginating)
                 .accessibilityIdentifier("ios.pagedReader")
+                .accessibilityValue(Text("\(chapter.title) · \(currentPage + 1)/\(max(pagination.pages.count, 1))"))
                 .overlay {
-                    if isPaginating {
+                    if pagination.isPaginating {
                         ProgressView("正在分页…")
                             .accessibilityIdentifier("ios.paginating")
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .background(.background)
                     }
                 }
-                .task(id: MobilePaginationRequest(layout: layout, contentRevision: chapter.contentRevision)) {
-                    await paginate(layout: layout)
+                .onChange(of: MobilePaginationRequest(chapterID: chapter.id, layout: layout, contentRevision: chapter.contentRevision), initial: true) { _, request in
+                    startPagination(request: request)
                 }
                 .task(id: store.readerScrollRequest?.id) { applyScrollRequest() }
                 .onScrollPhaseChange { _, phase in
-                    if phase == .idle { settlePage() }
+                    if phase == .interacting { userIsPaging = true }
+                    if phase == .idle, userIsPaging {
+                        userIsPaging = false
+                        settlePage()
+                    }
                 }
             }
 
-            HStack {
-                Button(currentPage > 0 ? "上一页" : "上一章", systemImage: "chevron.left", action: turnBackward)
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("ios.previousPage")
-                    .disabled(isPaginating || (currentPage == 0 && !store.chapterNavigationSnapshot.hasPrevious))
-                Spacer(minLength: 4)
-                Text("第 \(currentPage + 1) / \(max(pages.count, 1)) 页")
+            if showsControls {
+                HStack {
+                    Button(currentPage > 0 ? "上一页" : "上一章", systemImage: "chevron.left", action: turnBackward)
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("ios.previousPage")
+                        .disabled(pagination.isPaginating || (currentPage == 0 && !store.chapterNavigationSnapshot.hasPrevious))
+                    Spacer(minLength: 4)
+                    Text("第 \(currentPage + 1) / \(max(pagination.pages.count, 1)) 页")
+                        .font(.caption.monospacedDigit())
+                        .accessibilityIdentifier("ios.pageCount")
+                    Spacer(minLength: 4)
+                    Button(currentPage < pagination.pages.count - 1 ? "下一页" : "下一章", systemImage: "chevron.right", action: turnForward)
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("ios.nextPage")
+                        .disabled(pagination.isPaginating || (currentPage >= pagination.pages.count - 1 && !store.chapterNavigationSnapshot.hasNext))
+                }
+                .font(.callout)
+                .buttonStyle(.borderless)
+                .frame(minHeight: 44)
+                .padding(.horizontal, 20)
+                Text(store.readerProgressText)
                     .font(.caption.monospacedDigit())
-                    .accessibilityIdentifier("ios.pageCount")
-                Spacer(minLength: 4)
-                Button(currentPage < pages.count - 1 ? "下一页" : "下一章", systemImage: "chevron.right", action: turnForward)
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("ios.nextPage")
-                    .disabled(isPaginating || (currentPage >= pages.count - 1 && !store.chapterNavigationSnapshot.hasNext))
+                    .foregroundStyle(.secondary)
+                    .padding(.bottom, 8)
             }
-            .font(.callout)
-            .buttonStyle(.borderless)
-            .frame(minHeight: 44)
-            .padding(.horizontal, 20)
-            Text(store.readerProgressText)
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 8)
+        }
+        .onChange(of: pagination.completedRequest) { _, request in
+            guard request?.chapterID == chapter.id else { return }
+            visiblePageID = MobileReadingPage.pageID(containingParagraph: anchorParagraph, utf16Offset: anchorOffset, in: pagination.pages)
+            hasPrepared = true
+            applyScrollRequest()
+        }
+        .onChange(of: pagination.errorMessage) { _, message in
+            if let message { store.presentedError = PresentedError(message: message) }
         }
         .onChange(of: visiblePageID) { _, _ in commitPage() }
         .onDisappear {
             commitPage()
+            pagination.cancel()
             store.flushPendingProgress()
         }
     }
 
-    private var currentPage: Int { min(max(visiblePageID ?? 0, 0), max(pages.count - 1, 0)) }
+    private var currentPage: Int { min(max(visiblePageID ?? 0, 0), max(pagination.pages.count - 1, 0)) }
 
-    private func paginate(layout: MobilePaginationLayout) async {
-        let priorPage = pages.first { $0.id == visiblePageID }
+    private func startPagination(request: MobilePaginationRequest) {
+        let priorPage = pagination.pages.first { $0.id == visiblePageID }
         if let fragment = priorPage?.fragments.first {
             anchorParagraph = fragment.paragraphIndex
             anchorOffset = fragment.utf16Offset
@@ -116,42 +134,29 @@ struct MobilePagedReaderView: View {
             anchorParagraph = chapter.topParagraphIndex
             anchorOffset = 0
         }
-        isPaginating = true
+        // Viewport changes must not be mistaken for a swipe across a chapter boundary.
+        userIsPaging = false
         store.configureContinuousReading(false)
-        let paragraphs = store.readerSession.paragraphs(for: chapter)
-        do {
-            let result = try await paginator.pages(paragraphs: paragraphs, layout: layout)
-            try Task.checkCancellation()
-            guard store.selectedChapterID == chapter.id else { return }
-            pages = result
-            visiblePageID = MobileReadingPage.pageID(containingParagraph: anchorParagraph, utf16Offset: anchorOffset, in: result)
-            hasPrepared = true
-            isPaginating = false
-            applyScrollRequest()
-        } catch is CancellationError {
-            // Reflow/chapter changes cancel the old layout; the newer task owns the UI.
-        } catch {
-            isPaginating = false
-            store.presentedError = PresentedError(message: "章节分页失败：\(error.localizedDescription)")
-        }
+        pagination.start(request: request, paragraphs: store.readerSession.paragraphs(for: chapter))
     }
 
     private func applyScrollRequest() {
-        guard !isPaginating, let request = store.readerScrollRequest, request.chapterID == chapter.id else { return }
+        guard !pagination.isPaginating, !pagination.pages.isEmpty,
+              let request = store.readerScrollRequest, request.chapterID == chapter.id else { return }
         switch request.intent {
         case .chapterTop:
-            visiblePageID = pages.first?.id
+            visiblePageID = pagination.pages.first?.id
         case .chapterBottom:
-            visiblePageID = pages.last?.id
+            visiblePageID = pagination.pages.last?.id
         case .restore:
-            visiblePageID = MobileReadingPage.pageID(containingParagraph: chapter.topParagraphIndex, in: pages)
+            visiblePageID = MobileReadingPage.pageID(containingParagraph: chapter.topParagraphIndex, in: pagination.pages)
         }
         store.consumeReaderScrollRequest(request.id)
     }
 
     private func commitPage() {
-        guard !isPaginating, store.selectedChapterID == chapter.id,
-              let page = pages.first(where: { $0.id == visiblePageID }),
+        guard !pagination.isPaginating, store.selectedChapterID == chapter.id,
+              let page = pagination.pages.first(where: { $0.id == visiblePageID }),
               let fragment = page.fragments.first else { return }
         anchorParagraph = fragment.paragraphIndex
         anchorOffset = fragment.utf16Offset
@@ -160,9 +165,9 @@ struct MobilePagedReaderView: View {
     }
 
     private func settlePage() {
-        guard !isPaginating, !pages.isEmpty else { return }
+        guard !pagination.isPaginating, !pagination.pages.isEmpty else { return }
         if visiblePageID == -1 { previousChapter() }
-        else if visiblePageID == pages.count { nextChapter() }
+        else if visiblePageID == Int.max { nextChapter() }
         else { commitPage() }
     }
 
@@ -172,7 +177,7 @@ struct MobilePagedReaderView: View {
     }
 
     private func turnForward() {
-        if currentPage < pages.count - 1 { showPage(currentPage + 1) }
+        if currentPage < pagination.pages.count - 1 { showPage(currentPage + 1) }
         else { nextChapter() }
     }
 

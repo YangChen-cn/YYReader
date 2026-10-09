@@ -24,7 +24,7 @@
 
 也可以前往 [YYReader 1.3.0 Release](https://github.com/YangChen-cn/YYReader/releases/tag/v1.3.0) 查看校验信息和完整发布说明。
 
-iOS 使用独立版本号，首个正式版本为 [iOS 1.0.0](https://github.com/YangChen-cn/YYReader/releases/tag/ios-v1.0.0)。IPA 为 arm64 Release 未签名包，可通过 SideStore 等工具签名安装与续签；操作见 [iOS 安装说明](docs/IOS_DEVELOPMENT.md#使用-sidestore-在手机端安装与续签)。
+iOS 1.0.0 已更新安装包（构建号11），补充书架与设置布局优化、文件夹同步权限和左右翻页加载修复。关于页显示作者 YangChen 与 GitHub 地址。iOS 使用独立版本号，首个正式版本为 [iOS 1.0.0](https://github.com/YangChen-cn/YYReader/releases/tag/ios-v1.0.0)。IPA 为 arm64 Release 未签名包，可通过 SideStore 等工具签名安装与续签；操作见 [iOS 安装说明](docs/IOS_DEVELOPMENT.md#使用-sidestore-在手机端安装与续签)。
 
 ## 界面预览
 

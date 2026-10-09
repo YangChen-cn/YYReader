@@ -1,6 +1,87 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "%@ · %lld/%lld" : {
+      "extractionState" : "manual"
+    },
+    "上下滚动支持连续阅读。左右翻页时轻点正文中央显示菜单和页数，章末继续左滑进入下一章。学术论文使用上下滚动。" : {
+      "extractionState" : "manual"
+    },
+    "从一本好书开始" : {
+      "extractionState" : "manual"
+    },
+    "把喜欢的故事放进书架。\n添加小说网址，或导入自己的 TXT 文件。" : {
+      "extractionState" : "manual"
+    },
+    "添加小说网址" : {
+      "extractionState" : "manual"
+    },
+    "导入已有书架" : {
+      "extractionState" : "manual"
+    },
+    "未知作者" : {
+      "extractionState" : "manual"
+    },
+    "本地 TXT" : {
+      "extractionState" : "manual"
+    },
+    "网页小说" : {
+      "extractionState" : "manual"
+    },
+    "可离线阅读" : {
+      "extractionState" : "manual"
+    },
+    "本章阅读进度" : {
+      "extractionState" : "manual"
+    },
+    "目录待更新 · 尚未开始阅读" : {
+      "extractionState" : "manual"
+    },
+    "%lld 章 · 尚未开始阅读" : {
+      "extractionState" : "manual"
+    },
+    "%lld 本藏书 · 轻点打开，长按管理" : {
+      "extractionState" : "manual"
+    },
+    "打开章节目录，继续阅读" : {
+      "extractionState" : "manual"
+    },
+    "主题与字体" : {
+      "extractionState" : "manual"
+    },
+    "版式与间距" : {
+      "extractionState" : "manual"
+    },
+    "离线阅读" : {
+      "extractionState" : "manual"
+    },
+    "读过的章节会保存在本机。更多下载选项在阅读菜单中，方便离线时继续阅读。" : {
+      "extractionState" : "manual"
+    },
+    "正在获取文件夹权限…" : {
+      "extractionState" : "manual"
+    },
+    "当前文件夹" : {
+      "extractionState" : "manual"
+    },
+    "先选择文件夹，再启用同步。" : {
+      "extractionState" : "manual"
+    },
+    "选择 Mac 使用的共享位置，或直接选择 YYReaderSync 文件夹，进入后点“打开”。不要选择 mac.json 文件。iOS 写入 ios.json，读取 Mac 和 Windows 快照。同步不包含正文；本地 TXT 需在各设备分别导入。" : {
+      "extractionState" : "manual"
+    },
+    "显示阅读选项" : {
+      "extractionState" : "manual"
+    },
+    "加载与更新" : {
+      "extractionState" : "manual"
+    },
+    "书架传输" : {
+      "extractionState" : "manual"
+    },
+    "章节目录 · %lld 章" : {
+      "extractionState" : "manual"
+    },
     "本次更新：上下滚动与左右翻页、TXT 导入、离线缓存和跨端书架传输。" : {
       "extractionState" : "manual"
     },

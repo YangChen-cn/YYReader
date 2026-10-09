@@ -17,6 +17,10 @@ struct YYReaderIOSApp: App {
             defaults.set(false, forKey: ReaderPreferenceKeys.continuousReading)
             defaults.set(ReaderPresentationMode.normal.rawValue, forKey: ReaderPreferenceKeys.presentationMode)
             defaults.set(ReaderPageTurnMode.verticalScroll.rawValue, forKey: ReaderPreferenceKeys.pageTurnMode)
+            if ProcessInfo.processInfo.arguments.contains("--ui-testing-uncached") {
+                defaults.set(ReaderPageTurnMode.horizontalPages.rawValue, forKey: ReaderPreferenceKeys.pageTurnMode)
+                defaults.set(false, forKey: ReaderPreferenceKeys.prefetchNext)
+            }
             defaults.set(20.0, forKey: ReaderPreferenceKeys.fontSize)
             defaults.removeObject(forKey: ReaderPreferenceKeys.lastReadingBookID)
             defaults.removeObject(forKey: ReaderPreferenceKeys.lastReadingChapterID)

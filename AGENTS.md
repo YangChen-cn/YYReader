@@ -161,6 +161,8 @@ xcodebuild test \
 
 ## UI 验证与 Computer Use
 
+- iOS 调试和测试只复用用户正在使用的一台模拟器，直接覆盖 App 并保留数据；不得另开或同时启动第二台模拟器，除非用户明确要求。
+
 - 默认禁止使用 Computer Use 做日常 UI 验证、点击、输入或截图检查。
 - 优先使用单元测试、XCUITest、构建日志、静态检查和 accessibility identifier 验证可自动确认的行为。
 - 需要主观判断布局、动画、图标、Dock 或真实网站交互时，优先请用户在自己的 Mac 上手动验证，并给出简短、明确的验收步骤。

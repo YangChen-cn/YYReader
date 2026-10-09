@@ -64,6 +64,8 @@ final class FolderSyncController {
         bookmarkData != nil
     }
 
+    var isPreparingFolderAccess: Bool { folderAccessTask != nil }
+
     func attach(to store: LibraryStore) {
         self.store = store
         if isEnabled {
@@ -429,7 +431,7 @@ final class FolderSyncController {
 
     private func startDirectoryMonitor() {
         guard let selectedFolderURL else { return }
-        let directory = selectedFolderURL.appendingPathComponent(SyncEngine.directoryName, isDirectory: true)
+        let directory = SyncEngine.syncDirectory(in: selectedFolderURL)
         Task { [weak self] in
             await self?.monitor.start(directory: directory) { [weak self] in
                 Task { @MainActor [weak self] in

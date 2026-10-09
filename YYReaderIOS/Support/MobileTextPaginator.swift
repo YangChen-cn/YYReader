@@ -8,18 +8,25 @@ actor MobileTextPaginator {
               layout.width > 0, layout.height > 0, layout.fontSize > 0 else { return [] }
         let font = CTFontCreateWithName(layout.fontName as CFString, layout.fontSize, nil)
         var spacing = CGFloat(layout.lineSpacing)
+        var lineHeight = CGFloat(layout.lineHeight)
         let style = withUnsafePointer(to: &spacing) { value in
-            var setting = CTParagraphStyleSetting(spec: .lineSpacingAdjustment,
-                                                   valueSize: MemoryLayout<CGFloat>.size, value: value)
-            return CTParagraphStyleCreate(&setting, 1)
+            withUnsafePointer(to: &lineHeight) { height in
+                let settings = [
+                    CTParagraphStyleSetting(spec: .lineSpacingAdjustment, valueSize: MemoryLayout<CGFloat>.size, value: value),
+                    CTParagraphStyleSetting(spec: .minimumLineHeight, valueSize: MemoryLayout<CGFloat>.size, value: height),
+                    CTParagraphStyleSetting(spec: .maximumLineHeight, valueSize: MemoryLayout<CGFloat>.size, value: height)
+                ]
+                return settings.withUnsafeBufferPointer { CTParagraphStyleCreate($0.baseAddress, $0.count) }
+            }
         }
         let attributes: [NSAttributedString.Key: Any] = [
             NSAttributedString.Key(kCTFontAttributeName as String): font,
             NSAttributedString.Key(kCTParagraphStyleAttributeName as String): style
         ]
-        // Leave a line of tolerance for SwiftUI's text layout and CJK fallback fonts.
+        // Core Text's CJK fallback metrics are taller than SwiftUI's fixed font
+        // lines. Match the resolved line height instead of reserving a whole extra line.
         // Pages also allow vertical overflow at extreme accessibility sizes, so text is never clipped.
-        let pageHeight = max(layout.height - layout.lineHeight, layout.lineHeight)
+        let pageHeight = max(layout.height - 2, layout.lineHeight)
         let width = max(layout.width - 2, 1)
         var remainingHeight = pageHeight
         var fragments: [MobileReadingPage.Fragment] = []

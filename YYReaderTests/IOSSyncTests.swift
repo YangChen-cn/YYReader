@@ -4,6 +4,25 @@ import Testing
 
 struct IOSSyncTests {
     @Test
+    func choosingSyncDirectoryDirectlyReadsMacAndWritesIosBesideIt() async throws {
+        let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let directory = parent.appendingPathComponent(SyncEngine.directoryName, isDirectory: true)
+        let book = SyncBookRecord(sourceURL: "https://example.com/direct/", title: "目录选择测试", author: "作者", updatedAt: Date(timeIntervalSince1970: 100))
+        _ = try await SyncEngine(device: .mac).publishLocal(selectedFolder: parent, localBooks: [book], includeLocalText: false)
+        let macURL = directory.appendingPathComponent("mac.json")
+        let macData = try Data(contentsOf: macURL)
+        let engine = SyncEngine(device: .ios)
+        let result = try await engine.synchronize(selectedFolder: directory, localBooks: [])
+        #expect(result.books == [book])
+        #expect(result.remoteFileSignatures[.mac] != nil)
+        #expect(FileManager.default.fileExists(atPath: directory.appendingPathComponent("ios.json").path))
+        #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent(SyncEngine.directoryName).path))
+        #expect(try Data(contentsOf: macURL) == macData)
+        #expect(try await engine.remoteFileSignatures(selectedFolder: directory)[.mac] != nil)
+    }
+
+    @Test
     func iosWritesOnlyOwnSnapshotAndMacReadsItIdempotently() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: folder) }

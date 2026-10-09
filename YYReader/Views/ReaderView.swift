@@ -3,6 +3,8 @@ import SwiftUI
 struct ReaderView: View {
     @Bindable var store: LibraryStore
     let keyboardNavigationEnabled: Bool
+    var showsPagingControls = true
+    var loadsChapterAutomatically = true
     @AppStorage(ReaderPreferenceKeys.theme) private var themeName = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentationModeName = ReaderPresentationMode.normal.rawValue
     @AppStorage(ReaderPreferenceKeys.pageTurnMode) private var pageTurnMode = ReaderPageTurnMode.verticalScroll.rawValue
@@ -10,16 +12,24 @@ struct ReaderView: View {
     var body: some View {
         let theme = ReaderTheme(rawValue: themeName) ?? .system
         let isAcademic = presentationModeName == ReaderPresentationMode.academicPaper.rawValue
+        #if os(iOS)
+        // A load completing also replaces the prepared session. Observe that
+        // transition even when SwiftData's body fault has not notified this view.
+        let chapter = store.readerSession.entries.first { $0.id == store.selectedChapterID }?.chapter
+            ?? store.selectedChapter
+        #else
+        let chapter = store.selectedChapter
+        #endif
 
         ZStack {
             (isAcademic ? Color(white: 0.88) : theme.background)
                 .ignoresSafeArea()
 
             Group {
-                if let chapter = store.selectedChapter, chapter.isCached {
+                if let chapter, chapter.isCached {
                     #if os(iOS)
                     if pageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue && !isAcademic {
-                        MobilePagedReaderView(store: store, chapter: chapter)
+                        MobilePagedReaderView(store: store, chapter: chapter, showsControls: showsPagingControls)
                             .id(chapter.id)
                     } else {
                         ReaderContentView(store: store, keyboardNavigationEnabled: keyboardNavigationEnabled)
@@ -38,8 +48,9 @@ struct ReaderView: View {
                     )
                 } else if store.selectedChapter != nil {
                     ProgressView("正在准备章节…")
+                        .accessibilityIdentifier("reader.preparingChapter")
                         .task(id: store.selectedChapterID) {
-                            await store.ensureSelectedChapterLoaded()
+                            if loadsChapterAutomatically { await store.ensureSelectedChapterLoaded() }
                         }
                 } else {
                     ContentUnavailableView(
