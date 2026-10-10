@@ -55,6 +55,6 @@ struct MobileBookCardView: View {
         }
         .padding(14)
         .background(.background, in: .rect(cornerRadius: 16))
-        .accessibilityHint("打开章节目录，继续阅读")
+        .accessibilityHint("接续上次阅读位置")
     }
 }

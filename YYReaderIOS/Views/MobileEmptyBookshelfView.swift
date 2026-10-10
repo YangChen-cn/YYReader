@@ -22,6 +22,8 @@ struct MobileEmptyBookshelfView: View {
                 Button("导入已有书架", systemImage: "square.and.arrow.down", action: importBookshelf)
                     .font(.subheadline)
             }
+            .labelStyle(.titleAndIcon)
+            .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityIdentifier("ios.emptyBookshelf")
     }

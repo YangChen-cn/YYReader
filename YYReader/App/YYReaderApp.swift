@@ -3,6 +3,7 @@ import SwiftUI
 
 @main
 struct YYReaderApp: App {
+    @NSApplicationDelegateAdaptor(AppTerminationDelegate.self) private var terminationDelegate
     private let modelContainer: ModelContainer
     @State private var services: AppServices
 
@@ -27,6 +28,7 @@ struct YYReaderApp: App {
             LibrarySceneView()
                 .environment(services)
                 .frame(minHeight: 600)
+                .task { terminationDelegate.services = services }
         }
         .defaultSize(width: 1240, height: 820)
         .modelContainer(modelContainer)

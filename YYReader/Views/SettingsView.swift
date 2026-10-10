@@ -39,6 +39,11 @@ struct SettingsView: View {
             Tab("关于", systemImage: "info.circle") {
                 AboutSettingsView()
             }
+            Tab("更新", systemImage: "arrow.down.circle") {
+                ScrollView {
+                    AppUpdateSettingsView().padding(24)
+                }
+            }
         }
         .frame(width: 540, height: 620)
     }

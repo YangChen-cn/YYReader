@@ -7,6 +7,7 @@ final class AppServices {
     let verificationStore: WebVerificationStore
     let importCoordinator: NovelImportCoordinator
     let folderSync: FolderSyncController
+    let updates = AppUpdateController()
 
     init() {
         let verificationStore = WebVerificationStore()

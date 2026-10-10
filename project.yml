@@ -23,6 +23,12 @@ targets:
       - path: YYReader
     dependencies:
       - package: SwiftSoup
+      - target: YYReaderUpdater
+        link: false
+        embed: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
     entitlements:
       path: YYReader/YYReader.entitlements
       properties:
@@ -54,6 +60,30 @@ targets:
         NSHighResolutionCapable: true
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+  YYReaderUpdater:
+    type: application
+    platform: macOS
+    sources:
+      - path: YYReaderUpdater
+      - path: YYReader/Services/MacUpdateInstaller.swift
+      - path: YYReader/Support/ReleaseVersion.swift
+      - path: YYReader/Support/UpdateChecksum.swift
+      - path: YYReader/Resources/Localizable.xcstrings
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yyreader.updater
+        PRODUCT_NAME: YYReaderUpdater
+        ARCHS: arm64
+        ENABLE_APP_SANDBOX: NO
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: YES
+    info:
+      path: YYReaderUpdater/Info.plist
+      properties:
+        CFBundleDisplayName: YYReader 更新
+        LSUIElement: true
+        LSMinimumSystemVersion: "15.0"
   YYReaderTests:
     type: bundle.unit-test
     platform: macOS
@@ -105,6 +135,9 @@ targets:
       - path: YYReader/Views/LocalTextImportSheet.swift
       - path: YYReader/Views/BookMetadataEditorSheet.swift
       - path: YYReader/Views/AddURLSheet.swift
+      - path: YYReader/Views/AppUpdateCard.swift
+      - path: YYReader/Views/AppUpdateSettingsView.swift
+      - path: YYReader/Views/ReleaseNotesView.swift
       - path: YYReader/Views/LoadingOverlay.swift
       - path: YYReader/Views/AcademicPaperChapterView.swift
       - path: YYReader/Views/AcademicPaperEquationView.swift

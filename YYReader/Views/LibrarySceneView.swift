@@ -28,9 +28,11 @@ struct LibrarySceneView: View {
             }
         }
         .task(initializeStore)
+        .task { await services.updates.check() }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 services.folderSync.appBecameActive()
+                Task { await services.updates.check() }
             } else {
                 store?.flushPendingProgress()
             }

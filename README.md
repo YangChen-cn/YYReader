@@ -100,6 +100,7 @@ iOS IPA 需要用 SideStore、Sideloadly 等工具自行签名安装，续签由
 | **预取与离线缓存** | 默认预取小说最多 3 章、漫画最多 10 张图片；可主动下载当前章、后续章节或全书。已下载内容留在本机。 |
 | **看得见的缓存占用** | 设置中查看总大小及每本书占用，清理全部或单本缓存；每本漫画预算 512 MB，超出后优先清理已读章节，保留当前章与未读内容。 |
 | **书架与进度同步** | 共享文件夹、书架文件或剪贴板传输书籍信息与阅读进度；正文与图片缓存不随同步传输。 |
+| **更新提醒** | Mac / iOS 自动检查各自的 GitHub 发布，书架上展开更新说明。Mac 支持带进度的下载及安装重启；iOS 提供 IPA 下载链接，由侧载工具重新签名安装。此功能将在下一次发布中提供。 |
 
 漫画专用适配包括瓜子漫画、再漫画、好多漫和漫画站。手动选择「漫画」时，不匹配专用站点的网页会尝试通用解析：只提取明确阅读容器中的图片，过滤广告、占位图与重复地址；证据不足会提示失败。详见 [漫画阅读与适配说明](docs/MANGA_SUPPORT.md)。
 
@@ -152,7 +153,7 @@ YYReaderSync/
 
 Mac 与 iOS 共用解析、加载、缓存、SwiftData 数据模型与阅读进度逻辑。界面使用 SwiftUI，Swift 6 严格并发，SwiftSoup 2.13.5 与 XcodeGen 管理工程；Windows 使用 WinUI 3、C# / .NET 8 和 SQLite。
 
-[iOS 开发与安装](docs/IOS_DEVELOPMENT.md) · [漫画实现与 Windows 交接](docs/MANGA_SUPPORT.md) · [Windows 开发](windows/README.md) · [通用小说解析](shared/generic-parser/README.md) · [更新记录](RELEASE_NOTES.md)
+[iOS 开发与安装](docs/IOS_DEVELOPMENT.md) · [漫画实现与 Windows 交接](docs/MANGA_SUPPORT.md) · [应用更新](docs/APP_UPDATES.md) · [Windows 开发](windows/README.md) · [通用小说解析](shared/generic-parser/README.md) · [更新记录](RELEASE_NOTES.md)
 
 <details>
 <summary>从源码构建 macOS</summary>

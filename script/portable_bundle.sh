@@ -60,6 +60,13 @@ sign_portable_bundle() {
     fi
   done < <(portable_bundle_macho_files "$app_bundle")
 
+  # Seal the install helper's resources after sanitizing/signing its executable.
+  # It runs independently; never apply the reader's sandbox entitlements to it.
+  if [[ -d "$app_bundle/Contents/Helpers/YYReaderUpdater.app" ]]; then
+    /usr/bin/codesign --force --sign - --timestamp=none \
+      "$app_bundle/Contents/Helpers/YYReaderUpdater.app"
+  fi
+
   /usr/bin/codesign \
     --force \
     --sign - \

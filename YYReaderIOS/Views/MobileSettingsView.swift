@@ -94,6 +94,7 @@ struct MobileSettingsView: View {
                 } header: { Text("书架与阅读进度同步") } footer: {
                     Text("选择 Mac 使用的共享位置，或直接选择 YYReaderSync 文件夹，进入后点“打开”。不要选择 mac.json 文件。iOS 写入 ios.json，读取 Mac 和 Windows 快照。同步不包含正文；本地 TXT 需在各设备分别导入。")
                 }
+                Section("软件更新") { AppUpdateSettingsView() }
                 Section("关于") {
                     LabeledContent("YYReader", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")
                     LabeledContent("作者", value: "YangChen")

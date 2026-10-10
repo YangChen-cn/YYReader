@@ -2,6 +2,7 @@
 set -euo pipefail
 
 MODE="${1:-run}"
+APP_ARGUMENTS=("${@:2}")
 APP_NAME="YYReader"
 BUNDLE_ID="com.yyreader.app"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -63,7 +64,11 @@ open_app() {
   rm -rf "$RUN_BUNDLE"
   mkdir -p "$RUN_STAGING_DIR"
   /usr/bin/ditto "$APP_BUNDLE" "$RUN_BUNDLE"
-  /usr/bin/open -n "$RUN_BUNDLE"
+  if (( ${#APP_ARGUMENTS[@]} )); then
+    /usr/bin/open -n "$RUN_BUNDLE" --args "${APP_ARGUMENTS[@]}"
+  else
+    /usr/bin/open -n "$RUN_BUNDLE"
+  fi
 }
 
 case "$MODE" in
@@ -95,7 +100,7 @@ case "$MODE" in
     exit 1
     ;;
   *)
-    echo "usage: $0 [run|--build-only|--debug|--logs|--telemetry|--verify]" >&2
+    echo "usage: $0 [run|--build-only|--debug|--logs|--telemetry|--verify] [app arguments...]" >&2
     exit 2
     ;;
 esac

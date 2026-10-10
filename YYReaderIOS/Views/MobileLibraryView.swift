@@ -4,11 +4,9 @@ import UniformTypeIdentifiers
 struct MobileLibraryView: View {
     @Bindable var store: LibraryStore
     @Environment(AppServices.self) private var services
-    @Environment(\.horizontalSizeClass) private var sizeClass
-    @State private var compactColumn = NavigationSplitViewColumn.sidebar
-    @State private var columns = NavigationSplitViewVisibility.all
-    @State private var navigationID = UUID()
-    @State private var isReading = false
+    private enum Destination: Hashable { case reader }
+    @State private var path: [Destination] = []
+    @State private var showingCatalog = false
     @State private var readingBookID: UUID?
     @State private var showingURL = false
     @State private var pendingURL: String?
@@ -26,7 +24,6 @@ struct MobileLibraryView: View {
 
     var body: some View {
         navigation
-            .id(navigationID)
             .overlay {
                 if textImport.isWorking {
                     LoadingOverlay(message: "正在读取 TXT…", onCancel: textImport.cancel)
@@ -38,6 +35,18 @@ struct MobileLibraryView: View {
                 AddURLSheet { url, type in pendingURL = url; pendingContentType = type }
             }
             .sheet(isPresented: $showingSettings) { MobileSettingsView() }
+            .sheet(isPresented: $showingCatalog) {
+                NavigationStack {
+                    MobileChapterListView(store: store, openChapter: openChapter)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("关闭") { showingCatalog = false }
+                            }
+                        }
+                }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+            }
             .sheet(item: $transfer.pendingImport) { pending in
                 BookshelfTransferPreviewSheet(pendingImport: pending) {
                     transfer.confirmPendingImport(for: store)
@@ -103,18 +112,13 @@ struct MobileLibraryView: View {
                 }
             }
             .onChange(of: store.selectedBookID) { _, id in
-                // An explicit bookshelf tap already opened this book's reader.
-                // Do not let the deferred selection notification send it back to the catalog.
-                if isReading, id == readingBookID { return }
-                let returnToBookshelf = id == nil && isReading
-                isReading = false
+                // The bookshelf action already opened this book's reader or
+                // catalog. Its deferred selection notification must not close it.
+                if id == readingBookID { return }
+                path.removeAll()
+                showingCatalog = false
                 readingBookID = nil
                 store.endReaderPresentation()
-                if returnToBookshelf {
-                    compactColumn = .sidebar
-                    columns = .all
-                    if sizeClass == .compact { navigationID = UUID() }
-                }
             }
             .onOpenURL { url in
                 if url.isFileURL {
@@ -126,101 +130,55 @@ struct MobileLibraryView: View {
             }
     }
 
+    private var isReading: Bool { path.last == .reader }
+
     private var navigation: some View {
-        NavigationSplitView(columnVisibility: $columns, preferredCompactColumn: $compactColumn) {
-            List(selection: bookSelection) {
-                if !store.books.isEmpty {
-                    Text("\(store.books.count) 本藏书 · 轻点打开，长按管理")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                }
-                ForEach(store.books) { book in
-                    Button { openBook(book.id) } label: {
-                        MobileBookCardView(book: book)
-                    }
-                    .buttonStyle(.plain)
-                    .tag(book.id)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 8))
-                    .contextMenu {
-                        Button("编辑信息", systemImage: "pencil") {
-                            store.selectBook(book.id)
-                            showingMetadata = true
-                        }
-                        Button("删除", systemImage: "trash", role: .destructive) {
-                            store.selectBook(book.id)
-                            confirmingDelete = true
-                        }
-                    }
-                }
-            }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .background(Color(.systemGroupedBackground))
-            .overlay {
-                if store.books.isEmpty {
-                    MobileEmptyBookshelfView(addWeb: { showingURL = true }, importText: { chooseFile(text: true) },
-                                            importBookshelf: { chooseFile(text: false) })
-                }
-            }
-            .navigationTitle("书架")
-            .navigationBarTitleDisplayMode(.large)
+        NavigationStack(path: $path) {
+            MobileBookshelfView(
+                store: store,
+                openBook: openBook,
+                editBook: { id in store.selectBook(id); showingMetadata = true },
+                deleteBook: { id in store.selectBook(id); confirmingDelete = true },
+                addWeb: { showingURL = true },
+                importText: { chooseFile(text: true) },
+                importBookshelf: { chooseFile(text: false) }
+            )
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Menu("添加", systemImage: "plus") {
-                        Section("添加小说") {
-                            Button("添加网页", systemImage: "link") { showingURL = true }
-                            Button("导入 TXT", systemImage: "doc.text") { chooseFile(text: true) }
-                        }
-                        Section("书架传输") {
-                            Button("导入书架文件", systemImage: "square.and.arrow.down") { chooseFile(text: false) }
-                            Button("从剪贴板导入书架", systemImage: "doc.on.clipboard") { transfer.importFromClipboard(for: store) }
-                            Button("导出书架文件", systemImage: "square.and.arrow.up", action: exportBookshelf)
-                            Button("复制书架 JSON", systemImage: "doc.on.doc") { transfer.copyExportJSON(from: store) }
+                if !isReading {
+                    if services.updates.hasCollapsedUpdate {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("查看更新", systemImage: "app.badge", action: services.updates.revealBanner)
+                                .labelStyle(.iconOnly)
                         }
                     }
-                    .labelStyle(.titleAndIcon)
-                    .disabled(store.isLoading || transfer.isWorking || textImport.isWorking)
-                    .accessibilityIdentifier("ios.addMenu")
-                }
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("设置", systemImage: "gearshape") { showingSettings = true }
-                        .accessibilityIdentifier("ios.settings")
+                    ToolbarItem(placement: .primaryAction) {
+                        Menu("添加", systemImage: "plus") {
+                            Section("添加小说") {
+                                Button("添加网页", systemImage: "link") { showingURL = true }
+                                Button("导入 TXT", systemImage: "doc.text") { chooseFile(text: true) }
+                            }
+                            Section("书架传输") {
+                                Button("导入书架文件", systemImage: "square.and.arrow.down") { chooseFile(text: false) }
+                                Button("从剪贴板导入书架", systemImage: "doc.on.clipboard") { transfer.importFromClipboard(for: store) }
+                                Button("导出书架文件", systemImage: "square.and.arrow.up", action: exportBookshelf)
+                                Button("复制书架 JSON", systemImage: "doc.on.doc") { transfer.copyExportJSON(from: store) }
+                            }
+                        }
+                        .labelStyle(.titleAndIcon)
+                        .disabled(store.isLoading || transfer.isWorking || textImport.isWorking)
+                        .accessibilityIdentifier("ios.addMenu")
+                    }
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("设置", systemImage: "gearshape") { showingSettings = true }
+                            .accessibilityIdentifier("ios.settings")
+                    }
                 }
             }
-        } content: {
-            MobileChapterListView(store: store, openChapter: openChapter)
-        } detail: {
-            if isReading {
+            .navigationDestination(for: Destination.self) { _ in
                 MobileReaderView(store: store, showLibrary: showLibrary, showCatalog: showCatalog)
-            } else {
-                ContentUnavailableView {
-                    Label("开始阅读", systemImage: "text.book.closed")
-                } description: {
-                    Text("选择小说和章节，或继续上次阅读。")
-                } actions: {
-                    if let id = store.selectedChapterID {
-                        Button("继续阅读") {
-                            store.requestReaderScroll(.restore)
-                            openChapter(id)
-                        }
-                    }
-                }
+                    .navigationBarBackButtonHidden(true)
             }
         }
-    }
-
-    private var bookSelection: Binding<UUID?> {
-        Binding(get: { store.selectedBookID }, set: { newValue in
-            // Re-selecting the open book would rebuild the reader window while the
-            // regular-width layout shows it next to the bookshelf.
-            guard newValue != store.selectedBookID else { return }
-            if let newValue { openBook(newValue) }
-            else { store.selectBook(nil) }
-        })
     }
 
     private var verificationBinding: Binding<VerificationRequest?> {
@@ -232,18 +190,17 @@ struct MobileLibraryView: View {
         guard store.selectedChapterID == id else { return }
         store.beginReaderPresentation()
         readingBookID = store.selectedBookID
-        isReading = true
-        compactColumn = .detail
-        columns = .detailOnly
+        showingCatalog = false
+        if !isReading { path = [.reader] }
     }
 
     private func openBook(_ id: UUID) {
         guard !(isReading && readingBookID == id) else { return }
         if store.selectedBookID != id { store.selectBook(id) }
         guard store.selectedBookID == id else { return }
+        readingBookID = id
         guard let chapterID = store.selectedChapterID else {
-            compactColumn = .content
-            columns = .all
+            showingCatalog = true
             return
         }
         store.requestReaderScroll(.restore)
@@ -252,30 +209,16 @@ struct MobileLibraryView: View {
 
     private func showLibrary() {
         guard store.flushPendingProgress() else { return }
-        if sizeClass == .compact { store.selectBook(nil) }
-        isReading = false
+        path.removeAll()
+        showingCatalog = false
         readingBookID = nil
         store.resetContinuousReaderWindow()
         store.endReaderPresentation()
-        compactColumn = .sidebar
-        columns = .all
-        // Recreate the compact navigation host when returning to its root.
-        // Otherwise an active detail stack can leave iPhone on the catalog
-        // despite preferredCompactColumn being reset to sidebar.
-        if sizeClass == .compact { navigationID = UUID() }
     }
 
     private func showCatalog() {
         guard store.flushPendingProgress() else { return }
-        columns = .all
-        compactColumn = .content
-        if sizeClass == .compact {
-            isReading = false
-            readingBookID = nil
-            store.resetContinuousReaderWindow()
-            store.endReaderPresentation()
-            navigationID = UUID()
-        }
+        showingCatalog = true
     }
 
     private func chooseFile(text: Bool) {

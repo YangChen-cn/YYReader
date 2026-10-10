@@ -1,6 +1,90 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "接续上次阅读位置" : {
+      "extractionState" : "manual"
+    },
+    "暂时忽略" : {
+      "extractionState" : "manual"
+    },
+    "查看更新" : {
+      "extractionState" : "manual"
+    },
+    "展开更新说明与下载" : {
+      "extractionState" : "manual"
+    },
+    "退出预览" : {
+      "extractionState" : "manual"
+    },
+    "发现新版本" : {
+      "extractionState" : "manual"
+    },
+    "稍后提醒" : {
+      "extractionState" : "manual"
+    },
+    "正在下载更新…" : {
+      "extractionState" : "manual"
+    },
+    "正在准备安装…" : {
+      "extractionState" : "manual"
+    },
+    "下载更新" : {
+      "extractionState" : "manual"
+    },
+    "安装并重启" : {
+      "extractionState" : "manual"
+    },
+    "更新内容" : {
+      "extractionState" : "manual"
+    },
+    "在 GitHub 查看" : {
+      "extractionState" : "manual"
+    },
+    "下载 IPA" : {
+      "extractionState" : "manual"
+    },
+    "下载后使用 SideStore 等侧载工具重新签名安装。" : {
+      "extractionState" : "manual"
+    },
+    "安装更新并重启？" : {
+      "extractionState" : "manual"
+    },
+    "阅读进度会先保存，更新完成后自动重新打开 YYReader。" : {
+      "extractionState" : "manual"
+    },
+    "此版本未提供更新说明。" : {
+      "extractionState" : "manual"
+    },
+    "自动检查更新" : {
+      "extractionState" : "manual"
+    },
+    "检查更新" : {
+      "extractionState" : "manual"
+    },
+    "正在检查更新…" : {
+      "extractionState" : "manual"
+    },
+    "软件更新" : {
+      "extractionState" : "manual"
+    },
+    "更新" : {
+      "extractionState" : "manual"
+    },
+    "重新下载" : {
+      "extractionState" : "manual"
+    },
+    "已是最新版本" : {
+      "extractionState" : "manual"
+    },
+    "安装 YYReader 更新" : {
+      "extractionState" : "manual"
+    },
+    "安装完成后会自动重新打开。" : {
+      "extractionState" : "manual"
+    },
+    "返回 YYReader" : {
+      "extractionState" : "manual"
+    },
     "%@ · %lld/%lld" : {
       "extractionState" : "manual"
     },

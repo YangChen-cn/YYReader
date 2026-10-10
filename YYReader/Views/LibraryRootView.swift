@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LibraryRootView: View {
     @Bindable var store: LibraryStore
+    @Environment(AppServices.self) private var services
     @AppStorage(ReaderPreferenceKeys.theme) private var themeName = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentationModeName = ReaderPresentationMode.normal.rawValue
     @AppStorage(ReaderPreferenceKeys.mangaPageTurnMode) private var mangaPageTurnMode = ReaderPageTurnMode.mangaDefault.rawValue

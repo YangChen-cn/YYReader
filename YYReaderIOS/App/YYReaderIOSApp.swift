@@ -41,7 +41,7 @@ struct YYReaderIOSApp: App {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 configuration = ModelConfiguration(url: directory.appendingPathComponent("library.store"))
             } else {
-                configuration = ModelConfiguration(isStoredInMemoryOnly: inMemory)
+                configuration = ModelConfiguration(isStoredInMemoryOnly: inMemory || ProcessInfo.processInfo.arguments.contains("--preview-library"))
             }
             #else
             configuration = ModelConfiguration(isStoredInMemoryOnly: false)
@@ -54,7 +54,17 @@ struct YYReaderIOSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            MobileLibrarySceneView()
+            Group {
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("--preview-library") {
+                    MobileLibraryPreview(showsReader: false)
+                } else {
+                    MobileLibrarySceneView()
+                }
+                #else
+                MobileLibrarySceneView()
+                #endif
+            }
                 .environment(services)
                 .preferredColorScheme(ReaderTheme(rawValue: themeName)?.preferredColorScheme)
         }

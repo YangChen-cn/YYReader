@@ -98,10 +98,12 @@ struct MobileLibrarySceneView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 services.folderSync.appBecameActive()
+                Task { await services.updates.check() }
             } else {
                 store?.flushPendingProgress()
             }
         }
         .onDisappear { store?.flushPendingProgress() }
+        .task { await services.updates.check() }
     }
 }
