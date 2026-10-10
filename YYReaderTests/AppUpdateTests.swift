@@ -39,6 +39,19 @@ struct AppUpdateTests {
         #expect(invalid.sha256 == nil)
     }
 
+    @Test func releaseWithoutDigestStaysVisibleButRequiresManualInstall() throws {
+        var entry = entry("v2.0.0", asset: "YYReader-2.0.0-arm64.dmg")
+        var asset = (entry["assets"] as! [[String: Any]])[0]
+        asset["digest"] = NSNull()
+        entry["assets"] = [asset]
+
+        // The release is still offered, but the card must not promise an in-app
+        // download that could only fail its checksum step.
+        let release = try #require(AppRelease.newest(in: try decode([entry]), platform: .macOS, installed: "1.4.0"))
+        #expect(!release.canInstallAutomatically)
+        #expect(release.pageURL.absoluteString.hasPrefix("https://github.com/YangChen-cn/YYReader/releases/"))
+    }
+
     @Test func checksumAndSizeRejectDamagedOrPartialPackages() throws {
         let file = URL.temporaryDirectory.appendingPathComponent("YYReader-checksum-\(UUID())")
         defer { try? FileManager.default.removeItem(at: file) }

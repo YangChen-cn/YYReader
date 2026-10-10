@@ -75,9 +75,19 @@ struct AppUpdateCard: View {
                             Button("重新下载") { Task { await updates.retryDownload() } }
                         }
                     }
-                } else {
+                } else if release.canInstallAutomatically {
                     Button("下载更新", systemImage: "arrow.down.to.line", action: updates.download)
                         .buttonStyle(.borderedProminent)
+                } else {
+                    // Downloading inside the app verifies the published digest, so a
+                    // release without one is offered as a manual download instead of
+                    // an action that can only fail.
+                    Link(destination: release.pageURL) {
+                        Label("从发布页面下载", systemImage: "arrow.up.right.square")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Text("此版本未提供安装包校验值，自动更新已停用，请从发布页面下载后手动安装。")
+                        .font(.subheadline).foregroundStyle(.secondary)
                 }
                 #else
                 mobileActions(release)

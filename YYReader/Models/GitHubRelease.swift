@@ -52,6 +52,10 @@ struct AppRelease: Sendable, Identifiable {
     let asset: GitHubRelease.Asset
     var id: String { version }
 
+    /// The in-app download verifies the published sha256 digest before installing,
+    /// so a release without a well-formed one can only be installed manually.
+    var canInstallAutomatically: Bool { asset.sha256 != nil }
+
     static func newest(in releases: [GitHubRelease], platform: Platform, installed: String) -> Self? {
         guard let current = ReleaseVersion(installed) else { return nil }
         let prefix = platform == .macOS ? "v" : "ios-v"
