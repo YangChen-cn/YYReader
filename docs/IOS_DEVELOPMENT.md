@@ -51,7 +51,7 @@ iOS 直接编译 `YYReader/Models`、`Parsing`、`Services`、`Stores`、`Suppor
 ./script/package_ios.sh unsigned
 ```
 
-输出 `dist/iOS/YYReader-iOS-1.4.0-resign.ipa`，仅 arm64；上述日常构建命令默认 Debug，GitHub iOS 1.4.0 发布资产使用 Release。脚本检查图标、架构和 ZIP 完整性。**未签名 IPA 不能直接安装**；在侧载工具中使用自己的 Apple ID / 证书和描述文件签名后安装。普通 macOS ad-hoc 自签名不能代替 iOS 的设备签名。
+输出 `dist/iOS/YYReader-iOS-1.4.1-resign.ipa`，仅 arm64；上述日常构建命令默认 Debug，GitHub iOS 1.4.1 发布资产使用 Release。脚本检查图标、架构和 ZIP 完整性。**未签名 IPA 不能直接安装**；在侧载工具中使用自己的 Apple ID / 证书和描述文件签名后安装。普通 macOS ad-hoc 自签名不能代替 iOS 的设备签名。
 
 本机具备 Apple 开发者签名资源时，也可导出 development IPA：
 
@@ -66,7 +66,7 @@ YYREADER_IOS_TEAM_ID=你的TeamID ./script/package_ios.sh signed
 YYReader 的 `resign.ipa` 可以交给 SideStore 重新签名。SideStore 的 [官方 FAQ](https://docs.sidestore.io/docs/faq) 说明普通 App 无需专门修改；续签由 SideStore 管理，YYReader 不需要内置签名服务。
 
 1. 首次按 [SideStore 官方安装说明](https://docs.sidestore.io/docs/installation/install) 使用电脑安装并配置 SideStore，完成开发者信任、开发者模式、配对文件及 LocalDevVPN 设置。
-2. 把 `YYReader-iOS-1.4.0-resign.ipa` 保存到 iPhone 的“文件”。在 SideStore 的 My Apps 页面导入该 IPA，使用自己的 Apple Account 签名安装。
+2. 把 `YYReader-iOS-1.4.1-resign.ipa` 保存到 iPhone 的“文件”。在 SideStore 的 My Apps 页面导入该 IPA，使用自己的 Apple Account 签名安装。
 3. SideStore 会尝试后台刷新已安装 App；免费账号签名通常为7天，仍需确保其后台刷新与 LocalDevVPN 配置可用，定期检查 My Apps 中的剩余天数，也可点剩余天数手动刷新。iOS 的后台调度不保证每次自动刷新成功。
 4. 更新 YYReader 时使用同一账号，在 SideStore 导入新版 IPA 覆盖安装，保留已有 App。对于已由其他工具安装的版本，官方 FAQ 也建议保留原 App 再导入同一或新版 IPA；迁移前可先导出 `.yyreader` 书架文件。
 

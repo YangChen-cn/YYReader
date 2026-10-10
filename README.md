@@ -4,7 +4,7 @@
   <p><strong>小说与漫画，随处接着读。</strong></p>
   <p>macOS、iPhone 与 iPad 的原生小说和漫画阅读器，Windows 提供小说阅读。<br>添加网页或导入 TXT，把书架、离线缓存和阅读进度留在自己的设备上。</p>
   <p>
-    <a href="https://github.com/YangChen-cn/YYReader/releases/tag/v1.4.0"><img src="https://img.shields.io/badge/release-1.4.0-6D5CE8?style=flat-square" alt="macOS / iOS 1.4.0"></a>
+    <a href="https://github.com/YangChen-cn/YYReader/releases/tag/v1.4.1"><img src="https://img.shields.io/badge/release-1.4.1-6D5CE8?style=flat-square" alt="macOS / iOS 1.4.1"></a>
     <a href="https://github.com/YangChen-cn/YYReader/stargazers"><img src="https://img.shields.io/github/stars/YangChen-cn/YYReader?style=flat-square&color=E6A23C" alt="GitHub Stars"></a>
     <img src="https://img.shields.io/badge/Swift-6-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 6">
   </p>
@@ -29,13 +29,13 @@
 
 | 平台 | 最新版本 | 安装包 | 系统要求 |
 | --- | --- | --- | --- |
-| **macOS** | **1.4.0** | [DMG · arm64](https://github.com/YangChen-cn/YYReader/releases/download/v1.4.0/YYReader-1.4.0-arm64.dmg) | Apple 芯片，macOS 15+ |
-| **iPhone / iPad** | **1.4.0** | [IPA · arm64](https://github.com/YangChen-cn/YYReader/releases/download/ios-v1.4.0/YYReader-iOS-1.4.0-resign.ipa) | iOS / iPadOS 18+ |
+| **macOS** | **1.4.1** | [DMG · arm64](https://github.com/YangChen-cn/YYReader/releases/download/v1.4.1/YYReader-1.4.1-arm64.dmg) | Apple 芯片，macOS 15+ |
+| **iPhone / iPad** | **1.4.1** | [IPA · arm64](https://github.com/YangChen-cn/YYReader/releases/download/ios-v1.4.1/YYReader-iOS-1.4.1-resign.ipa) | iOS / iPadOS 18+ |
 | **Windows** | 1.3.0 | [安装程序 · x64](https://github.com/YangChen-cn/YYReader/releases/download/v1.3.0/YYReader-Setup-x64-1.3.0.exe) | Windows 10 1809+，推荐 Windows 11 |
 
 iOS IPA 需要用 SideStore、Sideloadly 等工具自行签名安装，续签由侧载工具管理；[安装与续签指南](docs/IOS_DEVELOPMENT.md#使用-sidestore-在手机端安装与续签)。作者已完成过 iPhone 真机签名安装、阅读与同步的使用流程。
 
-[macOS 1.4.0 发布说明](https://github.com/YangChen-cn/YYReader/releases/tag/v1.4.0) · [iOS 1.4.0 发布说明](https://github.com/YangChen-cn/YYReader/releases/tag/ios-v1.4.0) · [完整更新记录与校验值](RELEASE_NOTES.md)
+[macOS 1.4.1 发布说明](https://github.com/YangChen-cn/YYReader/releases/tag/v1.4.1) · [iOS 1.4.1 发布说明](https://github.com/YangChen-cn/YYReader/releases/tag/ios-v1.4.1) · [完整更新记录](RELEASE_NOTES.md)
 
 ## 界面一览
 
@@ -90,7 +90,7 @@ iOS IPA 需要用 SideStore、Sideloadly 等工具自行签名安装，续签由
 
 ## 阅读体验
 
-以下介绍最新 `main` 的功能，安装包以对应版本的发布说明为准；尚未发布的改动可从源码体验。
+以下功能以 Mac / iOS 1.4.1 为准，Windows 的支持范围在对应条目中说明。
 
 | 功能 | 使用方式 |
 | --- | --- |
@@ -104,7 +104,7 @@ iOS IPA 需要用 SideStore、Sideloadly 等工具自行签名安装，续签由
 | **预取与离线缓存** | 默认预取小说最多 3 章、漫画最多 10 张图片；可主动下载当前章、后续章节或全书。已下载内容留在本机。 |
 | **看得见的缓存占用** | 设置中查看总大小及每本书占用，清理全部或单本缓存；每本漫画预算 512 MB，超出后优先清理已读章节，保留当前章与未读内容。 |
 | **书架与进度同步** | 共享文件夹、书架文件或剪贴板传输书籍信息与阅读进度；正文与图片缓存不随同步传输。 |
-| **更新提醒** | Mac / iOS 自动检查各自的 GitHub 发布，书架上展开更新说明。Mac 支持带进度的下载及安装重启；iOS 提供 IPA 下载链接，由侧载工具重新签名安装。可暂时忽略提醒，之后从设置手动检查更新；此功能尚未进入 1.4.0 安装包。 |
+| **更新提醒** | Mac / iOS 自动检查各自的 GitHub 发布，书架上展开更新说明。Mac 支持带进度的下载及安装重启；iOS 提供 IPA 下载链接，由侧载工具重新签名安装。可暂时忽略提醒，之后从设置手动检查更新。 |
 
 漫画专用适配包括瓜子漫画、再漫画、好多漫、漫画站和多看漫画。其他站点通过正文区域、图片序列、尺寸及上下话导航综合识别；自动模式在小说正文不可信时尝试高置信度漫画解析，手动漫画模式可明确指定内容类型。广告图集与证据不足的页面会提示失败，正常网页中符合识别条件的 `blob:` 图片也可按需读取并缓存。详见 [漫画阅读与适配说明](docs/MANGA_SUPPORT.md)。
 
@@ -194,7 +194,7 @@ YYREADER_SIMULATOR_ID=当前模拟器UDID ./script/build_ios.sh simulator
 ./script/build_ios.sh release
 ```
 
-Release IPA 位于 `dist/iOS/YYReader-iOS-1.4.0-resign.ipa`。模拟器无需开发者证书；IPA 需要自己的 Apple ID / 证书重新签名。真机调试在 Signing & Capabilities 选择 Team，并在手机开启开发者模式。
+Release IPA 位于 `dist/iOS/YYReader-iOS-1.4.1-resign.ipa`。模拟器无需开发者证书；IPA 需要自己的 Apple ID / 证书重新签名。真机调试在 Signing & Capabilities 选择 Team，并在手机开启开发者模式。
 
 已有签名资源时可使用 `YYREADER_IOS_TEAM_ID=你的TeamID ./script/build_ios.sh signed`。完整操作见 [iOS 开发说明](docs/IOS_DEVELOPMENT.md)。
 

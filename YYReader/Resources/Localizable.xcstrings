@@ -532,6 +532,24 @@
     "原生小说与漫画阅读器" : {
       "extractionState" : "manual"
     },
+    "版本 1.4.1" : {
+      "extractionState" : "manual"
+    },
+    "自动检查更新，下载后安装并重启。" : {
+      "extractionState" : "manual"
+    },
+    "优化通用漫画识别与图片读取。" : {
+      "extractionState" : "manual"
+    },
+    "改进懒加载、缓存与阅读位置恢复。" : {
+      "extractionState" : "manual"
+    },
+    "更新提醒可暂时忽略，设置中再次检查。" : {
+      "extractionState" : "manual"
+    },
+    "iPad 双页与解析优化" : {
+      "extractionState" : "manual"
+    },
     "版本 1.4.0" : {
       "extractionState" : "manual"
     },

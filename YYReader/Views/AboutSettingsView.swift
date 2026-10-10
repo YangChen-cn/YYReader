@@ -83,12 +83,12 @@ struct AboutSettingsView: View {
             Text("最新改进")
                 .font(.headline)
 
-            GroupBox("版本 1.4.0") {
+            GroupBox("版本 1.4.1") {
                 VStack(alignment: .leading, spacing: 10) {
-                    Label("添加网址时选择自动、小说或漫画。", systemImage: "link")
-                    Label("漫画自动双页、快速跳页与深灰背景。", systemImage: "rectangle.split.2x1")
-                    Label("默认预取，按书籍查看与清理缓存。", systemImage: "internaldrive")
-                    Label("恢复阅读位置，共享书架与进度。", systemImage: "arrow.triangle.2.circlepath")
+                    Label("自动检查更新，下载后安装并重启。", systemImage: "link")
+                    Label("优化通用漫画识别与图片读取。", systemImage: "rectangle.split.2x1")
+                    Label("改进懒加载、缓存与阅读位置恢复。", systemImage: "internaldrive")
+                    Label("更新提醒可暂时忽略，设置中再次检查。", systemImage: "arrow.triangle.2.circlepath")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }

@@ -29,8 +29,8 @@
     macos: {
       name: "macOS",
       label: "下载 macOS 版",
-      meta: "arm64 DMG · 5.9 MB · 1.4.0",
-      href: "https://github.com/YangChen-cn/YYReader/releases/download/v1.4.0/YYReader-1.4.0-arm64.dmg",
+      meta: "arm64 DMG · 6.2 MB · 1.4.1",
+      href: "https://github.com/YangChen-cn/YYReader/releases/download/v1.4.1/YYReader-1.4.1-arm64.dmg",
       frame: "macos",
       shots: [
         { src: "images/yyreader-macos-library.png", title: "YYReader · 书架、目录与正文并排", alt: "YYReader macOS 界面：书架、目录与正文并排" },
@@ -40,8 +40,8 @@
     ios: {
       name: "iPhone / iPad",
       label: "下载 iPhone / iPad 版",
-      meta: "IPA · 7.1 MB · 1.4.0",
-      href: "https://github.com/YangChen-cn/YYReader/releases/download/ios-v1.4.0/YYReader-iOS-1.4.0-resign.ipa",
+      meta: "IPA · 7.4 MB · 1.4.1",
+      href: "https://github.com/YangChen-cn/YYReader/releases/download/ios-v1.4.1/YYReader-iOS-1.4.1-resign.ipa",
       frame: "ios",
       shots: [
         { src: "images/yyreader-ios-bookshelf.png", title: "YYReader · iPhone 书架", alt: "iPhone 书架：书封、作者、离线状态与阅读进度" },
