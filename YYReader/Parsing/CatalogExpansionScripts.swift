@@ -14,7 +14,7 @@ enum CatalogExpansionScripts {
     const control = [...document.querySelectorAll('a, button')].find(element =>
         labels.has(normalize(element.textContent)) &&
         element.getClientRects().length > 0 &&
-        (element.tagName === 'BUTTON' && (element.type === 'button' || !element.closest('form')) ||
+        (element.tagName === 'BUTTON' && element.type === 'button' ||
          (element.getAttribute('href') || '').toLowerCase().startsWith('javascript:')));
     if (!control) return false;
     control.click();

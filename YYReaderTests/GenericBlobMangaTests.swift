@@ -36,6 +36,24 @@ struct GenericBlobMangaTests {
         #expect(pending.imageURLs.count == 18)
     }
 
+    @Test func mixedPagesKeepResolvedHTTPAddressesInsteadOfBlobExtraction() throws {
+        // A page whose first and last images are displayed as blobs, while the
+        // middle one only has a data: placeholder plus the real address in
+        // data-src. That address is already usable and must survive.
+        let mixed = """
+        <h1>第7话</h1><section class='unfamiliar'>
+        <figure><img width='800' height='1200' src='blob:https://unrelated.example.org/uuid-0'></figure>
+        <figure><img width='800' height='1200' src='data:image/gif;base64,R0lGODlhAQABAAAAACw=' data-src='https://unrelated.example.org/page-1.jpg'></figure>
+        <figure><img width='800' height='1200' src='blob:https://unrelated.example.org/uuid-2'></figure>
+        </section><a href='/chapter/8'>下一话</a>
+        """
+        let page = try GenericMangaAdapter().parseChapterPage(document(mixed))
+        #expect(page.imageURLs.count == 3)
+        #expect(MangaBlobSource(url: page.imageURLs[0])?.index == 0)
+        #expect(MangaBlobSource(url: page.imageURLs[2])?.index == 2)
+        #expect(page.imageURLs[1].absoluteString == "https://unrelated.example.org/page-1.jpg")
+    }
+
     @Test func relocationRescoresReaderInsteadOfUsingStaleDocumentOffsets() async throws {
         let source = MangaBlobSource(chapterURL: chapter, index: 3)
         let locator = MangaBlobRegionLocator()

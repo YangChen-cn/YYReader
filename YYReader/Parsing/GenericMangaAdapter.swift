@@ -32,9 +32,15 @@ struct GenericMangaAdapter: NovelSourceAdapter {
               !requiringHighConfidence || recognition.isHighConfidence else {
             throw NovelParsingError.noMangaImages
         }
+        // Pages can mix blob-backed images with ordinary ones. A resolved http(s)
+        // address is already usable and always wins: routing it through the blob
+        // reader would ask the browser to decode an image the site never displays
+        // as a blob, and that page would never load. Only addresses that are not
+        // usable on their own (blob:, unresolved placeholders) need the browser.
         let blobSequence = recognition.imageURLs.contains { $0.scheme == "blob" }
-        let addresses = recognition.imageURLs.enumerated().map { index, url in
-            blobSequence && recognition.needsBrowser[index]
+        let addresses = recognition.imageURLs.enumerated().map { index, url -> URL in
+            guard !["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return url }
+            return blobSequence && recognition.needsBrowser[index]
                 ? MangaBlobSource(chapterURL: loaded.finalURL, index: index).url : url
         }
         return ParsedChapterPage(title: title,
