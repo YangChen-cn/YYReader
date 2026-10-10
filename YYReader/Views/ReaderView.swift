@@ -6,6 +6,7 @@ struct ReaderView: View {
     var showsPagingControls = true
     var loadsChapterAutomatically = true
     var togglePagingControls: () -> Void = {}
+    var automaticMangaLandscape = false
     @AppStorage(ReaderPreferenceKeys.theme) private var themeName = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentationModeName = ReaderPresentationMode.normal.rawValue
     @AppStorage(ReaderPreferenceKeys.pageTurnMode) private var pageTurnMode = ReaderPageTurnMode.verticalScroll.rawValue
@@ -30,7 +31,8 @@ struct ReaderView: View {
                 if let chapter, chapter.isCached {
                     if chapter.isManga {
                         MangaReaderView(store: store, chapter: chapter, showsControls: showsPagingControls,
-                                        keyboardNavigationEnabled: keyboardNavigationEnabled, toggleControls: togglePagingControls)
+                                        keyboardNavigationEnabled: keyboardNavigationEnabled, toggleControls: togglePagingControls,
+                                        automaticLandscape: automaticMangaLandscape)
                             .id(chapter.id)
                     } else {
                     #if os(iOS)

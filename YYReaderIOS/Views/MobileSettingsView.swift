@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct MobileSettingsView: View {
     var readingManga: Bool? = nil
+    var automaticLandscapeActive = false
     @Environment(\.dismiss) private var dismiss
     @Environment(AppServices.self) private var services
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -17,6 +18,7 @@ struct MobileSettingsView: View {
     @AppStorage(ReaderPreferenceKeys.pageTurnMode) private var pageTurnMode = ReaderPageTurnMode.verticalScroll.rawValue
     @AppStorage(ReaderPreferenceKeys.mangaPageTurnMode) private var mangaPageTurnMode = ReaderPageTurnMode.mangaDefault.rawValue
     @AppStorage(ReaderPreferenceKeys.mangaPageLayout) private var mangaLayout = MangaPageLayout.Mode.automatic.rawValue
+    @AppStorage(ReaderPreferenceKeys.mangaTabletAutoLandscape) private var autoLandscape = true
     @AppStorage(ReaderPreferenceKeys.mangaFirstPageAlone) private var mangaFirstPageAlone = true
     @AppStorage(ReaderPreferenceKeys.mangaDarkBackground) private var mangaDarkBackground = false
     @AppStorage(ReaderPreferenceKeys.prefetchNext) private var prefetch = true
@@ -31,16 +33,24 @@ struct MobileSettingsView: View {
             Form {
                 readingOptions
                 if UIDevice.current.userInterfaceIdiom == .pad, readingManga != false {
-                    Section("显示选项") {
-                        if mangaPageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue {
+                    Section {
+                        Toggle("横屏自动双页", isOn: $autoLandscape)
+                            .accessibilityIdentifier("ios.mangaAutoLandscape")
+                        if mangaPageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue || automaticLandscapeActive {
+                            if automaticLandscapeActive && autoLandscape {
+                                LabeledContent("漫画布局", value: MangaPageLayout.Mode.double.title)
+                            } else {
                             Picker("漫画布局", selection: $mangaLayout) {
                                 ForEach(MangaPageLayout.Mode.allCases) { Text($0.title).tag($0.rawValue) }
                             }
                             .pickerStyle(.segmented)
                             .accessibilityIdentifier("manga.layout")
+                            }
                             Toggle("首图单页", isOn: $mangaFirstPageAlone)
                         }
                         Toggle("深灰阅读背景", isOn: $mangaDarkBackground)
+                    } header: { Text("显示选项") } footer: {
+                        Text("横屏时自动使用左右双页，竖屏恢复原来的阅读方式。关闭后按手动设置阅读。")
                     }
                 }
                 Section("主题与字体") {
@@ -161,10 +171,16 @@ struct MobileSettingsView: View {
     }
 
     private func pageTurnPicker(manga: Bool) -> some View {
-        Picker("翻页方式", selection: manga ? $mangaPageTurnMode : $pageTurnMode) {
-            ForEach(ReaderPageTurnMode.allCases) { Text($0.title).tag($0.rawValue) }
+        Group {
+            if manga && automaticLandscapeActive && autoLandscape {
+                LabeledContent("翻页方式", value: ReaderPageTurnMode.horizontalPages.title)
+            } else {
+                Picker("翻页方式", selection: manga ? $mangaPageTurnMode : $pageTurnMode) {
+                    ForEach(ReaderPageTurnMode.allCases) { Text($0.title).tag($0.rawValue) }
+                }
+                .pickerStyle(.segmented)
+            }
         }
-        .pickerStyle(.segmented)
         .accessibilityIdentifier(manga ? "ios.mangaPageTurnMode" : "ios.pageTurnMode")
     }
 

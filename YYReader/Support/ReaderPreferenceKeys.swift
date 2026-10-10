@@ -12,6 +12,7 @@ enum ReaderPreferenceKeys {
     static let pageTurnMode = "reader.pageTurnMode"
     static let mangaPageTurnMode = "reader.mangaPageTurnMode"
     static let mangaPageLayout = "reader.mangaPageLayout"
+    static let mangaTabletAutoLandscape = "reader.mangaTabletAutoLandscape"
     static let mangaFirstPageAlone = "reader.mangaFirstPageAlone"
     static let mangaDarkBackground = "reader.mangaDarkBackground"
     static let prefetchNext = "reader.prefetchNext"

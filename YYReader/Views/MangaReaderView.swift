@@ -7,6 +7,7 @@ struct MangaReaderView: View {
     var showsControls = true
     let imageCache: MangaImageCache
     var toggleControls: () -> Void = {}
+    let automaticLandscape: Bool
     @AppStorage(ReaderPreferenceKeys.mangaPageTurnMode) private var pageTurnMode = ReaderPageTurnMode.mangaDefault.rawValue
     @AppStorage(ReaderPreferenceKeys.prefetchNext) private var prefetch = true
     @AppStorage(ReaderPreferenceKeys.mangaPageLayout) private var layoutName = MangaPageLayout.Mode.automatic.rawValue
@@ -24,7 +25,7 @@ struct MangaReaderView: View {
     @State private var scrollPosition = ScrollPosition(idType: Int.self)
     @State private var scrollState = ReaderScrollState()
     private var urls: [URL] { chapter.imageSourceURLs.compactMap(URL.init(string:)) }
-    private var usesPages: Bool { pageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue }
+    private var usesPages: Bool { automaticLandscape || pageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue }
     private var desktop: Bool {
         #if os(macOS)
         true
@@ -41,13 +42,15 @@ struct MangaReaderView: View {
     }
 
     init(store: LibraryStore, chapter: Chapter, showsControls: Bool = true,
-         keyboardNavigationEnabled: Bool = true, imageCache: MangaImageCache = .shared, toggleControls: @escaping () -> Void = {}) {
+         keyboardNavigationEnabled: Bool = true, imageCache: MangaImageCache = .shared,
+         toggleControls: @escaping () -> Void = {}, automaticLandscape: Bool = false) {
         self.store = store
         self.chapter = chapter
         self.showsControls = showsControls
         self.keyboardNavigationEnabled = keyboardNavigationEnabled
         self.toggleControls = toggleControls
         self.imageCache = imageCache
+        self.automaticLandscape = automaticLandscape
         let index = Self.resolvedPageIndex(request: store.readerScrollRequest, chapter: chapter,
                                           total: chapter.imageSourceURLs.count)
             ?? min(max(chapter.topParagraphIndex, 0), max(chapter.imageSourceURLs.count - 1, 0))
@@ -84,7 +87,7 @@ struct MangaReaderView: View {
         let pages = urls
         let aspectRatios = pages.map { ratios[$0.absoluteString] }
         let layout = MangaPageLayout(aspectRatios: aspectRatios,
-            mode: MangaPageLayout.Mode(rawValue: layoutName) ?? .automatic,
+            mode: automaticLandscape ? .double : (MangaPageLayout.Mode(rawValue: layoutName) ?? .automatic),
             firstPageAlone: firstPageAlone, viewport: canvasSize, allowsSpreads: allowsSpreads)
         let group = layout.group(containing: pageIndex)
         VStack(spacing: 0) {

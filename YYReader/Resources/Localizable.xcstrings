@@ -499,6 +499,12 @@
     "显示选项" : {
       "extractionState" : "manual"
     },
+    "横屏自动双页" : {
+      "extractionState" : "manual"
+    },
+    "横屏时自动使用左右双页，竖屏恢复原来的阅读方式。关闭后按手动设置阅读。" : {
+      "extractionState" : "manual"
+    },
     "漫画布局" : {
       "extractionState" : "manual"
     },

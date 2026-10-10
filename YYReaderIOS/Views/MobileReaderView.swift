@@ -7,13 +7,20 @@ struct MobileReaderView: View {
     @AppStorage(ReaderPreferenceKeys.presentationMode) private var mode = ReaderPresentationMode.normal.rawValue
     @AppStorage(ReaderPreferenceKeys.pageTurnMode) private var pageTurnMode = ReaderPageTurnMode.verticalScroll.rawValue
     @AppStorage(ReaderPreferenceKeys.mangaPageTurnMode) private var mangaPageTurnMode = ReaderPageTurnMode.mangaDefault.rawValue
+    @AppStorage(ReaderPreferenceKeys.mangaTabletAutoLandscape) private var autoLandscape = true
+    @State private var viewportSize = CGSize.zero
     @State private var showingSettings = false
     @State private var controlsVisible = false
     @State private var chapterLoadTask: Task<Void, Never>?
 
+    private var automaticMangaLandscape: Bool {
+        store.selectedChapter?.isManga == true && MangaPageLayout.usesTabletLandscapeSpreads(
+            enabled: autoLandscape, isTablet: UIDevice.current.userInterfaceIdiom == .pad, viewport: viewportSize)
+    }
+
     private var usesPages: Bool {
         if store.selectedChapter?.isManga == true {
-            return mangaPageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue
+            return automaticMangaLandscape || mangaPageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue
         }
         return pageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue && mode == ReaderPresentationMode.normal.rawValue
     }
@@ -21,7 +28,8 @@ struct MobileReaderView: View {
     var body: some View {
         GeometryReader { geometry in
             ReaderView(store: store, keyboardNavigationEnabled: false, showsPagingControls: controlsVisible,
-                       loadsChapterAutomatically: false, togglePagingControls: { controlsVisible.toggle() })
+                       loadsChapterAutomatically: false, togglePagingControls: { controlsVisible.toggle() },
+                       automaticMangaLandscape: automaticMangaLandscape)
                 .accessibilityAction(named: "显示阅读选项") { controlsVisible = true }
                 .simultaneousGesture(TapGesture(count: 2).exclusively(before: SpatialTapGesture())
                     .onEnded { value in
@@ -31,6 +39,7 @@ struct MobileReaderView: View {
                         controlsVisible.toggle()
                     }, including: usesPages ? .none : .all)
         }
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { viewportSize = $0 }
             .navigationTitle(store.selectedChapter?.title ?? "阅读")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(controlsVisible ? .visible : .hidden, for: .navigationBar)
@@ -83,14 +92,10 @@ struct MobileReaderView: View {
                 }
             }
             .sheet(isPresented: $showingSettings, onDismiss: { controlsVisible = false }) {
-                MobileSettingsView(readingManga: store.selectedChapter?.isManga == true)
+                MobileSettingsView(readingManga: store.selectedChapter?.isManga == true,
+                                   automaticLandscapeActive: automaticMangaLandscape)
             }
-            .onChange(of: pageTurnMode) { _, _ in
-                if store.selectedChapter?.isManga != true { readingModeChanged() }
-            }
-            .onChange(of: mangaPageTurnMode) { _, _ in
-                if store.selectedChapter?.isManga == true { readingModeChanged() }
-            }
+            .onChange(of: usesPages) { _, _ in readingModeChanged() }
             .onChange(of: store.selectedChapterID) { _, _ in loadCurrentChapter() }
             .onChange(of: store.offlineDownloads.completedCount) { _, _ in
                 if let chapter = store.selectedChapter, chapter.isAvailableOffline,

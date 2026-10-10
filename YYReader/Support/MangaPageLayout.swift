@@ -10,6 +10,10 @@ struct MangaPageLayout: Equatable, Sendable {
 
     let groups: [Range<Int>]
 
+    static func usesTabletLandscapeSpreads(enabled: Bool, isTablet: Bool, viewport: CGSize) -> Bool {
+        enabled && isTablet && viewport.width >= 780 && viewport.width > viewport.height
+    }
+
     init(aspectRatios: [Double?], mode: Mode, firstPageAlone: Bool, viewport: CGSize, allowsSpreads: Bool = true) {
         let double = allowsSpreads && (mode == .double || (mode == .automatic && viewport.width >= 780 && viewport.width >= viewport.height * 1.15))
         var result: [Range<Int>] = []

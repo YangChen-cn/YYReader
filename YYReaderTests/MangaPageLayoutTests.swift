@@ -49,6 +49,18 @@ struct MangaPageLayoutTests {
         #expect(phone.groups == (0..<8).map { $0..<$0 + 1 })
     }
 
+    @Test func landscapeOverrideRequiresEnabledTabletAndWideLandscapeViewport() {
+        let landscape = CGSize(width: 1194, height: 834)
+        #expect(MangaPageLayout.usesTabletLandscapeSpreads(enabled: true, isTablet: true, viewport: landscape))
+        #expect(!MangaPageLayout.usesTabletLandscapeSpreads(enabled: false, isTablet: true, viewport: landscape))
+        #expect(!MangaPageLayout.usesTabletLandscapeSpreads(enabled: true, isTablet: false, viewport: landscape))
+        #expect(!MangaPageLayout.usesTabletLandscapeSpreads(enabled: true, isTablet: true,
+                                                          viewport: CGSize(width: 834, height: 1194)))
+        #expect(!MangaPageLayout.usesTabletLandscapeSpreads(enabled: true, isTablet: true,
+                                                          viewport: CGSize(width: 600, height: 450)))
+        #expect(!MangaPageLayout.usesTabletLandscapeSpreads(enabled: true, isTablet: true, viewport: .zero))
+    }
+
     @Test func neighboringSpreadsStayBoundedAndUseChapterBoundarySlots() {
         let layout = MangaPageLayout(aspectRatios: Array(repeating: 0.7, count: 8), mode: .double,
                                      firstPageAlone: true, viewport: wide)
