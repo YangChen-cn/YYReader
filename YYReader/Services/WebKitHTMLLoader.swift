@@ -39,6 +39,19 @@ final class WebKitHTMLLoader: BrowserHTMLLoading {
         return try await session(for: host).load(url)
     }
 
+    func readMangaImage(_ imageURL: URL, chapterURL: URL) async throws -> MangaImageReadResult {
+        guard let host = normalizedHost(for: chapterURL), MangaBlobSource(url: imageURL) != nil || DuokanMangaAdapter.supports(chapterURL) else {
+            throw NovelParsingError.unsupportedURL
+        }
+        // Keep one inactive/current blob reader, rather than retaining a loaded
+        // manga page for every site the user has visited. Active jobs are kept.
+        let obsolete = sessions.filter { $0.key != host && $0.value.hasReadMangaImages && $0.value.isIdle }.map(\.key)
+        for oldHost in obsolete { sessions.removeValue(forKey: oldHost) }
+        let browser = session(for: host)
+        if !browser.isDisplaying(chapterURL) { try await limiter.wait(for: chapterURL) }
+        return try await browser.readMangaImage(imageURL, chapterURL: chapterURL)
+    }
+
     func hostSession(for url: URL) -> WebKitHostSession? {
         guard let host = normalizedHost(for: url) else { return nil }
         return session(for: host)

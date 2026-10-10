@@ -13,6 +13,7 @@ final class AppServices {
         let verificationStore = WebVerificationStore()
         let staticLoader = URLSessionHTMLLoader()
         let webKitLoader = WebKitHTMLLoader()
+        MangaBlobImageBridge.shared.loader = webKitLoader
         webKitLoader.configureVerification(
             presenter: { session, url in
                 verificationStore.present(session: session, url: url)

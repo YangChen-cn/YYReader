@@ -5,9 +5,20 @@ struct GenericNovelAdapter: NovelSourceAdapter {
     func canHandle(_ document: LoadedHTML) -> Bool { true }
 
     func parseChapterPage(_ loaded: LoadedHTML) throws -> ParsedChapterPage {
+        try parseChapterPage(loaded, requiringTrustworthyText: false)
+    }
+
+    func parseChapterPage(_ loaded: LoadedHTML, requiringTrustworthyText: Bool) throws -> ParsedChapterPage {
         let document = try HTMLParsingSupport.document(from: loaded)
         guard let candidate = try bestContentCandidate(in: document) else {
             throw NovelParsingError.noReadableContent
+        }
+        if requiringTrustworthyText {
+            let textLength = try candidate.text().filter { !$0.isWhitespace }.count
+            let linkLength = try candidate.select("a").text().filter { !$0.isWhitespace }.count
+            guard textLength - linkLength >= 60, linkLength <= textLength / 4 else {
+                throw NovelParsingError.noReadableContent
+            }
         }
         let paragraphs = try HTMLParsingSupport.paragraphs(from: candidate)
             .compactMap(cleanedParagraph)

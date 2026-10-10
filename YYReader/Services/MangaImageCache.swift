@@ -25,6 +25,7 @@ actor MangaImageCache {
     private let session: URLSession
     private let limiter = HostRateLimiter(defaultMinimumDelay: .milliseconds(180))
     private let thumbnailByteLimit: Int
+    private let blobReader: (@Sendable (URL, URL) async throws -> MangaImageReadResult)?
     private var tail: Task<Data, any Error>?
     private var retryAfter: Date?
     private var thumbnails: [String: Thumbnail] = [:]
@@ -43,12 +44,14 @@ actor MangaImageCache {
     init(
         directory: URL? = nil,
         session: URLSession = .shared,
-        thumbnailByteLimit: Int = 64 * 1024 * 1024
+        thumbnailByteLimit: Int = 64 * 1024 * 1024,
+        blobReader: (@Sendable (URL, URL) async throws -> MangaImageReadResult)? = nil
     ) {
         self.directory = directory ?? URL.applicationSupportDirectory
             .appending(path: "YYReader/MangaImages", directoryHint: .isDirectory)
         self.session = session
         self.thumbnailByteLimit = max(thumbnailByteLimit, 0)
+        self.blobReader = blobReader
     }
 
     func image(at url: URL, referer: URL) async throws -> MangaImagePayload {
@@ -262,20 +265,45 @@ actor MangaImageCache {
 
     private func fetch(_ url: URL, referer: URL) async throws -> Data {
         if let data = try cachedData(at: url) { return data }
-        guard ["https", "http"].contains(url.scheme?.lowercased() ?? "") else {
+        guard MangaBlobSource(url: url) != nil || ["https", "http"].contains(url.scheme?.lowercased() ?? "") else {
             throw HTMLLoadError.invalidResponse
         }
         if let retryAfter, retryAfter > .now {
             throw HTMLLoadError.rateLimited(retryAfterSeconds: Int(ceil(retryAfter.timeIntervalSinceNow)))
         }
         try await limiter.wait(for: url)
+        let data: Data
+        if MangaBlobSource(url: url) != nil || DuokanMangaAdapter.supports(referer) {
+            let result: MangaImageReadResult
+            if let blobReader { result = try await blobReader(url, referer) }
+            else { result = try await MangaBlobImageBridge.shared.readImage(url, chapterURL: referer) }
+            try Task.checkCancellation()
+            switch result {
+            case let .encoded(encoded):
+                guard encoded.utf8.count <= 40 * 1024 * 1024,
+                      let decoded = Data(base64Encoded: encoded) else { throw HTMLLoadError.invalidResponse }
+                data = decoded
+            case let .address(address): data = try await download(address, referer: referer)
+            }
+        } else { data = try await download(url, referer: referer) }
+        try Task.checkCancellation()
+        guard data.count <= 30 * 1024 * 1024,
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              CGImageSourceGetCount(source) > 0 else { throw HTMLLoadError.invalidResponse }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try data.write(to: fileURL(url), options: .atomic)
+        return data
+    }
+
+    private func download(_ url: URL, referer: URL) async throws -> Data {
+        guard ["https", "http"].contains(url.scheme ?? "") else { throw HTMLLoadError.invalidResponse }
         var request = URLRequest(url: url, timeoutInterval: 30)
         // Haoduo's public reader explicitly uses referrerpolicy="no-referrer".
         if !(referer.host?.hasSuffix("haoduoman.com") ?? false) {
             request.setValue(referer.absoluteString, forHTTPHeaderField: "Referer")
         }
         request.setValue("image/webp,image/*;q=0.9", forHTTPHeaderField: "Accept")
-        let (data, response) = try await session.data(for: request)
+        let (received, response) = try await session.data(for: request)
         try Task.checkCancellation()
         guard let http = response as? HTTPURLResponse else { throw HTMLLoadError.invalidResponse }
         if http.statusCode == 429 {
@@ -290,12 +318,7 @@ actor MangaImageCache {
             throw HTMLLoadError.rateLimited(retryAfterSeconds: Int(ceil(max(1, seconds))))
         }
         guard (200..<300).contains(http.statusCode) else { throw HTMLLoadError.httpStatus(http.statusCode) }
-        guard data.count <= 30 * 1024 * 1024,
-              let source = CGImageSourceCreateWithData(data as CFData, nil),
-              CGImageSourceGetCount(source) > 0 else { throw HTMLLoadError.invalidResponse }
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try data.write(to: fileURL(url), options: .atomic)
-        return data
+        return received
     }
 
     private func fileURL(_ url: URL) -> URL {

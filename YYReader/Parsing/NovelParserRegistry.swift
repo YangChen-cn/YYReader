@@ -5,11 +5,12 @@ actor NovelParserRegistry {
         GuaziMangaAdapter(),
         ZaiMangaAdapter(),
         HaoduoMangaAdapter(),
+        DuokanMangaAdapter(),
         ManhuazhanMangaAdapter(),
         QidiySourceAdapter(),
         GenericNovelAdapter()
     ]
-    private let mangaAdapters: [any NovelSourceAdapter] = [GuaziMangaAdapter(), ZaiMangaAdapter(), HaoduoMangaAdapter(), ManhuazhanMangaAdapter(), GenericMangaAdapter()]
+    private let mangaAdapters: [any NovelSourceAdapter] = [GuaziMangaAdapter(), ZaiMangaAdapter(), HaoduoMangaAdapter(), DuokanMangaAdapter(), ManhuazhanMangaAdapter(), GenericMangaAdapter()]
     private let novelAdapters: [any NovelSourceAdapter] = [QidiySourceAdapter(), GenericNovelAdapter()]
 
     private func adapters(for type: BookContentType) -> [any NovelSourceAdapter] {
@@ -26,7 +27,20 @@ actor NovelParserRegistry {
         guard let adapter = adapters(for: contentType).first(where: { $0.canHandle(document) }) else {
             throw NovelParsingError.noReadableContent
         }
-        let page = try adapter.parseChapterPage(document)
+        let page: ParsedChapterPage
+        if contentType == .auto, adapter is GenericNovelAdapter {
+            do {
+                page = try GenericNovelAdapter().parseChapterPage(document, requiringTrustworthyText: true)
+            } catch NovelParsingError.noReadableContent {
+                do {
+                    return try GenericMangaAdapter().parseChapterPage(document, requiringHighConfidence: true)
+                } catch NovelParsingError.noMangaImages {
+                    throw NovelParsingError.noReadableContent
+                }
+            }
+        } else {
+            page = try adapter.parseChapterPage(document)
+        }
         if contentType == .manga && page.imageURLs.isEmpty { throw NovelParsingError.noMangaImages }
         if contentType == .novel && (page.paragraphs.isEmpty || !page.imageURLs.isEmpty) { throw NovelParsingError.noReadableContent }
         return page
@@ -36,6 +50,18 @@ actor NovelParserRegistry {
         guard let adapter = adapters(for: contentType).first(where: { $0.canHandle(document) }) else {
             throw NovelParsingError.missingCatalog
         }
-        return try adapter.parseCatalogPage(document)
+        if contentType == .auto, adapter is GenericNovelAdapter,
+           try GenericMangaAdapter().hasMangaCatalogEvidence(document) {
+            do {
+                return try GenericMangaAdapter().parseCatalogPage(document)
+            } catch NovelParsingError.missingCatalog {
+                // A manga label alone does not establish a usable chapter list.
+            }
+        }
+        do {
+            return try adapter.parseCatalogPage(document)
+        } catch NovelParsingError.missingCatalog where contentType == .auto && adapter is GenericNovelAdapter {
+            return try GenericMangaAdapter().parseCatalogPage(document)
+        }
     }
 }

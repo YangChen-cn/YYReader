@@ -1,63 +1,70 @@
 import Foundation
 import SwiftSoup
 
-/// Conservative fallback used only when the user explicitly chooses manga.
+/// Weighted DOM recognition; automatic import requires high confidence.
 struct GenericMangaAdapter: NovelSourceAdapter {
     func canHandle(_ document: LoadedHTML) -> Bool { true }
 
-    private let readerSelectors = "[data-reader-images], #comic-content, .comic-content, #manga-reader, .manga-reader, #comic-reader, .comic-reader, #manga-content, .manga-content, .reading-content, .reader-images, .reader-pages, .reader-img-con, .chapter-images, #chapter-img, #ChapterContent, #showimage, .comic-pages, .manga-pages, #images, #viewer, #reader"
-    private let noiseSelectors = "script, style, noscript, iframe, header, footer, nav, .ad, .ads, .advertisement, [class*=advert], .banner, .logo, .cover, .thumbnail, .thumbnails, .recommend, .recommendations, .related, [hidden]"
+    private let noiseSelectors = MangaRegionScorer.noiseSelectors
 
-    func parseChapterPage(_ loaded: LoadedHTML) throws -> ParsedChapterPage {
+    func recognizeChapter(_ loaded: LoadedHTML) throws -> MangaRegionScorer.Recognition? {
         let dom = try HTMLParsingSupport.document(from: loaded)
         let title = try heading(in: dom)
-        let previous = try navigation(in: dom, labels: ["上一话", "上一章", "上一章节", "Previous Chapter"], rel: "prev", base: loaded.finalURL)
-        let next = try navigation(in: dom, labels: ["下一话", "下一章", "下一章节", "Next Chapter"], rel: "next", base: loaded.finalURL)
+        let previous = try navigation(in: dom, labels: ["上一话", "上一話", "上一章", "上一章节", "Previous Chapter"], rel: "prev", base: loaded.finalURL)
+        let next = try navigation(in: dom, labels: ["下一话", "下一話", "下一章", "下一章节", "Next Chapter"], rel: "next", base: loaded.finalURL)
+        return try MangaRegionScorer().recognize(in: dom, base: loaded.finalURL,
+            chapterTitle: isChapterTitle(title), chapterNavigation: previous != nil || next != nil)
+    }
+
+    func parseChapterPage(_ loaded: LoadedHTML) throws -> ParsedChapterPage {
+        try parseChapterPage(loaded, requiringHighConfidence: false)
+    }
+
+    func parseChapterPage(_ loaded: LoadedHTML, requiringHighConfidence: Bool) throws -> ParsedChapterPage {
+        let dom = try HTMLParsingSupport.document(from: loaded)
+        let title = try heading(in: dom)
+        let previous = try navigation(in: dom, labels: ["上一话", "上一話", "上一章", "上一章节", "Previous Chapter"], rel: "prev", base: loaded.finalURL)
+        let next = try navigation(in: dom, labels: ["下一话", "下一話", "下一章", "下一章节", "Next Chapter"], rel: "next", base: loaded.finalURL)
         let catalog = try navigation(in: dom, labels: ["目录", "章节列表", "返回目录", "全部章节", "All Chapters"], base: loaded.finalURL)
         let nextPage = try navigation(in: dom, labels: ["下一页", "下页", "Next Page"], base: loaded.finalURL)
-        try dom.select(noiseSelectors).remove()
-        let chapterEvidence = isChapterTitle(title) || previous != nil || next != nil
-        var candidates: [[URL]] = []
-        for container in try dom.select(readerSelectors).array() {
-            let identity = try (container.attr("id") + " " + container.attr("class")).lowercased()
-            let explicit = container.hasAttr("data-reader-images") || identity.contains("comic") || identity.contains("manga") || identity.contains("chapter-images") || identity.contains("reader-pages")
-            guard chapterEvidence || explicit else { continue }
-            let images = try images(in: container, base: loaded.finalURL)
-            if try images.count >= 2 || (images.count == 1 && chapterEvidence && (explicit || hasLargeImage(container))) {
-                candidates.append(images)
-            }
-        }
-        // Semantic containers need a sequence plus chapter evidence and little prose.
-        // Never fall back to body or all images on the page.
-        if candidates.isEmpty && chapterEvidence {
-            for container in try dom.select("article, main, #content, .chapter-content").array() {
-                guard try container.text().count < 60 else { continue }
-                let images = try images(in: container, base: loaded.finalURL)
-                if images.count >= 3 { candidates.append(images) }
-            }
-        }
-        guard let images = candidates.max(by: { $0.count < $1.count }), !images.isEmpty else {
+        guard let recognition = try MangaRegionScorer().recognize(in: dom, base: loaded.finalURL,
+            chapterTitle: isChapterTitle(title), chapterNavigation: previous != nil || next != nil),
+              !requiringHighConfidence || recognition.isHighConfidence else {
             throw NovelParsingError.noMangaImages
+        }
+        let blobSequence = recognition.imageURLs.contains { $0.scheme == "blob" }
+        let addresses = recognition.imageURLs.enumerated().map { index, url in
+            blobSequence && recognition.needsBrowser[index]
+                ? MangaBlobSource(chapterURL: loaded.finalURL, index: index).url : url
         }
         return ParsedChapterPage(title: title,
             bookTitle: try meta("og:novel:book_name", in: dom) ?? meta("og:book_name", in: dom) ?? bookTitle(in: dom),
             author: try meta("author", in: dom), paragraphs: [],
             catalogURL: catalog,
             previousChapterURL: previous, nextChapterURL: next,
-            nextPageURL: nextPage, imageURLs: images)
+            nextPageURL: nextPage, imageURLs: addresses)
+    }
+
+    func hasMangaCatalogEvidence(_ loaded: LoadedHTML) throws -> Bool {
+        let dom = try HTMLParsingSupport.document(from: loaded)
+        let type = try meta("og:type", in: dom)?.lowercased() ?? ""
+        let title = try dom.title()
+        return type.contains("comic") || title.contains("漫画") || title.contains("漫畫")
     }
 
     func parseCatalogPage(_ loaded: LoadedHTML) throws -> ParsedBookCatalog {
         let dom = try HTMLParsingSupport.document(from: loaded)
         try dom.select(noiseSelectors).remove()
-        let containers = try dom.select(".chapter-list, #chapter-list, #chapterlist, .chapter_list, .chapter-grid, .manga-chapters, .comic-chapters, .comic-chapter, .catalog, #catalog, .chapters, #chapters, .playlist, #playlist, .detail-list-select, #chapterlistload").array()
+        let containers = try dom.select(".chapter-list, #chapter-list, #chapterlist, .chapter_list, .chapter-grid, .chapters-grid, .manga-chapters, .comic-chapters, .comic-chapter, .catalog, #catalog, .chapters, #chapters, .playlist, #playlist, .detail-list-select, #chapterlistload").array()
         var candidates: [[ChapterSeed]] = []
         for container in containers {
             var seen = Set<String>()
             var chapters: [ChapterSeed] = []
             for link in try container.select("a[href]").array() {
                 let title = try link.text().trimmingCharacters(in: .whitespacesAndNewlines)
-                guard isChapterTitle(title), let url = HTMLParsingSupport.absoluteURL(for: link, relativeTo: loaded.finalURL),
+                guard !title.isEmpty, title.count <= 100,
+                      let url = HTMLParsingSupport.absoluteURL(for: link, relativeTo: loaded.finalURL),
+                      isChapterTitle(title) || isChapterPath(url, relativeTo: loaded.finalURL),
                       ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
                       HTMLParsingSupport.isSameOrigin(url, as: loaded.finalURL),
                       seen.insert(URLCanonicalizer.canonicalString(url.absoluteString)).inserted else { continue }
@@ -66,48 +73,17 @@ struct GenericMangaAdapter: NovelSourceAdapter {
             if chapters.count >= 2 { candidates.append(chapters) }
         }
         guard let chapters = candidates.max(by: { $0.count < $1.count }) else { throw NovelParsingError.missingCatalog }
+        for control in try dom.select("button, a[href^=javascript]").array() {
+            let label = try control.text().filter { !$0.isWhitespace && !"[]【】".contains($0) }
+            let style = try control.attr("style").filter { !$0.isWhitespace }.lowercased()
+            if CatalogExpansionScripts.labels.contains(label), !style.contains("display:none"),
+               !control.hasAttr("hidden"), try control.attr("data-yyreader-expanded") != "true" {
+                throw NovelParsingError.catalogNeedsExpansion
+            }
+        }
         return ParsedBookCatalog(title: try meta("og:book_name", in: dom) ?? heading(in: dom),
             author: try meta("author", in: dom) ?? "未知作者", chapters: chapters,
             nextPageURL: try navigation(in: dom, labels: ["下一页", "下页", "Next Page"], base: loaded.finalURL))
-    }
-
-    private func images(in container: Element, base: URL) throws -> [URL] {
-        var seen = Set<String>()
-        var result: [URL] = []
-        for image in try container.select("img").array() {
-            let identity = try [image.attr("id"), image.attr("class"), image.attr("alt")].joined(separator: " ").lowercased()
-            guard !isNoise(identity) else { continue }
-            if let width = try dimension("width", of: image), width < 160 { continue }
-            if let height = try dimension("height", of: image), height < 160 { continue }
-            for attribute in ["data-original", "data-src", "data-lazy-src", "data-url", "data-echo", "src"] {
-                let source = try image.attr(attribute).trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !source.isEmpty, var components = URLComponents(url: URL(string: source, relativeTo: base)?.absoluteURL ?? base, resolvingAgainstBaseURL: false),
-                      ["http", "https"].contains(components.scheme?.lowercased() ?? ""),
-                      !isNoise(source.lowercased()), !source.lowercased().hasSuffix(".svg"), !source.lowercased().hasSuffix(".ico") else { continue }
-                components.fragment = nil
-                guard let url = components.url, url != base else { continue }
-                if seen.insert(url.absoluteString).inserted { result.append(url) }
-                break
-            }
-        }
-        return result
-    }
-
-    private func isNoise(_ value: String) -> Bool {
-        HTMLParsingSupport.firstCapture("(?i)(?:^|[/_.\\s?&=-])(ad|ads|advert[^/\\s]*|logo|cover|thumb[^/\\s]*|avatar|banner|icon|(?:new)?loading\\d*|lazyload|placeholder|spacer|tracking|captcha)(?:$|[/_.\\s?&=-])", in: value) != nil
-            || value.contains("广告") || value.contains("封面") || value.contains("缩略图")
-    }
-
-    private func dimension(_ name: String, of image: Element) throws -> Double? {
-        let value = try image.attr(name).replacingOccurrences(of: "px", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return Double(value)
-    }
-
-    private func hasLargeImage(_ container: Element) throws -> Bool {
-        for image in try container.select("img").array() {
-            if let width = try dimension("width", of: image), let height = try dimension("height", of: image), width >= 400, height >= 600 { return true }
-        }
-        return false
     }
 
     private func heading(in dom: Document) throws -> String {
@@ -127,7 +103,15 @@ struct GenericMangaAdapter: NovelSourceAdapter {
 
     private func isChapterTitle(_ title: String) -> Bool {
         HTMLParsingSupport.firstCapture("(?i)(第\\s*[0-9一二三四五六七八九十百千]+\\s*[话話章回卷]|(?:chapter|episode)\\s*\\d+)", in: title) != nil
+            || HTMLParsingSupport.firstCapture("^((?:总)?\\d+(?:[.·、\\s].*)?)$", in: title) != nil
             || ["序章", "序话", "番外", "后记"].contains(where: title.hasPrefix)
+    }
+
+    private func isChapterPath(_ url: URL, relativeTo base: URL) -> Bool {
+        guard url != base else { return false }
+        let prefix = "/" + base.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/"
+        return url.path.range(of: "^/(?:chapter|read)/[^/]+", options: .regularExpression) != nil
+            || (url.path.hasPrefix(prefix) && url.path.range(of: "/[0-9]+\\.html$", options: .regularExpression) != nil)
     }
 
     private func navigation(in dom: Document, labels: Set<String>, rel: String? = nil, base: URL) throws -> URL? {
