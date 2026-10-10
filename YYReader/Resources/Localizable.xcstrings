@@ -1,6 +1,12 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "反转目录" : {
+      "extractionState" : "manual"
+    },
+    "保存目录顺序失败：%@" : {
+      "extractionState" : "manual"
+    },
     "接续上次阅读位置" : {
       "extractionState" : "manual"
     },

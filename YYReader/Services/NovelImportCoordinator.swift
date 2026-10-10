@@ -46,7 +46,7 @@ final class NovelImportCoordinator {
         let initialCatalog: ParsedBookCatalog?
         if let catalogURL = chapter.catalogURL {
             do {
-                initialCatalog = try await loadCatalogPage(at: catalogURL, contentType: contentType)
+                initialCatalog = try await loadCatalogPage(at: catalogURL, contentType: contentType).inReadingOrder()
             } catch is CancellationError {
                 throw CancellationError()
             } catch HTMLLoadError.cancelled {
@@ -94,6 +94,7 @@ final class NovelImportCoordinator {
         from document: LoadedHTML,
         contentType: BookContentType
     ) async throws -> NovelImportResult {
+        let catalog = catalog.inReadingOrder()
         guard let firstChapter = catalog.chapters.first else {
             throw NovelParsingError.missingCatalog
         }

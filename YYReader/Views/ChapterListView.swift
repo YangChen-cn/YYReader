@@ -13,11 +13,17 @@ struct ChapterListView: View {
             : store.sortedChapters.filter { $0.title.localizedStandardContains(searchText) }
 
         VStack(spacing: 0) {
-            TextField("搜索章节", text: $searchText)
-                .textFieldStyle(.roundedBorder)
-                .accessibilityLabel("搜索章节")
-                .padding(.horizontal, 8)
-                .padding(.vertical, 7)
+            HStack(spacing: 8) {
+                TextField("搜索章节", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("搜索章节")
+                Button("反转目录", systemImage: "arrow.up.arrow.down", action: store.reverseSelectedCatalog)
+                    .labelStyle(.iconOnly)
+                    .help("反转目录")
+                    .disabled(store.sortedChapters.count < 2 || store.isLoading)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 7)
 
             ScrollViewReader { proxy in
                 List(selection: chapterSelection) {
@@ -50,6 +56,9 @@ struct ChapterListView: View {
                     centerSelectedChapter(using: proxy, in: chapters)
                 }
                 .onChange(of: store.selectedChapterID) { _, _ in
+                    centerSelectedChapter(using: proxy, in: chapters)
+                }
+                .onChange(of: chapters.map(\.id)) { _, _ in
                     centerSelectedChapter(using: proxy, in: chapters)
                 }
                 .onChange(of: searchText) { _, _ in

@@ -39,7 +39,7 @@ actor NovelProcessingWorker {
             author: author,
             chapters: orderedChapters,
             nextPageURL: nil
-        )
+        ).inReadingOrder()
     }
 
     func aggregateChapterPages(

@@ -3,6 +3,22 @@ import Testing
 @testable import YYReader
 
 struct GenericMangaRecognitionTests {
+    @Test func dingCatalogDetectsDescendingOrderWithoutSortingExtras() throws {
+        let url = URL(string: "https://www.dingmanhua.com/comic/1919.html/")!
+        for (titles, expected) in [
+            (["总697·新话", "临时公告", "总696·上", "总696·下", "总695·旧话"], ["总695·旧话", "总696·下", "总696·上", "临时公告", "总697·新话"]),
+            (["总695·旧话", "公告", "总696·上", "总697·新话"], ["总695·旧话", "公告", "总696·上", "总697·新话"])
+        ] {
+            let links = titles.enumerated().map { "<a href='/chapter/1919-\($0.offset).html'>\($0.element)</a>" }.joined()
+            let html = "<h1>测试漫画</h1><div class='chapters-grid'>\(links)</div>"
+            let document = LoadedHTML(requestedURL: url, finalURL: url, html: html, retrievalKind: .urlSession)
+            let catalog = try GenericMangaAdapter().parseCatalogPage(document).inReadingOrder()
+            #expect(catalog.chapters.map(\.title) == expected)
+            #expect(catalog.chapters.map(\.sortIndex) == Array(1...titles.count))
+        }
+    }
+
+
     private let url = URL(string: "https://example.com/episodes/12")!
     private let navigation = "<a href='/episodes/13'>下一话</a><a href='/series/test'>目录</a>"
     private func loaded(_ html: String) -> LoadedHTML {

@@ -635,6 +635,27 @@ final class LibraryStore {
         return book
     }
 
+    func reverseSelectedCatalog() {
+        guard let book = selectedBook, sortedChapters.count > 1, !isLoading else { return }
+        guard flushPendingProgress() else { return }
+        let original = sortedChapters.map { ($0, $0.sortIndex) }
+        let previousUpdatedAt = book.updatedAt
+        for (index, chapter) in sortedChapters.reversed().enumerated() {
+            chapter.sortIndex = index + 1
+        }
+        book.updatedAt = .now
+        do {
+            try modelContext.save()
+            rebuildSelectedBookChapters()
+            selectChapter(sortedChapters.first?.id, scrollIntent: .chapterTop)
+            folderSync?.scheduleLocalChange()
+        } catch {
+            for (chapter, index) in original { chapter.sortIndex = index }
+            book.updatedAt = previousUpdatedAt
+            presentedError = PresentedError(message: "保存目录顺序失败：\(error.localizedDescription)")
+        }
+    }
+
     func updateSelectedBookMetadata(title: String, author: String) {
         guard let book = selectedBook else { return }
         let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)

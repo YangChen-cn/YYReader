@@ -58,6 +58,9 @@ struct MobileChapterListView: View {
                 await Task.yield()
                 if let id = store.selectedChapterID { proxy.scrollTo(id, anchor: .center) }
             }
+            .onChange(of: chapters.map(\.id)) { _, _ in
+                if let id = store.selectedChapterID { proxy.scrollTo(id, anchor: .center) }
+            }
             .overlay {
                 if store.selectedBook == nil {
                     ContentUnavailableView("请选择小说", systemImage: "book")
@@ -74,6 +77,10 @@ struct MobileChapterListView: View {
         .navigationTitle(store.selectedBook?.title ?? "目录")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("反转目录", systemImage: "arrow.up.arrow.down", action: store.reverseSelectedCatalog)
+                    .disabled(store.sortedChapters.count < 2 || store.isLoading)
+            }
             ToolbarItem(placement: .primaryAction) {
                 if store.selectedBook?.sourceKind == .web {
                     Button("刷新目录", systemImage: "arrow.clockwise", action: store.startRefreshSelectedCatalog)

@@ -4,6 +4,19 @@ import Testing
 
 @MainActor
 struct NovelImportCoordinatorTests {
+    @Test func descendingNovelImportStartsAtOldestChapter() async throws {
+        let catalog = URL(string: "https://example.com/novel/")!
+        let chapter = URL(string: "https://example.com/novel/1.html")!
+        let loader = MockHTMLLoader(documents: [
+            catalog: "<h1>测试小说</h1><div id='list'><a href='3.html'>第三章</a><a href='2.html'>第二章</a><a href='1.html'>第一章</a></div>",
+            chapter: "<h1>第一章</h1><div id='content'><p>" + String(repeating: "这是用于目录顺序回归的自造正文，导入倒序目录时应该从第一章开始。", count: 8) + "</p></div>"
+        ])
+        let result = try await NovelImportCoordinator(loader: loader).importNovel(from: catalog)
+        #expect(result.chapterURL == chapter)
+        #expect(result.catalog.map(\.title) == ["第一章", "第二章", "第三章"])
+        #expect(loader.requestedURLs == [catalog, chapter])
+    }
+
     @Test
     func nextPageWithDifferentChapterNumberDoesNotMergeEntireNovel() async throws {
         let first = try #require(URL(string: "https://example.com/book/1.html"))

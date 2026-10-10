@@ -10,6 +10,34 @@ private final class FetchFailureSwitch {
 
 @MainActor
 struct LibraryStoreTests {
+    @Test func reversingCatalogPreservesChapterCacheAndProgress() throws {
+        let container = try ModelContainer(for: Book.self, Chapter.self,
+                                           configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let context = container.mainContext
+        let book = Book(title: "测试", author: "作者", sourceHost: "example.com", catalogURL: "https://example.com/book/")
+        let chapters = (1...3).map { Chapter(sourceURL: "https://example.com/book/\($0).html", title: "第\($0)章", sortIndex: $0, book: book) }
+        book.chapters = chapters
+        context.insert(book)
+        for chapter in chapters { context.insert(chapter) }
+        chapters[1].replaceBodyText("缓存正文")
+        chapters[1].readingProgress = 0.5
+        chapters[1].topParagraphIndex = 3
+        book.currentChapterID = chapters[1].id
+        try context.save()
+        let store = LibraryStore(modelContext: context, coordinator: NovelImportCoordinator(loader: MockHTMLLoader(documents: [:])))
+        store.selectBook(book.id)
+        store.reverseSelectedCatalog()
+        #expect(store.sortedChapters.map(\.id) == chapters.reversed().map(\.id))
+        #expect(store.selectedChapterID == chapters[2].id)
+        #expect(book.currentChapterID == chapters[2].id)
+        #expect(chapters[1].bodyText == "缓存正文")
+        #expect(chapters[1].readingProgress == 0.5 && chapters[1].topParagraphIndex == 3)
+        store.reverseSelectedCatalog()
+        #expect(store.sortedChapters.map(\.id) == chapters.map(\.id))
+        #expect(store.selectedChapterID == chapters[0].id)
+        #expect(book.currentChapterID == chapters[0].id)
+    }
+
     @Test func failedImportEndsLoadingAndPresentsErrorWithoutAddingBook() async throws {
         let container = try ModelContainer(for: Book.self, Chapter.self,
                                            configurations: ModelConfiguration(isStoredInMemoryOnly: true))
