@@ -3,6 +3,7 @@ import SwiftUI
 struct MobileChapterListView: View {
     let store: LibraryStore
     let openChapter: (UUID) -> Void
+    @State private var showingReverseConfirmation = false
     @State private var search = ""
 
     private var chapters: [Chapter] {
@@ -74,11 +75,18 @@ struct MobileChapterListView: View {
             }
         }
         .searchable(text: $search, prompt: "搜索章节")
+        .confirmationDialog("反转目录？", isPresented: $showingReverseConfirmation, titleVisibility: .visible) {
+            Button("确认反转", action: store.reverseSelectedCatalog)
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("目录顺序将反转，并跳到新的第一章。仅适用于导入目录顺序颠倒的情况；手动顺序会保留，刷新目录后仍然生效。")
+        }
+        .onChange(of: store.selectedBookID) { _, _ in showingReverseConfirmation = false }
         .navigationTitle(store.selectedBook?.title ?? "目录")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("反转目录", systemImage: "arrow.up.arrow.down", action: store.reverseSelectedCatalog)
+                Button("反转目录", systemImage: "arrow.up.arrow.down") { showingReverseConfirmation = true }
                     .disabled(store.sortedChapters.count < 2 || store.isLoading)
             }
             ToolbarItem(placement: .primaryAction) {

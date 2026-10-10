@@ -10,6 +10,49 @@ private final class FetchFailureSwitch {
 
 @MainActor
 struct LibraryStoreTests {
+    @Test func manualCatalogOrderSurvivesRefreshAndStoreRecreation() async throws {
+        for initiallyDescending in [false, true] {
+            let suite = "catalog-order-test." + UUID().uuidString
+            let defaults = try #require(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let container = try ModelContainer(for: Book.self, Chapter.self,
+                                               configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+            let context = container.mainContext
+            let url = URL(string: "https://example.com/manual-order/")!
+            let book = Book(title: "测试", author: "作者", sourceHost: "example.com", catalogURL: url.absoluteString)
+            let numbers = initiallyDescending ? [3, 2, 1] : [1, 2, 3]
+            let chapters = numbers.enumerated().map {
+                Chapter(sourceURL: url.appendingPathComponent("\($0.element).html").absoluteString,
+                        title: "第\($0.element)章", sortIndex: $0.offset + 1, book: book)
+            }
+            book.chapters = chapters
+            context.insert(book)
+            for chapter in chapters { context.insert(chapter) }
+            chapters[1].replaceBodyText("缓存正文")
+            chapters[1].readingProgress = 0.5
+            try context.save()
+            let html = "<h1>测试</h1><div id='list'>" + [4, 3, 2, 1].map {
+                "<a href='\($0).html'>第\($0)章</a>"
+            }.joined() + "</div>"
+            let coordinator = NovelImportCoordinator(loader: MockHTMLLoader(documents: [url: html]))
+            let store = LibraryStore(modelContext: context, coordinator: coordinator, catalogOrderDefaults: defaults)
+            store.selectBook(book.id)
+            store.reverseSelectedCatalog()
+            let selected = store.selectedChapterID
+            let reopened = LibraryStore(modelContext: context, coordinator: coordinator, catalogOrderDefaults: defaults)
+            reopened.selectBook(book.id)
+            await reopened.refreshSelectedCatalog()
+            let expected = initiallyDescending ? ["第1章", "第2章", "第3章", "第4章"] : ["第4章", "第3章", "第2章", "第1章"]
+            #expect(reopened.sortedChapters.map(\.title) == expected)
+            #expect(reopened.selectedChapterID == selected)
+            #expect(chapters[1].bodyText == "缓存正文" && chapters[1].readingProgress == 0.5)
+            #expect(reopened.presentedError == nil)
+            reopened.reverseSelectedCatalog()
+            await reopened.refreshSelectedCatalog()
+            #expect(reopened.sortedChapters.map(\.title) == Array(expected.reversed()))
+        }
+    }
+
     @Test func reversingCatalogPreservesChapterCacheAndProgress() throws {
         let container = try ModelContainer(for: Book.self, Chapter.self,
                                            configurations: ModelConfiguration(isStoredInMemoryOnly: true))

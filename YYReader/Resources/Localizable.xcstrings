@@ -1,6 +1,15 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "反转目录？" : {
+      "extractionState" : "manual"
+    },
+    "确认反转" : {
+      "extractionState" : "manual"
+    },
+    "目录顺序将反转，并跳到新的第一章。仅适用于导入目录顺序颠倒的情况；手动顺序会保留，刷新目录后仍然生效。" : {
+      "extractionState" : "manual"
+    },
     "反转目录" : {
       "extractionState" : "manual"
     },

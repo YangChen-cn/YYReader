@@ -5,6 +5,7 @@ struct ChapterListView: View {
     let selectionScrollIntent: ReaderScrollIntent?
     let isCatalogVisible: Bool
     let activateChapter: (UUID) -> Void
+    @State private var showingReverseConfirmation = false
     @State private var searchText = ""
 
     var body: some View {
@@ -17,7 +18,7 @@ struct ChapterListView: View {
                 TextField("搜索章节", text: $searchText)
                     .textFieldStyle(.roundedBorder)
                     .accessibilityLabel("搜索章节")
-                Button("反转目录", systemImage: "arrow.up.arrow.down", action: store.reverseSelectedCatalog)
+                Button("反转目录", systemImage: "arrow.up.arrow.down") { showingReverseConfirmation = true }
                     .labelStyle(.iconOnly)
                     .help("反转目录")
                     .disabled(store.sortedChapters.count < 2 || store.isLoading)
@@ -66,6 +67,13 @@ struct ChapterListView: View {
                 }
             }
         }
+        .confirmationDialog("反转目录？", isPresented: $showingReverseConfirmation, titleVisibility: .visible) {
+            Button("确认反转", action: store.reverseSelectedCatalog)
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("目录顺序将反转，并跳到新的第一章。仅适用于导入目录顺序颠倒的情况；手动顺序会保留，刷新目录后仍然生效。")
+        }
+        .onChange(of: store.selectedBookID) { _, _ in showingReverseConfirmation = false }
         .navigationTitle(store.selectedBook?.title ?? "目录")
         .onKeyPress(.return) {
             guard let chapterID = store.selectedChapterID else { return .ignored }

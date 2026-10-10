@@ -20,6 +20,7 @@ final class LibraryStore {
         let task: Task<Void, Never>
     }
 
+    private let catalogOrderDefaults: UserDefaults
     private let modelContext: ModelContext
     private let bookFetchOperation: BookFetchOperation
     private let coordinator: NovelImportCoordinator
@@ -72,6 +73,7 @@ final class LibraryStore {
         modelContext: ModelContext,
         coordinator: NovelImportCoordinator,
         folderSync: FolderSyncController? = nil,
+        catalogOrderDefaults: UserDefaults = .standard,
         progressSaveDelay: Duration = .milliseconds(600),
         continuousTailProbeTTL: TimeInterval = 45,
         bookFetchOperation: @escaping BookFetchOperation = { context, descriptor in
@@ -79,6 +81,7 @@ final class LibraryStore {
         }
     ) {
         self.modelContext = modelContext
+        self.catalogOrderDefaults = catalogOrderDefaults
         self.bookFetchOperation = bookFetchOperation
         self.coordinator = coordinator
         self.folderSync = folderSync
@@ -647,6 +650,13 @@ final class LibraryStore {
         do {
             try modelContext.save()
             rebuildSelectedBookChapters()
+            // Remember representative chapters in the chosen order instead of
+            // toggling against automatic detection, which may change on refresh.
+            let sampleCount = min(8, sortedChapters.count)
+            let anchors = (0..<sampleCount).map { index in
+                canonicalURLString(sortedChapters[index * (sortedChapters.count - 1) / (sampleCount - 1)].sourceURL)
+            }
+            catalogOrderDefaults.set(anchors, forKey: catalogOrderKey(for: book))
             selectChapter(sortedChapters.first?.id, scrollIntent: .chapterTop)
             folderSync?.scheduleLocalChange()
         } catch {
@@ -870,6 +880,7 @@ final class LibraryStore {
         guard let book = selectedBook else { return false }
         guard flushPendingProgress() else { return false }
         let deletionRecord = syncRecord(for: book, deletedAt: .now)
+        let orderKey = catalogOrderKey(for: book)
         readerScrollRequest = nil
         let imageURLs = book.chapters.flatMap(\.imageSourceURLs).compactMap(URL.init(string:))
         offlineDownloads.cancel()
@@ -881,6 +892,7 @@ final class LibraryStore {
             presentedError = PresentedError(message: "删除小说失败：\(error.localizedDescription)")
             return false
         }
+        catalogOrderDefaults.removeObject(forKey: orderKey)
         Task { [weak self] in
             do { try await MangaImageCache.shared.remove(imageURLs) }
             catch { self?.presentedError = PresentedError(message: "清理漫画图片失败：\(error.localizedDescription)") }
@@ -1563,9 +1575,24 @@ final class LibraryStore {
         return chapter
     }
 
+    private func catalogOrderKey(for book: Book) -> String {
+        "catalog.manualOrder." + book.id.uuidString
+    }
+
     private func upsertCatalog(_ catalog: ParsedBookCatalog, into book: Book) {
+        var seeds = catalog.chapters
+        if let anchors = catalogOrderDefaults.stringArray(forKey: catalogOrderKey(for: book)) {
+            let positions = anchors.compactMap { anchor in
+                seeds.firstIndex(where: { canonicalURLString($0.url.absoluteString) == anchor })
+            }
+            if let first = positions.first, let last = positions.last, first > last {
+                seeds = seeds.reversed().enumerated().map {
+                    ChapterSeed(title: $0.element.title, url: $0.element.url, sortIndex: $0.offset + 1)
+                }
+            }
+        }
         var existing = Dictionary(uniqueKeysWithValues: book.chapters.map { (canonicalURLString($0.sourceURL), $0) })
-        for seed in catalog.chapters {
+        for seed in seeds {
             let key = canonicalURLString(seed.url.absoluteString)
             if let chapter = existing[key] {
                 chapter.title = seed.title
