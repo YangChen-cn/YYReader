@@ -359,7 +359,9 @@ struct MangaReaderView: View {
         }
     }
     private func refreshRatios(_ pages: [URL]) async {
-        let known = await imageCache.cachedAspectRatios(for: pages)
+        let unknown = pages.filter { ratios[$0.absoluteString] == nil }
+        guard !unknown.isEmpty else { return }
+        let known = await imageCache.cachedAspectRatios(for: unknown)
         guard !Task.isCancelled, store.selectedChapterID == chapter.id else { return }
         ratios.merge(known) { _, new in new }
     }
@@ -376,7 +378,8 @@ struct MangaReaderView: View {
                 guard prefetch else { return }
                 _ = try await imageCache.original(at: url, referer: referer)
             }
-            await refreshRatios(pages)
+            let currentPages = Set(pages)
+            await refreshRatios(images.filter { currentPages.contains($0) })
             if !Task.isCancelled, chapter.imagesCachedAt == nil, await imageCache.containsAll(pages) {
                 store.markChapterImagesCached(chapter)
             }

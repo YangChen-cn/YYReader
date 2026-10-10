@@ -19,6 +19,7 @@ struct LibraryRootView: View {
     @State private var bookshelfTransfer = BookshelfTransferController()
     @State private var localTextImport = LocalTextImportController()
     @State private var showingMetadataEditor = false
+    @State private var activeNotice: BookshelfTransferNotice?
 
     var body: some View {
         Group {
@@ -140,23 +141,27 @@ struct LibraryRootView: View {
                 )
             }
         }
-        .alert(item: $store.presentedError) { error in
-            Alert(title: Text("操作失败"), message: Text(error.message), dismissButton: .default(Text("好")))
-        }
-        .alert(item: $bookshelfTransfer.notice) { notice in
+        .alert(item: $activeNotice) { notice in
             Alert(
                 title: Text(notice.title),
                 message: Text(notice.message),
                 dismissButton: .default(Text("好"))
             )
         }
-        .alert("导入 TXT 失败", isPresented: Binding(
-            get: { localTextImport.errorMessage != nil },
-            set: { if !$0 { localTextImport.errorMessage = nil } }
-        )) {
-            Button("好") { localTextImport.errorMessage = nil }
-        } message: {
-            Text(localTextImport.errorMessage ?? "未知错误")
+        .onChange(of: store.presentedError?.id, initial: true) { _, _ in
+            guard let error = store.presentedError else { return }
+            activeNotice = BookshelfTransferNotice(title: "操作失败", message: error.message)
+            store.presentedError = nil
+        }
+        .onChange(of: bookshelfTransfer.notice?.id, initial: true) { _, _ in
+            guard let notice = bookshelfTransfer.notice else { return }
+            activeNotice = notice
+            bookshelfTransfer.notice = nil
+        }
+        .onChange(of: localTextImport.errorMessage, initial: true) { _, message in
+            guard let message else { return }
+            activeNotice = BookshelfTransferNotice(title: "导入 TXT 失败", message: message)
+            localTextImport.errorMessage = nil
         }
         .onChange(of: store.offlineDownloads.isDownloading) { _, isDownloading in
             if !isDownloading {

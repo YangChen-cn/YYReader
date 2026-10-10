@@ -27,6 +27,7 @@ actor MangaImageCache {
     private let thumbnailByteLimit: Int
     private let blobReader: (@Sendable (URL, URL) async throws -> MangaImageReadResult)?
     private var tail: Task<Data, any Error>?
+    private var tailID: UUID?
     private var retryAfter: Date?
     private var thumbnails: [String: Thumbnail] = [:]
     private var thumbnailRecency: UInt64 = 0
@@ -162,6 +163,7 @@ actor MangaImageCache {
         try Task.checkCancellation()
         if let cached = try cachedData(at: url) { return cached }
         let previous = tail
+        let id = UUID()
         let task = Task {
             // A failed/cancelled predecessor must not poison subsequent image requests.
             if let previous { _ = await previous.result }
@@ -169,6 +171,12 @@ actor MangaImageCache {
             return try await self.fetch(url, referer: referer)
         }
         tail = task
+        tailID = id
+        defer {
+            // A completed Task retains its Data result. Release it when the
+            // queue drains, without detaching a newer request's predecessor.
+            if tailID == id { tail = nil; tailID = nil }
+        }
         return try await withTaskCancellationHandler {
             let data = try await task.value
             try Task.checkCancellation()
@@ -235,6 +243,7 @@ actor MangaImageCache {
         // chain onto the cancelled task and then be orphaned by `tail = nil`.
         let running = tail
         tail = nil
+        tailID = nil
         running?.cancel()
         _ = await running?.result
         generation &+= 1
@@ -260,6 +269,7 @@ actor MangaImageCache {
     /// Test and diagnostic hook: how many display thumbnails are in memory.
     var cachedThumbnailCount: Int { thumbnails.count }
     var activeThumbnailWaiterCount: Int { thumbnailTasks.values.reduce(0) { $0 + $1.waiters.count } }
+    var hasPendingOriginalRequest: Bool { tail != nil }
 
     private func cachedData(at url: URL) throws -> Data? {
         let file = fileURL(url)

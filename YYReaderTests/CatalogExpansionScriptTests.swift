@@ -30,11 +30,35 @@ struct CatalogExpansionScriptTests {
     }
 
     @Test
+    func expandsUntypedMangaButtonOutsideForms() async throws {
+        let webView = try await loadedWebView(html: """
+            <form><input name="search"></form>
+            <div class="chapters-grid"><a href="/read/a/1.html">001</a><a href="/read/a/2.html">002</a></div>
+            <button class="load-more-btn" id="loadMoreBtn" onclick="expandList()">加载更多章节</button>
+            <script>
+            function expandList() {
+                document.querySelector('.chapters-grid').insertAdjacentHTML('beforeend', '<a href="/read/a/3.html">003</a>');
+            }
+            </script>
+            """)
+        let expanded = try await webView.callAsyncJavaScript(CatalogExpansionScripts.expand,
+                                                             arguments: [:], in: nil, contentWorld: .page)
+        #expect(expanded as? Bool == true)
+        let html = try #require(try await webView.evaluateJavaScript("document.documentElement.outerHTML") as? String)
+        let url = try #require(URL(string: "https://example.com/comic/a/"))
+        let catalog = try GenericMangaAdapter().parseCatalogPage(
+            LoadedHTML(requestedURL: url, finalURL: url, html: html, retrievalKind: .webKit))
+        #expect(catalog.chapters.map(\.title) == ["001", "002", "003"])
+    }
+
+    @Test
     func doesNotClickLoginOrSubmitControls() async throws {
         let webView = try await loadedWebView(html: """
             <a href="1.html">第1章 开始</a><a href="2.html">第2章 中途</a>
             <button type="button" onclick="window.clicked=true">登录后阅读全文</button>
             <button type="submit" onclick="window.clicked=true">展开完整列表</button>
+            <form id="submitForm"><button onclick="window.clicked=true">加载更多章节</button></form>
+            <button form="submitForm" onclick="window.clicked=true">加载更多章节</button>
             <script>window.clicked=false;</script>
             """)
         let expanded = try await webView.callAsyncJavaScript(CatalogExpansionScripts.expand,

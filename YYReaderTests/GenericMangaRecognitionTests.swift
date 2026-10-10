@@ -104,6 +104,36 @@ struct GenericMangaRecognitionTests {
         #expect(try await NovelParserRegistry().parseChapterPage(loaded(html)).imageURLs.count == 18)
     }
 
+    @Test func finalNovelFallbackStillRequiresNonLinkProse() async throws {
+        let links = (1...3).map { "<a href='/menu/\($0)'>\(String(repeating: "菜单说明", count: 10))</a><br><br><br>" }.joined()
+        let html = "<h1>第12章</h1><div id='content'>\(links)</div>"
+        #expect(try GenericNovelAdapter().parseChapterPage(loaded(html)).paragraphs.count == 3)
+        await #expect(throws: NovelParsingError.noReadableContent) {
+            try await NovelParserRegistry().parseChapterPage(loaded(html))
+        }
+        let prose = String(repeating: "他沿着山路继续前行，远处的灯火在雨中逐渐变得清晰。", count: 8)
+        let page = try await NovelParserRegistry().parseChapterPage(loaded(
+            "<h1>第12章</h1><div id='content'><p>\(prose)</p>\(links)</div>"))
+        #expect(page.imageURLs.isEmpty && page.paragraphs.contains(prose))
+    }
+
+    @Test func repeatedImageLoadingControlsAreNotNovelBody() async throws {
+        let controls = (1...18).map { _ in "<div><p>100%</p><span>加载失败， 点击重试</span><p>0%</p><span>正在加载图片， 请稍候</span></div>" }.joined()
+        let html = "<h1>001</h1><div id='content'>\(controls)</div>" + navigation
+        await #expect(throws: NovelParsingError.noReadableContent) {
+            try await NovelParserRegistry().parseChapterPage(loaded(html))
+        }
+        #expect(throws: NovelParsingError.noReadableContent) { try GenericNovelAdapter().parseChapterPage(loaded(html)) }
+        let reader = (1...18).map { index in
+            "<div><img width='800' height='1200' src='/pages/\(index).jpg'><p>100%</p><span>加载失败，点击重试</span></div>"
+        }.joined()
+        let manga = try await NovelParserRegistry().parseChapterPage(loaded("<h1>001</h1><div class='chapter-images'>\(reader)</div>" + navigation))
+        #expect(manga.imageURLs.count == 18 && manga.paragraphs.isEmpty)
+        let prose = String(repeating: "他看见屏幕显示加载失败，点击重试，却依旧没有找到任何线索。", count: 5)
+        let novel = try GenericNovelAdapter().parseChapterPage(loaded("<h1>第1章</h1><div id='content'><p>\(prose)</p></div>"))
+        #expect(novel.paragraphs == [prose])
+    }
+
     @Test(arguments: ["reader-images", "chapter-images", "comic-content", "viewer", "unfamiliar"])
     func renderedReaderShapesWorkWithoutHostRules(_ identity: String) throws {
         let html = "<h1>001</h1><div class='\(identity)'>\(sequence(18))</div>" + navigation

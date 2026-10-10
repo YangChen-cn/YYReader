@@ -8,15 +8,18 @@ struct GenericNovelAdapter: NovelSourceAdapter {
         try parseChapterPage(loaded, requiringTrustworthyText: false)
     }
 
-    func parseChapterPage(_ loaded: LoadedHTML, requiringTrustworthyText: Bool) throws -> ParsedChapterPage {
+    func parseChapterPage(_ loaded: LoadedHTML, requiringTrustworthyText: Bool,
+                          allowingNavigationHeavyText: Bool = false) throws -> ParsedChapterPage {
         let document = try HTMLParsingSupport.document(from: loaded)
+        try HTMLParsingSupport.removeImageLoadingControls(in: document)
         guard let candidate = try bestContentCandidate(in: document) else {
             throw NovelParsingError.noReadableContent
         }
         if requiringTrustworthyText {
             let textLength = try candidate.text().filter { !$0.isWhitespace }.count
             let linkLength = try candidate.select("a").text().filter { !$0.isWhitespace }.count
-            guard textLength - linkLength >= 60, linkLength <= textLength / 4 else {
+            guard textLength - linkLength >= 60,
+                  allowingNavigationHeavyText || linkLength <= textLength / 4 else {
                 throw NovelParsingError.noReadableContent
             }
         }

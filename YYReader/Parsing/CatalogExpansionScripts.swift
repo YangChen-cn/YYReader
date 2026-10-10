@@ -14,10 +14,13 @@ enum CatalogExpansionScripts {
             /^\\/(?:chapter|read)\\//.test(pathOf(a.href))).length;
     const initialCount = count();
     if (initialCount < 2) return false;
+    const safeButton = element => element.tagName === 'BUTTON' &&
+        (element.type === 'button' || (!element.hasAttribute('type') &&
+          !element.closest('form') && !element.hasAttribute('form')));
     const control = [...document.querySelectorAll('a, button')].find(element =>
         labels.has(normalize(element.textContent)) &&
         element.getClientRects().length > 0 &&
-        (element.tagName === 'BUTTON' && element.type === 'button' ||
+        (safeButton(element) ||
          (element.getAttribute('href') || '').toLowerCase().startsWith('javascript:')));
     if (!control) return false;
     control.click();

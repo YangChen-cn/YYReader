@@ -35,11 +35,10 @@ actor NovelParserRegistry {
                 do {
                     return try GenericMangaAdapter().parseChapterPage(document, requiringHighConfidence: true)
                 } catch NovelParsingError.noMangaImages {
-                    // The trustworthy-text gate rejects readable prose whose
-                    // container also holds navigation links. Manga evidence is
-                    // checked first, so the lenient novel parse can only win on
-                    // pages that really are text.
-                    page = try GenericNovelAdapter().parseChapterPage(document, requiringTrustworthyText: false)
+                    // Relax only link density for navigation-heavy novels;
+                    // keep the minimum non-link prose requirement after cleanup.
+                    page = try GenericNovelAdapter().parseChapterPage(document,
+                        requiringTrustworthyText: true, allowingNavigationHeavyText: true)
                 }
             }
         } else {

@@ -6,6 +6,18 @@ enum HTMLParsingSupport {
         try SwiftSoup.parse(loaded.html, loaded.finalURL.absoluteString)
     }
 
+    /// Image-loader labels may repeat enough times to look like prose. Remove
+    /// only standalone controls, never a wrapper containing actual images.
+    static func removeImageLoadingControls(in document: Document) throws {
+        for node in try document.select("div, span, p, button").array().reversed() {
+            let text = node.ownText().filter { !$0.isWhitespace && !"，,。.!！…:：;；".contains($0) }
+            guard !text.isEmpty, text.count <= 50 else { continue }
+            let status = text.range(of: "^(?:[0-9]{1,3}%)*(?:正在(?:加载|准备)(?:章节)?图片(?:请稍[候后])?|(?:图片)?加载失败(?:点击重试)?|请稍[候后])(?:[0-9]{1,3}%)*$", options: .regularExpression) != nil
+            let percentage = text.range(of: "^[0-9]{1,3}%$", options: .regularExpression) != nil
+            if status || percentage, try node.select("img").isEmpty() { try node.remove() }
+        }
+    }
+
     static func absoluteURL(for element: Element, relativeTo baseURL: URL) -> URL? {
         guard let href = try? element.attr("href"),
               !href.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,

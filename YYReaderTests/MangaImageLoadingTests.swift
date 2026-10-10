@@ -20,6 +20,7 @@ struct MangaImageLoadingTests {
         #expect(displayed.aspectRatio > 0)
         _ = await first.result
         #expect(MangaImageTestProtocol.requests(url) == 1)
+        #expect(await cache.hasPendingOriginalRequest == false)
         #expect(await cache.cachedThumbnailCount == 1)
         let cached = try await cache.image(at: url, referer: url)
         #expect(cached.data == displayed.data)
@@ -56,6 +57,27 @@ struct MangaImageLoadingTests {
         #expect(!(await cache.containsAll([slow])))
         try await cache.removeAll()
         #expect(await cache.cachedThumbnailCount == 0)
+    }
+
+    @Test func completingPredecessorKeepsQueuedOriginalAndReleasesFinishedResult() async throws {
+        let directory = URL.temporaryDirectory.appending(path: "MangaQueue-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = MangaImageCache(directory: directory, session: session())
+        let firstURL = URL(string: "https://images.example.com/first-\(UUID()).png")!
+        let secondURL = URL(string: "https://images.example.com/second-\(UUID()).png")!
+        let first = Task { try await cache.original(at: firstURL, referer: firstURL) }
+        for _ in 0..<100 {
+            if MangaImageTestProtocol.requests(firstURL) == 1 { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let second = Task { try await cache.original(at: secondURL, referer: secondURL) }
+        _ = try await first.value
+        #expect(await cache.hasPendingOriginalRequest)
+        let data = try await second.value
+        #expect(!data.isEmpty)
+        #expect(await cache.hasPendingOriginalRequest == false)
+        #expect(await cache.containsAll([firstURL, secondURL]))
+        #expect(MangaImageTestProtocol.requests(firstURL) == 1 && MangaImageTestProtocol.requests(secondURL) == 1)
     }
 
     private func session() -> URLSession {

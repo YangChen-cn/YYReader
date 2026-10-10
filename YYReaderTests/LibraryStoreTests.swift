@@ -10,6 +10,19 @@ private final class FetchFailureSwitch {
 
 @MainActor
 struct LibraryStoreTests {
+    @Test func failedImportEndsLoadingAndPresentsErrorWithoutAddingBook() async throws {
+        let container = try ModelContainer(for: Book.self, Chapter.self,
+                                           configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let store = LibraryStore(modelContext: container.mainContext,
+                                 coordinator: NovelImportCoordinator(loader: MockHTMLLoader(documents: [:])))
+        store.startImportURL("https://example.com/missing-comic/")
+        for _ in 0..<100 {
+            if store.presentedError != nil { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(store.presentedError != nil)
+        #expect(!store.isLoading && store.books.isEmpty)
+    }
     @Test
     func syncKeepsUnselectedBookshelfAndRestoresProgressOnlyWhenBookIsOpened() throws {
         let container = try ModelContainer(for: Book.self, Chapter.self,

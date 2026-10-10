@@ -52,6 +52,7 @@ struct MangaRegionScorer {
         for (index, image) in try dom.select("img").array().enumerated() {
             try image.attr("data-yyreader-dom-index", String(index))
         }
+        try HTMLParsingSupport.removeImageLoadingControls(in: dom)
         // Loading labels are controls, not prose. Never remove a wrapper that
         // actually contains an image.
         for control in try dom.select(".loading-content, .chapter-loading, .image-loading, .progress-container").array()
