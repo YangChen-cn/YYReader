@@ -32,6 +32,13 @@ struct MangaReaderView: View {
         false
         #endif
     }
+    private var allowsSpreads: Bool {
+        #if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .pad
+        #else
+        true
+        #endif
+    }
 
     init(store: LibraryStore, chapter: Chapter, showsControls: Bool = true,
          keyboardNavigationEnabled: Bool = true, imageCache: MangaImageCache = .shared, toggleControls: @escaping () -> Void = {}) {
@@ -77,8 +84,8 @@ struct MangaReaderView: View {
         let pages = urls
         let aspectRatios = pages.map { ratios[$0.absoluteString] }
         let layout = MangaPageLayout(aspectRatios: aspectRatios,
-            mode: desktop ? (MangaPageLayout.Mode(rawValue: layoutName) ?? .automatic) : .single,
-            firstPageAlone: firstPageAlone, viewport: canvasSize)
+            mode: MangaPageLayout.Mode(rawValue: layoutName) ?? .automatic,
+            firstPageAlone: firstPageAlone, viewport: canvasSize, allowsSpreads: allowsSpreads)
         let group = layout.group(containing: pageIndex)
         VStack(spacing: 0) {
             // Measure the space actually left by the native controls. Images
@@ -86,12 +93,16 @@ struct MangaReaderView: View {
             GeometryReader { geometry in
                 if usesPages {
                     #if os(iOS)
-                    MobileMangaPager(pages: pages, referer: referer, pageIndex: pageIndex,
-                        size: geometry.size, imageCache: imageCache,
-                        hasPrevious: store.chapterNavigationSnapshot.hasPrevious,
-                        hasNext: store.chapterNavigationSnapshot.hasNext,
-                        turn: { turn($0, layout: layout) }, toggleControls: toggleControls,
-                        didLoad: { index, ratio in imageLoaded(index: index, ratio: ratio, pages: pages) })
+                    if cachedRatiosReady || !allowsSpreads {
+                        MobileMangaPager(pages: pages, referer: referer, pageIndex: pageIndex,
+                            layout: layout, aspectRatios: aspectRatios, size: geometry.size, imageCache: imageCache,
+                            hasPrevious: store.chapterNavigationSnapshot.hasPrevious,
+                            hasNext: store.chapterNavigationSnapshot.hasNext,
+                            turn: { turn($0, layout: layout) }, toggleControls: toggleControls,
+                            didLoad: { index, ratio in imageLoaded(index: index, ratio: ratio, pages: pages) })
+                    } else {
+                        ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                     #else
                     if cachedRatiosReady {
                         pagedCanvas(pages: pages, layout: layout, group: group, size: geometry.size, referer: referer)
@@ -111,8 +122,8 @@ struct MangaReaderView: View {
         .task(id: prefetchKey(group: group)) {
             await prefetchImages(after: usesPages ? max(group.upperBound - 1, pageIndex) : pageIndex, pages: pages, referer: referer)
         }
-        .background(desktop && darkBackground ? Color(white: 0.10) : Color.clear)
-        .environment(\.colorScheme, desktop && darkBackground ? .dark : colorScheme)
+        .background(allowsSpreads && darkBackground ? Color(white: 0.10) : Color.clear)
+        .environment(\.colorScheme, allowsSpreads && darkBackground ? .dark : colorScheme)
         .task(id: chapter.contentRevision) {
             await refreshRatios(pages)
             if !Task.isCancelled { cachedRatiosReady = true }

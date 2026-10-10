@@ -1,10 +1,12 @@
 import SwiftUI
 
-/// A bounded three-page strip: only the current page and its neighbors are rendered.
+/// A bounded three-group strip: iPhone uses single pages, iPad can use spreads.
 struct MobileMangaPager: View {
     let pages: [URL]
     let referer: URL
     let pageIndex: Int
+    let layout: MangaPageLayout
+    let aspectRatios: [Double?]
     let size: CGSize
     let imageCache: MangaImageCache
     let hasPrevious: Bool
@@ -16,21 +18,23 @@ struct MobileMangaPager: View {
     @State private var offset = 0.0
     @State private var animationID: UUID?
     @State private var showingZoom = false
+    @State private var zoomPageIndex = 0
 
     var body: some View {
         HStack(spacing: 0) {
-            // Original indices keep the already displayed neighbor alive when
-            // it becomes the current page, avoiding three new image decodes per turn.
-            ForEach(Array((pageIndex - 1)...(pageIndex + 1)), id: \.self) { index in
+            // Group bounds retain neighboring images across a page turn.
+            ForEach(layout.neighboringGroups(containing: pageIndex), id: \.lowerBound) { group in
                 ZStack {
-                    if pages.indices.contains(index) {
+                    if group.count == 2 {
+                        spread(group)
+                    } else if let index = group.first, pages.indices.contains(index) {
                         MangaPageImage(url: pages[index], referer: referer, pageNumber: index + 1,
                             imageCache: imageCache, allowsZoom: false) { didLoad(index, $0) }
                             .padding(.vertical, 4)
                             .id(pages[index])
-                    } else if index < pageIndex && hasPrevious {
+                    } else if group.lowerBound < 0 && hasPrevious {
                         Label("上一话", systemImage: "chevron.left")
-                    } else if index > pageIndex && hasNext {
+                    } else if group.lowerBound >= pages.count && hasNext {
                         Label("下一话", systemImage: "chevron.right")
                     }
                 }
@@ -55,11 +59,13 @@ struct MobileMangaPager: View {
                     animateTurn(direction)
                 } else { resetOffset() }
             })
-        .simultaneousGesture(TapGesture(count: 2).exclusively(before: SpatialTapGesture())
+        .simultaneousGesture(SpatialTapGesture(count: 2).exclusively(before: SpatialTapGesture())
             .onEnded { value in
                 guard animationID == nil else { return }
                 switch value {
-                case .first: showingZoom = true
+                case let .first(tap):
+                    zoomPageIndex = imageIndex(at: tap.location.x)
+                    showingZoom = true
                 case let .second(tap):
                     switch MangaPageLayout.tap(at: tap.location.x, width: size.width) {
                     case .backward: turnImmediately(-1)
@@ -69,23 +75,57 @@ struct MobileMangaPager: View {
                 }
             })
         .fullScreenCover(isPresented: $showingZoom) {
-            if pages.indices.contains(pageIndex) {
-                MobileMangaZoomView(url: pages[pageIndex], referer: referer,
-                                    pageNumber: pageIndex + 1, imageCache: imageCache)
+            if pages.indices.contains(zoomPageIndex) {
+                MobileMangaZoomView(url: pages[zoomPageIndex], referer: referer,
+                                    pageNumber: zoomPageIndex + 1, imageCache: imageCache)
             }
         }
         .onChange(of: pageIndex) { _, _ in cancelTransition() }
         .onChange(of: size) { _, _ in cancelTransition() }
+        .onChange(of: layout) { _, _ in cancelTransition() }
         .onDisappear { cancelTransition() }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("manga.canvas")
         .accessibilityAction(named: "上一页") { turnImmediately(-1) }
         .accessibilityAction(named: "下一页") { turnImmediately(1) }
-        .accessibilityAction(named: "放大图片") { showingZoom = true }
+        .accessibilityAction(named: "放大图片") { zoomPageIndex = pageIndex; showingZoom = true }
+    }
+
+    private func spread(_ group: Range<Int>) -> some View {
+        let ratios = group.map { aspectRatios[$0] ?? 0.7 }
+        let height = spreadHeight(ratios)
+        return HStack(spacing: 0) {
+            ForEach(Array(group), id: \.self) { index in
+                if index > group.lowerBound {
+                    Rectangle().fill(Color.primary.opacity(0.18))
+                        .frame(width: 1, height: height).frame(width: 16)
+                        .accessibilityHidden(true)
+                }
+                MangaPageImage(url: pages[index], referer: referer, pageNumber: index + 1,
+                    imageCache: imageCache, allowsZoom: false) { didLoad(index, $0) }
+                    .frame(width: height * ratios[index - group.lowerBound], height: height)
+                    .id(pages[index])
+                    .accessibilityAction(named: "放大图片") { zoomPageIndex = index; showingZoom = true }
+            }
+        }
+    }
+
+    private func spreadHeight(_ ratios: [Double]) -> Double {
+        MangaPageLayout.fittedHeight(ratios: ratios,
+            viewport: CGSize(width: max(1, size.width - 16), height: max(1, size.height - 8)), gap: 16)
+    }
+
+    private func imageIndex(at x: Double) -> Int {
+        let group = layout.group(containing: pageIndex)
+        guard group.count == 2 else { return pageIndex }
+        let ratios = group.map { aspectRatios[$0] ?? 0.7 }
+        let height = spreadHeight(ratios)
+        let left = (size.width - height * ratios.reduce(0, +) - 16) / 2
+        return x < left + height * ratios[0] + 8 ? group.lowerBound : group.lowerBound + 1
     }
 
     private func canTurn(_ direction: Int) -> Bool {
-        pages.indices.contains(pageIndex + direction) || (direction < 0 ? hasPrevious : hasNext)
+        layout.adjacentIndex(from: pageIndex, direction: direction) != nil || (direction < 0 ? hasPrevious : hasNext)
     }
 
     private func animateTurn(_ direction: Int) {

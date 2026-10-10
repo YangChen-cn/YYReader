@@ -32,6 +32,33 @@ struct MangaPageLayoutTests {
         #expect(MangaPageLayout(aspectRatios: [], mode: .double, firstPageAlone: true, viewport: wide).groups.isEmpty)
     }
 
+    @Test func tabletRotationAndPhonePolicyKeepTheSameRawImage() {
+        let ratios: [Double?] = Array(repeating: 0.7, count: 8)
+        let landscape = CGSize(width: 1194, height: 760)
+        let portrait = CGSize(width: 834, height: 1100)
+        let tablet = MangaPageLayout(aspectRatios: ratios, mode: .automatic, firstPageAlone: true,
+                                     viewport: landscape, allowsSpreads: true)
+        let rotated = MangaPageLayout(aspectRatios: ratios, mode: .automatic, firstPageAlone: true,
+                                      viewport: portrait, allowsSpreads: true)
+        #expect(tablet.group(containing: 4) == 3..<5)
+        #expect(rotated.group(containing: 4) == 4..<5)
+        #expect(tablet.adjacentIndex(from: 4, direction: 1) == 5)
+        #expect(tablet.adjacentIndex(from: 4, direction: -1) == 1)
+        let phone = MangaPageLayout(aspectRatios: ratios, mode: .double, firstPageAlone: true,
+                                    viewport: landscape, allowsSpreads: false)
+        #expect(phone.groups == (0..<8).map { $0..<$0 + 1 })
+    }
+
+    @Test func neighboringSpreadsStayBoundedAndUseChapterBoundarySlots() {
+        let layout = MangaPageLayout(aspectRatios: Array(repeating: 0.7, count: 8), mode: .double,
+                                     firstPageAlone: true, viewport: wide)
+        #expect(layout.neighboringGroups(containing: 0) == [-1..<0, 0..<1, 1..<3])
+        #expect(layout.neighboringGroups(containing: 4) == [1..<3, 3..<5, 5..<7])
+        #expect(layout.neighboringGroups(containing: 7) == [5..<7, 7..<8, 8..<9])
+        #expect(layout.adjacentIndex(from: 7, direction: 1) == nil)
+        #expect(layout.neighboringGroups(containing: 4).reduce(0) { $0 + $1.count } == 6)
+    }
+
     @Test func reflowAndNewlyKnownLandscapeKeepTheRequestedOriginalPage() {
         let before = MangaPageLayout(aspectRatios: Array(repeating: nil, count: 8), mode: .double,
                                      firstPageAlone: true, viewport: wide)

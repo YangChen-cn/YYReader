@@ -16,6 +16,9 @@ struct MobileSettingsView: View {
     @AppStorage(ReaderPreferenceKeys.continuousReading) private var continuous = false
     @AppStorage(ReaderPreferenceKeys.pageTurnMode) private var pageTurnMode = ReaderPageTurnMode.verticalScroll.rawValue
     @AppStorage(ReaderPreferenceKeys.mangaPageTurnMode) private var mangaPageTurnMode = ReaderPageTurnMode.mangaDefault.rawValue
+    @AppStorage(ReaderPreferenceKeys.mangaPageLayout) private var mangaLayout = MangaPageLayout.Mode.automatic.rawValue
+    @AppStorage(ReaderPreferenceKeys.mangaFirstPageAlone) private var mangaFirstPageAlone = true
+    @AppStorage(ReaderPreferenceKeys.mangaDarkBackground) private var mangaDarkBackground = false
     @AppStorage(ReaderPreferenceKeys.prefetchNext) private var prefetch = true
     @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentation = ReaderPresentationMode.normal.rawValue
     @AppStorage(ReaderPreferenceKeys.academicColumnMode) private var columns = AcademicColumnMode.double.rawValue
@@ -27,6 +30,19 @@ struct MobileSettingsView: View {
         NavigationStack {
             Form {
                 readingOptions
+                if UIDevice.current.userInterfaceIdiom == .pad, readingManga != false {
+                    Section("显示选项") {
+                        if mangaPageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue {
+                            Picker("漫画布局", selection: $mangaLayout) {
+                                ForEach(MangaPageLayout.Mode.allCases) { Text($0.title).tag($0.rawValue) }
+                            }
+                            .pickerStyle(.segmented)
+                            .accessibilityIdentifier("manga.layout")
+                            Toggle("首图单页", isOn: $mangaFirstPageAlone)
+                        }
+                        Toggle("深灰阅读背景", isOn: $mangaDarkBackground)
+                    }
+                }
                 Section("主题与字体") {
                     Picker("主题", selection: $theme) {
                         ForEach(ReaderTheme.allCases) { Text($0.title).tag($0.rawValue) }

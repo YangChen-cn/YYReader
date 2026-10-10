@@ -10,8 +10,8 @@ struct MangaPageLayout: Equatable, Sendable {
 
     let groups: [Range<Int>]
 
-    init(aspectRatios: [Double?], mode: Mode, firstPageAlone: Bool, viewport: CGSize) {
-        let double = mode == .double || (mode == .automatic && viewport.width >= 780 && viewport.width >= viewport.height * 1.15)
+    init(aspectRatios: [Double?], mode: Mode, firstPageAlone: Bool, viewport: CGSize, allowsSpreads: Bool = true) {
+        let double = allowsSpreads && (mode == .double || (mode == .automatic && viewport.width >= 780 && viewport.width >= viewport.height * 1.15))
         var result: [Range<Int>] = []
         var index = 0
         while index < aspectRatios.count {
@@ -33,6 +33,19 @@ struct MangaPageLayout: Equatable, Sendable {
         guard let position = groups.firstIndex(where: { $0.contains(index) }),
               groups.indices.contains(position + direction) else { return nil }
         return groups[position + direction].lowerBound
+    }
+
+    /// Three stable slots, including chapter-boundary placeholders. Never pulls
+    /// images from another chapter just to fill a spread.
+    func neighboringGroups(containing index: Int) -> [Range<Int>] {
+        guard let position = groups.firstIndex(where: { $0.contains(index) }) else { return [] }
+        let total = groups.last?.upperBound ?? 0
+        return [-1, 0, 1].map { offset in
+            let neighbor = position + offset
+            if neighbor < 0 { return -1..<0 }
+            if neighbor >= groups.count { return total..<total + 1 }
+            return groups[neighbor]
+        }
     }
 
     static func fittedHeight(ratios: [Double], viewport: CGSize, gap: Double = 4) -> Double {
