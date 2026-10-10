@@ -562,6 +562,24 @@ html[data-theme="dark"] .icon-btn .icon-moon { display: none; }
 .card-wide { grid-column: span 2; }
 @media (max-width: 900px) { .card-wide { grid-column: span 1; } }
 
+/* 全宽截图（自带设备边框的实机画面） */
+.shot { margin: 32px 0 0; padding: 0; }
+.shot img {
+  width: 100%;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  background: var(--surface);
+}
+.shot figcaption {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  text-align: center;
+  max-width: 46em;
+  margin-inline: auto;
+}
+
 .chip-list { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 16px 0 0; }
 .chip-list li {
   padding: 6px 14px;
