@@ -50,9 +50,11 @@ struct AddURLSheet: View {
     }
 
     private func submit() {
-        guard !submitting else { return }
+        // Return also submits, so the empty-input guard cannot live on the button
+        // alone: an empty field would otherwise be forwarded and dismissed.
+        let submittedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !submittedURL.isEmpty, !submitting else { return }
         submitting = true
-        let submittedURL = url
         onSubmit(submittedURL, contentType)
         dismiss()
     }

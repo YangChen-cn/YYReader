@@ -185,9 +185,17 @@ final class AppUpdateController {
             // The helper stages and verifies before requesting a normal app quit.
             // AppTerminationDelegate flushes the most recent reading progress then.
             installationTask = Task { [weak self, service] in
+                // A helper that never reports back must not leave isInstalling set forever.
+                // Bound the wait so the failure path can reset the state and allow a retry.
+                let deadline = Date.now.addingTimeInterval(300)
                 while !Task.isCancelled {
                     do {
                         try await Task.sleep(for: .seconds(1))
+                        if Date.now >= deadline {
+                            self?.errorMessage = "安装助手长时间未响应，请重试或从发布页面下载安装。"
+                            self?.isInstalling = false
+                            return
+                        }
                         if let message = try await service.installationError(archive) {
                             self?.errorMessage = message
                             self?.isInstalling = false

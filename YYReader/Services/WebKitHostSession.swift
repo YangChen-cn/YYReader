@@ -26,6 +26,9 @@ final class WebKitHostSession: NSObject {
     private var activeTimeoutTask: Task<Void, Never>?
     @ObservationIgnored
     private var inspectingLoadID: UUID?
+    /// Nodes resolved for the page currently loaded, dropped when a new page starts.
+    @ObservationIgnored
+    private var resolvedImageNodes: [String: ResolvedImageNode] = [:]
     @ObservationIgnored
     private var documentIsReady = false
     @ObservationIgnored
@@ -223,6 +226,14 @@ final class WebKitHostSession: NSObject {
             var nodeID = ""
             var expectedBlobURL = ""
             if let source {
+                // Reading a chapter resolves every page against the same loaded
+                // document, so the node found for a page is affirmed cheaply before
+                // paying for another clone, parse and region-scoring pass. A missing
+                // or changed node falls through to the full re-score below.
+                if attempt == 0, let resolved = await affirmedNode(for: imageURL, chapterURL: chapterURL, loadID: loadID) {
+                    if let url = resolved.directURL { return .address(url) }
+                    domIndex = resolved.domIndex; nodeID = resolved.nodeID; expectedBlobURL = resolved.expectedBlobURL
+                } else {
                 let snapshot = try await webView.evaluateJavaScript(MangaSnapshotScripts.capture)
                 guard activeLoad?.id == loadID, let html = snapshot as? String, let finalURL = webView.url else {
                     throw HTMLLoadError.cancelled
@@ -233,7 +244,14 @@ final class WebKitHostSession: NSObject {
                 if let expectedCount, expectedCount != location.pageCount { throw NovelParsingError.noMangaImages }
                 expectedCount = location.pageCount
                 if let url = location.directURL { return .address(url) }
+                resolvedImageNodes[imageURL.absoluteString] = ResolvedImageNode(
+                    pageURL: finalURL,
+                    chapterURL: chapterURL.absoluteString,
+                    nodeID: location.nodeID,
+                    location: location
+                )
                 domIndex = location.domIndex; nodeID = location.nodeID; expectedBlobURL = location.expectedBlobURL
+                }
             }
             do {
                 let result = try await webView.callAsyncJavaScript(MangaBlobScripts.readImage,
@@ -254,6 +272,35 @@ final class WebKitHostSession: NSObject {
             }
         }
         throw HTMLLoadError.invalidResponse
+    }
+
+    /// Where a page of the current chapter was found in the loaded document.
+    private struct ResolvedImageNode {
+        let pageURL: URL
+        let chapterURL: String
+        let nodeID: String
+        let location: MangaBlobRegionLocator.Location
+    }
+
+    /// Affirm a previously resolved page without re-scoring the document: the
+    /// document must still be the one that was scored, and the node must still
+    /// exist with the source the reader was told about.
+    private func affirmedNode(for imageURL: URL, chapterURL: URL, loadID: UUID) async -> MangaBlobRegionLocator.Location? {
+        guard let resolved = resolvedImageNodes[imageURL.absoluteString],
+              let pageURL = webView.url,
+              resolved.pageURL == pageURL,
+              resolved.chapterURL == chapterURL.absoluteString,
+              !resolved.nodeID.isEmpty,
+              activeLoad?.id == loadID else { return nil }
+        let current = try? await webView.callAsyncJavaScript(
+            MangaBlobScripts.confirmNode,
+            arguments: ["nodeID": resolved.nodeID],
+            in: nil,
+            contentWorld: .page
+        )
+        guard activeLoad?.id == loadID, let source = current as? String, !source.isEmpty else { return nil }
+        if !resolved.location.expectedBlobURL.isEmpty, source != resolved.location.expectedBlobURL { return nil }
+        return resolved.location
     }
 
     private func finish(_ id: UUID) {
@@ -311,6 +358,8 @@ final class WebKitHostSession: NSObject {
 extension WebKitHostSession: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation?) {
         guard activeLoad != nil else { return }
+        // A new document invalidates every node resolved in the previous one.
+        resolvedImageNodes.removeAll()
         activeNavigation = navigation
         documentIsReady = false
         failureMessage = nil

@@ -280,7 +280,13 @@ struct MangaReaderView: View {
         savePosition(total: urls.count)
     }
 
-    private var chapterURL: URL { URL(string: chapter.sourceURL)! }
+    private var chapterURL: URL {
+        if let url = URL(string: chapter.sourceURL) { return url }
+        // A legacy row can hold an address that no longer parses; the reader must
+        // still open instead of trapping on the referer.
+        if let catalog = chapter.book?.catalogURL, let url = URL(string: catalog) { return url }
+        return URL(string: "https://www.guazimanhua.com/")!
+    }
     private func requestedPageIndex(total: Int) -> Int? {
         Self.resolvedPageIndex(request: store.readerScrollRequest, chapter: chapter, total: total)
     }

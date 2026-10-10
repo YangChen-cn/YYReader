@@ -1497,7 +1497,11 @@ final class LibraryStore {
         )
         if book.modelContext == nil { modelContext.insert(book) }
 
-        book.importContentType = result.contentType.rawValue
+        // Re-importing a chapter with the sheet left on 自动识别 must not downgrade
+        // the type the book was imported with; only an explicit choice replaces it.
+        if result.contentType != .auto {
+            book.importContentType = result.contentType.rawValue
+        }
         book.resolvedContentType = result.imageURLs.isEmpty ? BookContentType.novel.rawValue : BookContentType.manga.rawValue
         book.title = result.bookTitle
         book.author = result.author

@@ -38,7 +38,8 @@ actor MangaImageCache {
     }
     private var thumbnailTasks: [String: ThumbnailWork] = [:]
     /// Bumped by `removeAll()` so work started before a cache clear cannot
-    /// repopulate the memory cache afterwards.
+    /// repopulate the memory cache or the disk directory afterwards.
+    private var generation = 0
     private var thumbnailGeneration = 0
 
     init(
@@ -230,10 +231,13 @@ actor MangaImageCache {
     func removeAll() async throws {
         for work in thumbnailTasks.values { work.task.cancel() }
         thumbnailTasks.removeAll()
+        // Detach the queue before awaiting: a request arriving meanwhile must not
+        // chain onto the cancelled task and then be orphaned by `tail = nil`.
         let running = tail
+        tail = nil
         running?.cancel()
         _ = await running?.result
-        tail = nil
+        generation &+= 1
         thumbnailGeneration &+= 1
         thumbnails.removeAll()
         thumbnailBytes = 0
@@ -265,6 +269,7 @@ actor MangaImageCache {
 
     private func fetch(_ url: URL, referer: URL) async throws -> Data {
         if let data = try cachedData(at: url) { return data }
+        let writeGeneration = generation
         guard MangaBlobSource(url: url) != nil || ["https", "http"].contains(url.scheme?.lowercased() ?? "") else {
             throw HTMLLoadError.invalidResponse
         }
@@ -290,8 +295,12 @@ actor MangaImageCache {
         guard data.count <= 30 * 1024 * 1024,
               let source = CGImageSourceCreateWithData(data as CFData, nil),
               CGImageSourceGetCount(source) > 0 else { throw HTMLLoadError.invalidResponse }
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try data.write(to: fileURL(url), options: .atomic)
+        // A cache clear that happened while this image was downloading keeps the
+        // image for its caller, but must not write it back into the fresh directory.
+        if writeGeneration == generation {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try data.write(to: fileURL(url), options: .atomic)
+        }
         return data
     }
 

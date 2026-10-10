@@ -82,7 +82,10 @@ final class Chapter {
 
     var isAvailableOffline: Bool {
         if book?.preferredContentType == .novel && isManga { return false }
-        if book?.preferredContentType == .manga || book?.isManga == true {
+        // A legacy book classified as manga by its host can still hold text
+        // chapters, so the heuristic only decides for chapters that really carry
+        // images; otherwise a cached body text would report as not offline.
+        if book?.preferredContentType == .manga || (book?.isManga == true && isManga) {
             return isManga && imagesCachedAt != nil
         }
         return isManga ? imagesCachedAt != nil : cachedAt != nil

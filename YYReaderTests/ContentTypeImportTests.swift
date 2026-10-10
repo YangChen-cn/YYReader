@@ -141,6 +141,37 @@ struct ContentTypeImportTests {
         #expect(book.chapters.first?.imageSourceURLs.count == 1)
     }
 
+    @Test func reimportingWithAutomaticKeepsTheChosenContentType() async throws {
+        let container = try ModelContainer(for: Book.self, Chapter.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let loader = MockHTMLLoader(documents: [catalog: catalogHTML, first: chapter(1), second: chapter(2)])
+        let store = LibraryStore(modelContext: container.mainContext, coordinator: NovelImportCoordinator(loader: loader))
+
+        store.startImportURL(catalog.absoluteString, contentType: .manga)
+        while store.canCancelLoading || store.isLoading { try await Task.sleep(for: .milliseconds(10)) }
+        let book = try #require(store.selectedBook)
+        #expect(book.preferredContentType == .manga)
+
+        // Re-importing the same book with the sheet left on 自动识别 must not
+        // silently downgrade the type the user chose.
+        store.startImportURL(catalog.absoluteString)
+        while store.canCancelLoading || store.isLoading { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(store.books.count == 1)
+        #expect(store.selectedBook?.preferredContentType == .manga)
+    }
+
+    @Test func legacyMangaBookStillReportsCachedTextChaptersAsOffline() throws {
+        let book = Book(title: "旧漫画书", author: "作者", sourceHost: "guazimanhua.com",
+                        catalogURL: "https://www.guazimanhua.com/comic.php?id=25319")
+        let chapter = Chapter(sourceURL: "https://www.guazimanhua.com/manhua/25319/1.html", title: "第1话",
+                              sortIndex: 1, bodyText: "旧版导入的文字正文，用于验证离线徽标。", cachedAt: .now,
+                              book: book)
+
+        // The host heuristic still classifies the book as manga, but this chapter
+        // holds text: its cached body is what makes it offline-readable.
+        #expect(book.isManga && !chapter.isManga)
+        #expect(chapter.isAvailableOffline)
+    }
+
     @Test func storeUsesPersistedPreferenceForUncachedChapterAndCatalogRefresh() async throws {
         let container = try ModelContainer(for: Book.self, Chapter.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         let loader = MockHTMLLoader(documents: [catalog: catalogHTML, first: chapter(1), second: chapter(2)])

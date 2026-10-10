@@ -120,12 +120,16 @@ struct GenericMangaAdapter: NovelSourceAdapter {
             || (url.path.hasPrefix(prefix) && url.path.range(of: "/[0-9]+\\.html$", options: .regularExpression) != nil)
     }
 
+    /// In-chapter pagination, in both directions. A `rel="prev"` link labelled
+    /// 上一页 points at the previous page of this chapter, not at a chapter.
+    private static let paginationLabels: Set<String> = ["上一页", "上页", "下一页", "下页", "Previous Page", "Next Page"]
+
     private func navigation(in dom: Document, labels: Set<String>, rel: String? = nil, base: URL) throws -> URL? {
         for link in try dom.select("a[href]").array() {
             let visible = try link.text().trimmingCharacters(in: .whitespacesAndNewlines)
             let text = visible.isEmpty ? try link.attr("title") : visible
             let relationship = try link.attr("rel").split(separator: " ")
-            guard labels.contains(text) || (labels.contains("目录") && text.hasSuffix("完整章节目录")) || (rel.map { relationship.contains(Substring($0)) } == true && !["下一页", "下页", "Next Page"].contains(text)),
+            guard labels.contains(text) || (labels.contains("目录") && text.hasSuffix("完整章节目录")) || (rel.map { relationship.contains(Substring($0)) } == true && !Self.paginationLabels.contains(text)),
                   let url = HTMLParsingSupport.absoluteURL(for: link, relativeTo: base),
                   HTMLParsingSupport.isSameOrigin(url, as: base), url != base else { continue }
             return url

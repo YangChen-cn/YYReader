@@ -1,6 +1,15 @@
 /// Reads a single image already displayed by the normal public reader. It never
 /// decrypts data, makes CDN requests, or exports the whole chapter as base64.
 enum MangaBlobScripts {
+    /// Cheap affirmation before a full re-score: is the node resolved earlier
+    /// still present and still showing the same source? Returns that source, or
+    /// null when the node is gone, which falls back to re-scoring the document.
+    static let confirmNode = #"""
+    (() => {
+      const node = [...document.querySelectorAll('img')].find(image => image.getAttribute('data-yyreader-node') === nodeID);
+      return node ? (node.currentSrc || node.src || '') : null;
+    })()
+    """#
     static let readImage = #"""
     const normalized = value => { const u = new URL(value, location.href); u.hash = ''; return u.href; };
     const expectedChapter = normalized(chapterURL);

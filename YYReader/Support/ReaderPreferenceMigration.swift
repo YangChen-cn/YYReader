@@ -1,7 +1,7 @@
 import Foundation
 
 enum ReaderPreferenceMigration {
-    static let currentVersion = 4
+    static let currentVersion = 5
 
     static func migrateIfNeeded(defaults: UserDefaults = .standard) {
         let storedVersion = defaults.integer(forKey: ReaderPreferenceKeys.preferenceVersion)
@@ -40,6 +40,17 @@ enum ReaderPreferenceMigration {
                 fontSize: fontSize,
                 defaults: defaults
             )
+        }
+
+        if storedVersion < 5 {
+            // Manga page turning moved to its own key with a platform default. Only
+            // an explicit earlier choice is carried over: @AppStorage writes a key
+            // only when the user changes it, so an unwritten key means "untouched".
+            if defaults.object(forKey: ReaderPreferenceKeys.mangaPageTurnMode) == nil,
+               let previous = defaults.string(forKey: ReaderPreferenceKeys.pageTurnMode),
+               ReaderPageTurnMode(rawValue: previous) != nil {
+                defaults.set(previous, forKey: ReaderPreferenceKeys.mangaPageTurnMode)
+            }
         }
 
         defaults.set(currentVersion, forKey: ReaderPreferenceKeys.preferenceVersion)

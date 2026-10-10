@@ -6,9 +6,12 @@ enum CatalogExpansionScripts {
     static let expand = """
     const normalize = text => text.replace(/[\\s\\[\\]【】]/g, '');
     const labels = new Set(['展开完整列表', '展开完整目录', '展开全部章节', '加载全部章节', '加载更多章节']);
+    // An unresolvable href would otherwise throw inside the filter and abort the
+    // whole expansion, which the caller reports as a failed page load.
+    const pathOf = href => { try { return new URL(href, location.href).pathname; } catch (error) { return ''; } };
     const count = () => [...document.querySelectorAll('a[href]')]
         .filter(a => /第.+[章回节節话話]/.test(a.textContent) ||
-            /^\\/(?:chapter|read)\\//.test(new URL(a.href, location.href).pathname)).length;
+            /^\\/(?:chapter|read)\\//.test(pathOf(a.href))).length;
     const initialCount = count();
     if (initialCount < 2) return false;
     const control = [...document.querySelectorAll('a, button')].find(element =>
