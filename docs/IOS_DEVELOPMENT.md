@@ -37,7 +37,7 @@ iOS 直接编译 `YYReader/Models`、`Parsing`、`Services`、`Stores`、`Suppor
 ./script/build_ios.sh test
 ```
 
-测试包含共享业务单元测试、屏幕分页测试与不依赖网络的 XCUITest：本地书籍进入阅读器/设置、不支持 URL 的错误恢复，以及切换翻页方式、左右手势、字号重新分页和跨章。UI 测试使用 `--ui-testing` 的内存书架；分页测试另加 `--ui-testing-pagination` 使用自造长正文，`--ui-testing-large-catalog` 使用5000章目录且只缓存当前章，验证切换与工具栏不会卡在分页中。`--ui-testing-uncached` 则直接以左右翻页打开未缓存章（延迟模拟下载）和仅在磁盘缓存的章，验证正文就绪后不再停留在“正在准备章节”。Debug 可以传 `--preview-url <小说网址>` 预先导入实际书籍用于人工验收；该入口不进入 Release。真实网站、云文件提供商和主观视觉效果仍需手动验收。
+测试包含共享业务单元测试与屏幕分页测试，不包含界面自动化用例：界面行为一律人工验收。人工验收可使用 `--ui-testing` 的内存书架；分页场景另加 `--ui-testing-pagination` 使用自造长正文，`--ui-testing-large-catalog` 使用5000章目录且只缓存当前章，验证切换与工具栏不会卡在分页中。`--ui-testing-uncached` 则直接以左右翻页打开未缓存章（延迟模拟下载）和仅在磁盘缓存的章，验证正文就绪后不再停留在“正在准备章节”。Debug 可以传 `--preview-url <小说网址>` 预先导入实际书籍用于人工验收；该入口不进入 Release。真实网站、云文件提供商和主观视觉效果仍需手动验收。
 
 多台模拟器时可通过 `YYREADER_SIMULATOR_ID=<UDID>` 指定设备。模拟器不需要 Apple 签名证书。
 

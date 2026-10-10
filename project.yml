@@ -223,18 +223,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.yyreader.ios.tests
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_STYLE: Automatic
-  YYReaderIOSUITests:
-    type: bundle.ui-testing
-    platform: iOS
-    sources:
-      - path: YYReaderIOSUITests
-    dependencies:
-      - target: YYReaderIOS
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.yyreader.ios.uitests
-        GENERATE_INFOPLIST_FILE: YES
-        CODE_SIGN_STYLE: Automatic
 schemes:
   YYReader:
     build:
@@ -250,9 +238,7 @@ schemes:
       targets:
         YYReaderIOS: all
         YYReaderIOSTests: [test]
-        YYReaderIOSUITests: [test]
     test:
       gatherCoverageData: true
       targets:
         - YYReaderIOSTests
-        - YYReaderIOSUITests

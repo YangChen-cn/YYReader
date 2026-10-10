@@ -79,7 +79,6 @@
 		2BF79F5ABE6F7ACEE04013B4 /* MangaPageLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41AF6D9168F10575B115DFF0 /* MangaPageLayout.swift */; };
 		2C17DE1F36B6D7B95442F124 /* ChapterLoadResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7D5F292EE7DD72DA68E2645 /* ChapterLoadResult.swift */; };
 		2C29E058F7FC7A3A44B37907 /* BookshelfTransferBook.swift in Sources */ = {isa = PBXBuildFile; fileRef = C94CF1D85937DAEE4CF2FD1A /* BookshelfTransferBook.swift */; };
-		2C631F3B2A0906D317F2A465 /* MobileReaderUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5443E841FC7F96B929CE288B /* MobileReaderUITests.swift */; };
 		2D0D6A607F258E5614D2B557 /* BookshelfTransferDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E6EC96B0D77427332191BD /* BookshelfTransferDocument.swift */; };
 		2E0A56EF5E46348F2CA7173B /* BookshelfTransferPreviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 741FDEEC4FCA8EB97C7261EC /* BookshelfTransferPreviewSheet.swift */; };
 		2E76633748A6507737E8B08B /* NovelImportCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBF8749F98DE0A2712F05A9D /* NovelImportCoordinatorTests.swift */; };
@@ -447,13 +446,6 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		8FD150A1051CDAB1415A9728 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = FEFD8B21F08E6687963FF449 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = A9E5BF380F3D4028FFA7449B;
-			remoteInfo = YYReaderIOS;
-		};
 		9DA4F2E230B52A028E1F7FE9 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = FEFD8B21F08E6687963FF449 /* Project object */;
@@ -575,7 +567,6 @@
 		51A38D4B668B847545406232 /* AcademicPaperPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcademicPaperPlannerTests.swift; sourceTree = "<group>"; };
 		523309B052311E3D0336B167 /* LocalTextImportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTextImportSheet.swift; sourceTree = "<group>"; };
 		5403080B9719FF70295F8E29 /* BookshelfTransferError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookshelfTransferError.swift; sourceTree = "<group>"; };
-		5443E841FC7F96B929CE288B /* MobileReaderUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileReaderUITests.swift; sourceTree = "<group>"; };
 		55C6EA41EC8E99B1BF94B859 /* FolderSyncController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderSyncController.swift; sourceTree = "<group>"; };
 		55E1B7061DB5103ED708DC6E /* MobileLibraryPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileLibraryPreview.swift; sourceTree = "<group>"; };
 		57BDD4722C2FA5C218DDA134 /* SyncBookRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncBookRecord.swift; sourceTree = "<group>"; };
@@ -589,7 +580,6 @@
 		5D08DB90C7789698A8F4EF47 /* LoadedHTML.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadedHTML.swift; sourceTree = "<group>"; };
 		5D3ACFE32D00300379637DFD /* MobileReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileReaderView.swift; sourceTree = "<group>"; };
 		5E72C3EC8C0485C6BED3793F /* CatalogExpansionScriptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatalogExpansionScriptTests.swift; sourceTree = "<group>"; };
-		5E8DEBF84ADDAA6A4D0DA5CC /* YYReaderIOSUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = YYReaderIOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5F75B2D2568DD36D93DE7EFF /* ReaderCommandActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderCommandActions.swift; sourceTree = "<group>"; };
 		5FCB04ED8E6E3CA1ED28120F /* SyncError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncError.swift; sourceTree = "<group>"; };
 		60C257C3334253FDA545E767 /* WebKitHostSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebKitHostSession.swift; sourceTree = "<group>"; };
@@ -831,7 +821,6 @@
 				52E5D1E7E2E7A3C4F5993070 /* shared */,
 				1D1647A7C434E42401B5E80A /* YYReader */,
 				E51AC92074DDA0B2A2D9C3C9 /* YYReaderIOS */,
-				99B88AA3BB3D04735476F52F /* YYReaderIOSUITests */,
 				CBF7B83B1202E89BA012E6E0 /* YYReaderTests */,
 				971448060BAFE6595DB87ADE /* YYReaderUpdater */,
 				BF648321E521A205D329D569 /* Products */,
@@ -1028,14 +1017,6 @@
 			path = YYReaderUpdater;
 			sourceTree = "<group>";
 		};
-		99B88AA3BB3D04735476F52F /* YYReaderIOSUITests */ = {
-			isa = PBXGroup;
-			children = (
-				5443E841FC7F96B929CE288B /* MobileReaderUITests.swift */,
-			);
-			path = YYReaderIOSUITests;
-			sourceTree = "<group>";
-		};
 		9ABC77BD60483A277B627286 /* generic-parser */ = {
 			isa = PBXGroup;
 			children = (
@@ -1102,7 +1083,6 @@
 				A853C78203225CD1EE19A454 /* YYReader.app */,
 				48C83535C92E5BDFCA92C7E8 /* YYReader.app */,
 				8360068CC5CA9D777CFFEC34 /* YYReaderIOSTests.xctest */,
-				5E8DEBF84ADDAA6A4D0DA5CC /* YYReaderIOSUITests.xctest */,
 				F457E711268710ACEC351E87 /* YYReaderTests.xctest */,
 				428D3BF5C91B8CFEB68B7856 /* YYReaderUpdater.app */,
 			);
@@ -1230,24 +1210,6 @@
 			productReference = 428D3BF5C91B8CFEB68B7856 /* YYReaderUpdater.app */;
 			productType = "com.apple.product-type.application";
 		};
-		5FEAC871080266D62DDB7D02 /* YYReaderIOSUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = A924D642EE802A915C9DDBD4 /* Build configuration list for PBXNativeTarget "YYReaderIOSUITests" */;
-			buildPhases = (
-				79ED9D97AA27295F0BAE4171 /* Sources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				2BC0F3CFF9CCE6058C400F77 /* PBXTargetDependency */,
-			);
-			name = YYReaderIOSUITests;
-			packageProductDependencies = (
-			);
-			productName = YYReaderIOSUITests;
-			productReference = 5E8DEBF84ADDAA6A4D0DA5CC /* YYReaderIOSUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
-		};
 		9E86819502DC9CE666CC54CB /* YYReaderTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = D7921721BB0C4EA93C2B10FD /* Build configuration list for PBXNativeTarget "YYReaderTests" */;
@@ -1324,10 +1286,6 @@
 					48BF732905C7C51B6B5AD8FA = {
 						ProvisioningStyle = Automatic;
 					};
-					5FEAC871080266D62DDB7D02 = {
-						ProvisioningStyle = Automatic;
-						TestTargetID = A9E5BF380F3D4028FFA7449B;
-					};
 					A9E5BF380F3D4028FFA7449B = {
 						ProvisioningStyle = Automatic;
 					};
@@ -1356,7 +1314,6 @@
 				EC92EF3A20F2F3298EC3D8A5 /* YYReader */,
 				A9E5BF380F3D4028FFA7449B /* YYReaderIOS */,
 				06997E3A81D5F47ABAC69E94 /* YYReaderIOSTests */,
-				5FEAC871080266D62DDB7D02 /* YYReaderIOSUITests */,
 				9E86819502DC9CE666CC54CB /* YYReaderTests */,
 				48BF732905C7C51B6B5AD8FA /* YYReaderUpdater */,
 			);
@@ -1450,14 +1407,6 @@
 				28EEF515B9B61FF5AF0BCD89 /* TestFixture.swift in Sources */,
 				4A4C5F8A6717967E98475963 /* URLSessionHTMLLoaderTests.swift in Sources */,
 				07360D5690400F521255DC73 /* WebVerificationStoreTests.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		79ED9D97AA27295F0BAE4171 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				2C631F3B2A0906D317F2A465 /* MobileReaderUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1881,11 +1830,6 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		2BC0F3CFF9CCE6058C400F77 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = A9E5BF380F3D4028FFA7449B /* YYReaderIOS */;
-			targetProxy = 8FD150A1051CDAB1415A9728 /* PBXContainerItemProxy */;
-		};
 		2BF852286F46A6D59AAB6E1A /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = A9E5BF380F3D4028FFA7449B /* YYReaderIOS */;
@@ -1921,24 +1865,6 @@
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/YYReader.app/YYReader";
 			};
 			name = Debug;
-		};
-		5048C6AF62C763500E9C61A4 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.yyreader.ios.uitests;
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = YYReaderIOS;
-			};
-			name = Release;
 		};
 		6B333998FE5D7019608E9F63 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -2224,24 +2150,6 @@
 			};
 			name = Release;
 		};
-		E812F0A2723896B126838F11 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.yyreader.ios.uitests;
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = YYReaderIOS;
-			};
-			name = Debug;
-		};
 		E8EBFFED28B71559FDDD89CD /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2293,15 +2201,6 @@
 			buildConfigurations = (
 				A83D44382BCB9127D4CFAD66 /* Debug */,
 				7163D302E1A0781208A5C781 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
-		};
-		A924D642EE802A915C9DDBD4 /* Build configuration list for PBXNativeTarget "YYReaderIOSUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				E812F0A2723896B126838F11 /* Debug */,
-				5048C6AF62C763500E9C61A4 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
