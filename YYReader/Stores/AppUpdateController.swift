@@ -177,8 +177,12 @@ final class AppUpdateController {
         isInstalling = true
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.createsNewApplicationInstance = true
+        // The helper keeps the old version as a backup until the new build writes
+        // this marker, so a build that cannot open its store is rolled back.
         configuration.arguments = ["--install", archive.path, target.path, release.version, digest,
-                                   String(ProcessInfo.processInfo.processIdentifier)]
+                                   String(ProcessInfo.processInfo.processIdentifier),
+                                   LaunchConfirmation.markerArgument,
+                                   LaunchConfirmation.markerURL(forArchive: archive).path]
         do {
             try await service.resetInstallationStatus(archive)
             let application = try await NSWorkspace.shared.openApplication(at: helper, configuration: configuration)

@@ -12,6 +12,7 @@ actor MacUpdateInstaller {
 
     enum Failure: LocalizedError {
         case invalidPackage, location, command(String), quit, rollback(URL)
+        case launchFailed(String), upgradeUnconfirmed(String)
         var errorDescription: String? {
             switch self {
             case .invalidPackage: "安装包与预期版本不符，更新已停止。"
@@ -19,6 +20,9 @@ actor MacUpdateInstaller {
             case .command(let name): "\(name)未能完成，原版本仍保留。"
             case .quit: "YYReader 未正常退出，更新已停止。请保存后重试。"
             case .rollback(let url): "恢复原版本失败，原 App 保留在：\(url.path)"
+            case .launchFailed(let message): "新版本启动失败，已恢复原版本：\(message)"
+            case .upgradeUnconfirmed(let message):
+                "新版本尚未确认可以打开，已保留上一版本备份：\(message)"
             }
         }
     }
@@ -99,6 +103,26 @@ actor MacUpdateInstaller {
         if FileManager.default.fileExists(atPath: prepared.staging.path) {
             try FileManager.default.removeItem(at: prepared.staging)
         }
+    }
+
+    /// Waits for the newly launched build to write its confirmation marker. The
+    /// backup is deleted only after this returns true.
+    nonisolated static func waitForLaunchMarker(
+        at url: URL,
+        timeout: Duration,
+        poll: Duration = .milliseconds(250),
+        fileExists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
+    ) async -> Bool {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while ContinuousClock.now < deadline {
+            if fileExists(url) { return true }
+            do {
+                try await Task.sleep(for: poll)
+            } catch {
+                return false
+            }
+        }
+        return fileExists(url)
     }
 
     func finish(_ prepared: Prepared, archive: URL) throws {

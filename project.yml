@@ -66,6 +66,7 @@ targets:
     sources:
       - path: YYReaderUpdater
       - path: YYReader/Services/MacUpdateInstaller.swift
+      - path: YYReader/Support/LaunchConfirmation.swift
       - path: YYReader/Support/ReleaseVersion.swift
       - path: YYReader/Support/UpdateChecksum.swift
       - path: YYReader/Resources/Localizable.xcstrings

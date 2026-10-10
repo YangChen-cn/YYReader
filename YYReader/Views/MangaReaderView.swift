@@ -49,6 +49,31 @@ struct MangaReaderView: View {
     }
 
     var body: some View {
+        if let referer = chapterURL {
+            reader(referer: referer)
+        } else {
+            invalidChapterAddress
+        }
+    }
+
+    /// A persisted chapter address that no longer parses cannot serve as a referer.
+    /// Report it with a way out instead of substituting an unrelated site.
+    private var invalidChapterAddress: some View {
+        ContentUnavailableView {
+            Label("章节地址无效", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text("无法确定这本漫画的章节地址，图片请求缺少合法的来源地址。请刷新目录后重试。")
+        } actions: {
+            Button("刷新目录", action: store.startRefreshSelectedCatalog)
+                .disabled(!store.canRefreshSelectedCatalog || store.isLoading)
+            Button("重试加载") { Task { await store.ensureSelectedChapterLoaded() } }
+                .disabled(store.isLoading)
+        }
+        .accessibilityIdentifier("manga.invalidChapterAddress")
+    }
+
+    @ViewBuilder
+    private func reader(referer: URL) -> some View {
         let pages = urls
         let aspectRatios = pages.map { ratios[$0.absoluteString] }
         let layout = MangaPageLayout(aspectRatios: aspectRatios,
@@ -61,7 +86,7 @@ struct MangaReaderView: View {
             GeometryReader { geometry in
                 if usesPages {
                     #if os(iOS)
-                    MobileMangaPager(pages: pages, referer: chapterURL, pageIndex: pageIndex,
+                    MobileMangaPager(pages: pages, referer: referer, pageIndex: pageIndex,
                         size: geometry.size, imageCache: imageCache,
                         hasPrevious: store.chapterNavigationSnapshot.hasPrevious,
                         hasNext: store.chapterNavigationSnapshot.hasNext,
@@ -69,13 +94,13 @@ struct MangaReaderView: View {
                         didLoad: { index, ratio in imageLoaded(index: index, ratio: ratio, pages: pages) })
                     #else
                     if cachedRatiosReady {
-                        pagedCanvas(pages: pages, layout: layout, group: group, size: geometry.size)
+                        pagedCanvas(pages: pages, layout: layout, group: group, size: geometry.size, referer: referer)
                     } else {
                         ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                     #endif
                 } else {
-                    scrollingCanvas(pages: pages, aspectRatios: aspectRatios, size: geometry.size)
+                    scrollingCanvas(pages: pages, aspectRatios: aspectRatios, size: geometry.size, referer: referer)
                 }
             }
             .onGeometryChange(for: CGSize.self) { $0.size } action: { canvasSize = $0 }
@@ -84,7 +109,7 @@ struct MangaReaderView: View {
             }
         }
         .task(id: prefetchKey(group: group)) {
-            await prefetchImages(after: usesPages ? max(group.upperBound - 1, pageIndex) : pageIndex, pages: pages)
+            await prefetchImages(after: usesPages ? max(group.upperBound - 1, pageIndex) : pageIndex, pages: pages, referer: referer)
         }
         .background(desktop && darkBackground ? Color(white: 0.10) : Color.clear)
         .environment(\.colorScheme, desktop && darkBackground ? .dark : colorScheme)
@@ -109,7 +134,7 @@ struct MangaReaderView: View {
         .accessibilityElement(children: .contain)
     }
 
-    private func pagedCanvas(pages: [URL], layout: MangaPageLayout, group: Range<Int>, size: CGSize) -> some View {
+    private func pagedCanvas(pages: [URL], layout: MangaPageLayout, group: Range<Int>, size: CGSize, referer: URL) -> some View {
         let pageRatios = group.map { ratios[pages[$0].absoluteString] ?? 0.7 }
         let gap = group.count == 2 ? 16.0 : 0.0
         let height = MangaPageLayout.fittedHeight(ratios: pageRatios,
@@ -122,7 +147,7 @@ struct MangaReaderView: View {
                         .frame(width: gap)
                         .accessibilityHidden(true)
                 }
-                MangaPageImage(url: pages[index], referer: chapterURL, pageNumber: index + 1,
+                MangaPageImage(url: pages[index], referer: referer, pageNumber: index + 1,
                                imageCache: imageCache) { ratio in
                     imageLoaded(index: index, ratio: ratio, pages: pages)
                 }
@@ -154,12 +179,12 @@ struct MangaReaderView: View {
         }
     }
 
-    private func scrollingCanvas(pages: [URL], aspectRatios: [Double?], size: CGSize) -> some View {
+    private func scrollingCanvas(pages: [URL], aspectRatios: [Double?], size: CGSize, referer: URL) -> some View {
         let width = MangaPageLayout.scrollWidth(viewportWidth: size.width, desktop: desktop)
         return ScrollView {
             LazyVStack(spacing: 0) {
                 ForEach(pages.indices, id: \.self) { index in
-                    MangaPageImage(url: pages[index], referer: chapterURL, pageNumber: index + 1,
+                    MangaPageImage(url: pages[index], referer: referer, pageNumber: index + 1,
                                    imageCache: imageCache) { ratio in
                         imageLoaded(index: index, ratio: ratio, pages: pages)
                     }
@@ -280,12 +305,15 @@ struct MangaReaderView: View {
         savePosition(total: urls.count)
     }
 
-    private var chapterURL: URL {
-        if let url = URL(string: chapter.sourceURL) { return url }
-        // A legacy row can hold an address that no longer parses; the reader must
-        // still open instead of trapping on the referer.
-        if let catalog = chapter.book?.catalogURL, let url = URL(string: catalog) { return url }
-        return URL(string: "https://www.guazimanhua.com/")!
+    /// Referer for every image request. Only the chapter's own address qualifies:
+    /// borrowing another site's address would silently send the images of this
+    /// chapter with a foreign referer, so an unusable address reports a
+    /// recoverable error instead.
+    private var chapterURL: URL? {
+        guard let url = URL(string: chapter.sourceURL),
+              ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+              let host = url.host, !host.isEmpty else { return nil }
+        return url
     }
     private func requestedPageIndex(total: Int) -> Int? {
         Self.resolvedPageIndex(request: store.readerScrollRequest, chapter: chapter, total: total)
@@ -325,14 +353,14 @@ struct MangaReaderView: View {
         let ready = usesPages ? group.allSatisfy { loadedPages.contains($0) } : loadedPages.contains(pageIndex)
         return "\(prefetch)-\(ready)-\(usesPages ? group.upperBound - 1 : pageIndex)"
     }
-    private func prefetchImages(after index: Int, pages: [URL]) async {
+    private func prefetchImages(after index: Int, pages: [URL], referer: URL) async {
         guard prefetch, loadedPages.contains(index) else { return }
         do {
             let images = try await store.mangaPrefetchImages(after: chapter, pageIndex: index)
             for url in images {
                 try Task.checkCancellation()
                 guard prefetch else { return }
-                _ = try await imageCache.original(at: url, referer: chapterURL)
+                _ = try await imageCache.original(at: url, referer: referer)
             }
             await refreshRatios(pages)
             if !Task.isCancelled, chapter.imagesCachedAt == nil, await imageCache.containsAll(pages) {

@@ -148,6 +148,40 @@ struct AppUpdateTests {
         try await worker.rollback(prepared)
         #expect(try String(contentsOf: prepared.target, encoding: .utf8) == "old")
     }
+    @Test func backupIsDiscardedOnlyAfterTheNewBuildConfirmsItOpened() async throws {
+        let directory = URL.temporaryDirectory.appendingPathComponent("YYReader-launch-\(UUID())")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let marker = directory.appendingPathComponent(LaunchConfirmation.markerFileName)
+
+        // No marker within the deadline means the update must roll back, so the
+        // helper reports failure and keeps the backup.
+        #expect(!(await MacUpdateInstaller.waitForLaunchMarker(at: marker, timeout: .milliseconds(120), poll: .milliseconds(20))))
+
+        // A build that reached a usable state writes the marker, and only then may
+        // the previous version be discarded.
+        try Data("1.5.0".utf8).write(to: marker)
+        #expect(await MacUpdateInstaller.waitForLaunchMarker(at: marker, timeout: .milliseconds(120), poll: .milliseconds(20)))
+    }
+
+    @Test func launchConfirmationWritesInsideTheContainerAndIgnoresOtherRequests() throws {
+        let directory = URL.temporaryDirectory.appendingPathComponent("YYReader-confirm-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let marker = directory.appendingPathComponent(LaunchConfirmation.markerFileName)
+
+        // Nothing asked for a confirmation: no file is written anywhere.
+        #expect(!LaunchConfirmation.confirmIfRequested(arguments: ["YYReader"]))
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
+
+        #expect(LaunchConfirmation.confirmIfRequested(
+            arguments: ["YYReader", LaunchConfirmation.markerArgument, marker.path]
+        ))
+        #expect(FileManager.default.fileExists(atPath: marker.path))
+        // A path outside this app's container must never be written.
+        #expect(!LaunchConfirmation.confirmIfRequested(
+            arguments: ["YYReader", LaunchConfirmation.markerArgument, "/etc/yyreader-launch.marker"]
+        ))
+    }
     #endif
 
     private func entry(_ tag: String, asset: String, draft: Bool = false, prerelease: Bool = false) -> [String: Any] {

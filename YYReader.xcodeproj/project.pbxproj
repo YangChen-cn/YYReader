@@ -119,6 +119,7 @@
 		409E2E2D8E8F38C443DF01E7 /* NovelImportResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0C2BF6B6A3928A55288E00 /* NovelImportResult.swift */; };
 		40F2FA6CDD73CE66F803D947 /* AddURLSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D044672EEE0BD4388C59459F /* AddURLSheet.swift */; };
 		41296525C4A78AA63A65DFDD /* Fixtures in Resources */ = {isa = PBXBuildFile; fileRef = C7E85F05654E2B1884512C39 /* Fixtures */; };
+		4186EC17E4D23DDDB8846FEA /* LaunchConfirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14C156419ADCD2638E215EAF /* LaunchConfirmation.swift */; };
 		421F6F3FFB4034A9A055976A /* MobilePageLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 326ADD156679440B2CB0B20D /* MobilePageLayoutTests.swift */; };
 		4236B85DBB2A663D727B515D /* MangaSnapshotScripts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2720AFE7B770A3340DC332 /* MangaSnapshotScripts.swift */; };
 		42698DCAD444FB862048ACB9 /* AppearanceInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D1FE8ACBCD32A22D38F5482 /* AppearanceInspectorView.swift */; };
@@ -157,6 +158,7 @@
 		54CC85C698DB958EDB101A7F /* YYReaderIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10FC4E8FA478C747928D972B /* YYReaderIOSApp.swift */; };
 		54EE59FD422C0B555BD092E0 /* GenericCatalogBoundaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88F0C0FD822555C1A10C29FD /* GenericCatalogBoundaryTests.swift */; };
 		558D40AC4B764334F8E3E5EB /* BookSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF1291F4E27B8B4FE509C2E /* BookSidebarView.swift */; };
+		570295920E9BC4CAD5FA118E /* LaunchConfirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14C156419ADCD2638E215EAF /* LaunchConfirmation.swift */; };
 		5743D62A82647737C5665246 /* LocalTextImportDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = D501FA8F258644105C1A8F3E /* LocalTextImportDraft.swift */; };
 		57561A91EC49D0750C9BB1B8 /* MacUpdateInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = E677B8131152A877246213F7 /* MacUpdateInstaller.swift */; };
 		579B3B2BBEA327065B48BBA6 /* GenericBlobMangaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 089573748C2DABAF5BE58642 /* GenericBlobMangaTests.swift */; };
@@ -293,6 +295,7 @@
 		AD249B4B54105734FA009884 /* ReleaseNotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E74E4BA3A5A9FCB53A9ECF9E /* ReleaseNotesView.swift */; };
 		AD4B5F14FA91F8AA29D62087 /* ReaderToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C054499EC138FF42DBA90F51 /* ReaderToolbar.swift */; };
 		ADB4DD7F6973C773B16CCC62 /* LocalTextImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 523309B052311E3D0336B167 /* LocalTextImportSheet.swift */; };
+		AEB6CB94EE20FAAE3F0E3EF3 /* LaunchConfirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14C156419ADCD2638E215EAF /* LaunchConfirmation.swift */; };
 		AF5A6AF9E8416AA549EABA4C /* LocalTextImportError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF86BA737E16160890BDECE /* LocalTextImportError.swift */; };
 		AF8663103B1D1BACB31096E7 /* ReaderFontPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83A57394FE47C186720C43A9 /* ReaderFontPicker.swift */; };
 		B1B7233E153E8574EDEC991D /* ReaderScrollState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01D8AA3C8525B27E5C9A0C55 /* ReaderScrollState.swift */; };
@@ -508,6 +511,7 @@
 		10FC4E8FA478C747928D972B /* YYReaderIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YYReaderIOSApp.swift; sourceTree = "<group>"; };
 		11EC822E4B837B8BD4D1D0F4 /* MobilePaginationRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobilePaginationRequest.swift; sourceTree = "<group>"; };
 		13AEFF74A256AAADBBADA72E /* MobileChapterListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileChapterListView.swift; sourceTree = "<group>"; };
+		14C156419ADCD2638E215EAF /* LaunchConfirmation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchConfirmation.swift; sourceTree = "<group>"; };
 		157A011324B953B358636C77 /* BookshelfTransferNotice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookshelfTransferNotice.swift; sourceTree = "<group>"; };
 		16962E22CE775BEF29CF2B36 /* WebVerificationWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebVerificationWebView.swift; sourceTree = "<group>"; };
 		182A4EBB62150B0C78F8376C /* ReaderPreferenceMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderPreferenceMigration.swift; sourceTree = "<group>"; };
@@ -760,6 +764,7 @@
 			children = (
 				CD7C682CCEB631ECB765AF3B /* AppServices.swift */,
 				34C73CC9D6681DABF8995E8F /* AppTerminationDelegate.swift */,
+				14C156419ADCD2638E215EAF /* LaunchConfirmation.swift */,
 				4E77A2262EF6E21891665E0B /* MangaBlobScripts.swift */,
 				BDFE85C46C8BAFC0F8382B7D /* MangaBlobSource.swift */,
 				41AF6D9168F10575B115DFF0 /* MangaPageLayout.swift */,
@@ -1479,6 +1484,7 @@
 				FD6174CB2225418AA2DBFF31 /* HostRateLimiter.swift in Sources */,
 				CE5AE74C60CF5809DA06DF84 /* HybridHTMLLoader.swift in Sources */,
 				38CC8901F677F2116F8475AC /* KeyboardShortcutRecorder.swift in Sources */,
+				AEB6CB94EE20FAAE3F0E3EF3 /* LaunchConfirmation.swift in Sources */,
 				009BFDC795B37B6DB640CD1A /* LibraryRootView.swift in Sources */,
 				6C48C46340A504942D277BCC /* LibrarySceneView.swift in Sources */,
 				674DF86A39674877000083F4 /* LibraryStore.swift in Sources */,
@@ -1594,6 +1600,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4186EC17E4D23DDDB8846FEA /* LaunchConfirmation.swift in Sources */,
 				57561A91EC49D0750C9BB1B8 /* MacUpdateInstaller.swift in Sources */,
 				FC4E14E9A77B4F5862FEC866 /* ReleaseVersion.swift in Sources */,
 				3DE2EC2E1B5DCCA381405733 /* UpdateChecksum.swift in Sources */,
@@ -1706,6 +1713,7 @@
 				07B4A2615350B873B4B18849 /* HaoduoMangaAdapter.swift in Sources */,
 				6DEC5B51E030B3E076AB52EB /* HostRateLimiter.swift in Sources */,
 				A1E8066AAF120121E68B780C /* HybridHTMLLoader.swift in Sources */,
+				570295920E9BC4CAD5FA118E /* LaunchConfirmation.swift in Sources */,
 				8F86C442E98C7DCE9D5B0914 /* LibraryStore.swift in Sources */,
 				1E04FCDBC92A7C77BE452987 /* LoadedHTML.swift in Sources */,
 				5EFB0C2FEF994ACECCD1C885 /* LoadingOverlay.swift in Sources */,

@@ -71,5 +71,8 @@ struct LibrarySceneView: View {
         store = newStore
         services.libraryStore = newStore
         services.folderSync.attach(to: newStore)
+        // The store is open and the selection restored: confirm the update now, so
+        // the installer can discard the previous version's backup.
+        LaunchConfirmation.confirmIfRequested()
     }
 }
