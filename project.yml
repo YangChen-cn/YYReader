@@ -56,6 +56,11 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.books
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Plain Text Novel
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.plain-text]
         LSMinimumSystemVersion: "15.0"
         NSHighResolutionCapable: true
         NSAppTransportSecurity:
@@ -124,6 +129,10 @@ targets:
       - path: YYReader/Views/ReaderView.swift
       - path: YYReader/Views/ReaderContentView.swift
       - path: YYReader/Views/ReaderParagraphView.swift
+      - path: YYReader/Views/TavernAvatarView.swift
+      - path: YYReader/Views/TavernCharacterEditor.swift
+      - path: YYReader/Views/TavernDialogueView.swift
+      - path: YYReader/Views/TavernReadingBlockView.swift
       - path: YYReader/Views/ReaderChapterHeader.swift
       - path: YYReader/Views/ReaderChapterFooter.swift
       - path: YYReader/Views/ReaderContinuationBoundary.swift

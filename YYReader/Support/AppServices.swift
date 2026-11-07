@@ -1,9 +1,11 @@
 import Observation
+import Foundation
 
 @MainActor
 @Observable
 final class AppServices {
     weak var libraryStore: LibraryStore?
+    var openedLocalTextURL: URL?
     let verificationStore: WebVerificationStore
     let importCoordinator: NovelImportCoordinator
     let folderSync: FolderSyncController

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ReaderAppearancePopover: View {
     var isManga = false
+    @AppStorage(ReaderPreferenceKeys.tavernRemoteAvatars) private var remoteAvatars = true
     @AppStorage(ReaderPreferenceKeys.fontFamily) private var fontFamily = ReaderFontFamily.serif.rawValue
     @AppStorage(ReaderPreferenceKeys.fontSize) private var fontSize = 20.0
     @AppStorage(ReaderPreferenceKeys.lineSpacing) private var lineSpacing = ReaderLineSpacingPreset.comfortable.value
@@ -97,6 +98,15 @@ struct ReaderAppearancePopover: View {
                 }
             }
 
+            Picker("阅读排版", selection: $presentationMode) {
+                ForEach(ReaderPresentationMode.allCases) { mode in
+                    Text(LocalizedStringKey(mode.title)).tag(mode.rawValue)
+                }
+            }
+
+            if presentationMode == ReaderPresentationMode.sillyTavern.rawValue {
+                Toggle("自动加载图床头像", isOn: $remoteAvatars)
+            }
             Toggle("段首缩进 2 字符", isOn: $paragraphIndent)
             Toggle("连续阅读", isOn: $continuousReading)
 

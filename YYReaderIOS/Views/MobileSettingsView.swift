@@ -7,6 +7,7 @@ struct MobileSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppServices.self) private var services
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @AppStorage(ReaderPreferenceKeys.tavernRemoteAvatars) private var remoteAvatars = true
     @AppStorage(ReaderPreferenceKeys.theme) private var theme = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.fontFamily) private var font = ReaderFontFamily.serif.rawValue
     @AppStorage(ReaderPreferenceKeys.fontSize) private var fontSize = 20.0
@@ -80,6 +81,10 @@ struct MobileSettingsView: View {
                     Picker("排版", selection: $presentation) {
                         Text("常规").tag(ReaderPresentationMode.normal.rawValue)
                         Text("学术论文").tag(ReaderPresentationMode.academicPaper.rawValue)
+                        Text("SillyTavern").tag(ReaderPresentationMode.sillyTavern.rawValue)
+                    }
+                    if presentation == ReaderPresentationMode.sillyTavern.rawValue {
+                        Toggle("自动加载图床头像", isOn: $remoteAvatars)
                     }
                     if presentation == ReaderPresentationMode.academicPaper.rawValue {
                         if sizeClass == .regular {
@@ -118,7 +123,7 @@ struct MobileSettingsView: View {
                     if let date = sync.lastSyncAt { LabeledContent("上次同步", value: date.formatted(date: .abbreviated, time: .shortened)) }
                     if let error = sync.errorMessage { Label(error, systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.red) }
                 } header: { Text("书架与阅读进度同步") } footer: {
-                    Text("选择 Mac 使用的共享位置，或直接选择 YYReaderSync 文件夹，进入后点“打开”。不要选择 mac.json 文件。iOS 写入 ios.json，读取 Mac 和 Windows 快照。同步不包含正文；本地 TXT 需在各设备分别导入。")
+                    Text("选择 Mac 使用的共享位置，或直接选择 YYReaderSync 文件夹，进入后点“打开”。不要选择 mac.json 文件。iOS 写入 ios.json，读取 Mac 和 Windows 快照。本地 TXT 可在书架长按选择上传正文，另一端同步时下载；也可分别导入同一 TXT，只同步进度。")
                 }
                 Section("软件更新") { AppUpdateSettingsView() }
                 Section("关于") {
@@ -138,7 +143,7 @@ struct MobileSettingsView: View {
                 }
             }
             .onChange(of: presentation) { _, value in
-                if value == ReaderPresentationMode.academicPaper.rawValue {
+                if value != ReaderPresentationMode.normal.rawValue {
                     pageTurnMode = ReaderPageTurnMode.verticalScroll.rawValue
                 }
             }

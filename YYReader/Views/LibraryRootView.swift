@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct LibraryRootView: View {
     @Bindable var store: LibraryStore
@@ -33,6 +34,11 @@ struct LibraryRootView: View {
         .background { MangaWindowWidthBridge(enabled: isReadingMangaVertically).allowsHitTesting(false) }
         .onChange(of: store.selectedBookID) { _, id in
             if id == nil && isReading { showLibrary() }
+        }
+        .onChange(of: services.openedLocalTextURL, initial: true) { _, url in
+            guard let url else { return }
+            services.openedLocalTextURL = nil
+            openLocalText(url)
         }
         .toolbar(removing: .sidebarToggle)
         .toolbar {
@@ -211,6 +217,30 @@ struct LibraryRootView: View {
     private func confirmBookshelfImport() { bookshelfTransfer.confirmPendingImport(for: store) }
     private func copyBookshelfExport() { bookshelfTransfer.copyExportJSON(from: store) }
     private func exportBookshelf() { bookshelfTransfer.exportToFile(from: store) }
+    private func openLocalText(_ url: URL) {
+        #if DEBUG
+        // Explicit development preview only; normal Open With uses import review.
+        if ProcessInfo.processInfo.arguments.contains("--preview-tavern") {
+            Task {
+                do {
+                    let draft = try await LocalTextImportService().prepareImport(from: url)
+                    let book = try store.importLocalText(draft, title: draft.suggestedTitle, author: "未知作者")
+                    presentationModeName = ReaderPresentationMode.sillyTavern.rawValue
+                    if let last = store.sortedChapters.last { store.selectChapter(last.id, scrollIntent: .chapterTop) }
+                    enterReader()
+                    readerColumnVisibility = .all
+                    Logger(subsystem: "com.yyreader.app", category: "TavernImport").notice("Imported \(book.chapters.count, privacy: .public) floors; selected \(store.selectedChapter?.title ?? "", privacy: .public)")
+                } catch {
+                    localTextImport.errorMessage = error.localizedDescription
+                    Logger(subsystem: "com.yyreader.app", category: "TavernImport").error("Import failed: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+            return
+        }
+        #endif
+        localTextImport.loadFile(url)
+    }
+
     private func confirmLocalTextImport(_ draft: LocalTextImportDraft, title: String, author: String) {
         do {
             try store.importLocalText(draft, title: title, author: author)

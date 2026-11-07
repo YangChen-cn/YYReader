@@ -17,6 +17,8 @@ struct ReaderContentView: View {
     @State private var scrollPosition = ScrollPosition(idType: ReaderScrollTarget.self)
     @State private var scrollState = ReaderScrollState()
     @State private var hasAppliedInitialScroll = false
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var tavernPlanCache = TavernReadingPlanCache()
     @State private var academicPlanCache = AcademicPaperPlanCache()
     @State private var isRestoringPresentation = false
     @State private var activeReadingAnchor: (chapterID: UUID, paragraphIndex: Int)?
@@ -28,6 +30,9 @@ struct ReaderContentView: View {
         let firstEntryID = entries.first?.id
         let lastEntryID = entries.last?.id
         let presentationMode = ReaderPresentationMode(rawValue: presentationModeName) ?? .normal
+
+        let tavernBackground = (theme.preferredColorScheme ?? colorScheme) == .dark
+            ? Color(white: 0.10) : Color(red: 0.985, green: 0.975, blue: 0.955)
 
         GeometryReader { geometry in
             let effectiveWidth = ReaderViewportLayout.effectiveContentWidth(
@@ -43,7 +48,7 @@ struct ReaderContentView: View {
                 : effectiveWidth
 
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: paragraphSpacing * fontSize) {
+                LazyVStack(alignment: .leading, spacing: presentationMode == .sillyTavern ? max(18, paragraphSpacing * fontSize) : paragraphSpacing * fontSize) {
                     ForEach(entries) { entry in
                         let paragraphs = entry.paragraphs
                         if paragraphs.isEmpty {
@@ -111,15 +116,29 @@ struct ReaderContentView: View {
                                 separator: theme.separator
                             )
 
-                            ForEach(paragraphs.indices, id: \.self) { index in
-                                ReaderParagraphView(
-                                    paragraph: paragraphs[index],
-                                    fontFamily: family,
-                                    fontSize: fontSize,
-                                    lineSpacing: lineSpacing * fontSize,
-                                    usesFirstLineIndent: paragraphIndent
-                                )
-                                .id(ReaderScrollTarget.paragraph(chapterID: entry.chapter.id, index: index))
+                            if presentationMode == .sillyTavern {
+                                let plan = tavernPlanCache.plan(chapter: entry.chapter, paragraphs: paragraphs)
+                                if plan.blocks.isEmpty {
+                                    ContentUnavailableView("没有可显示的正文", systemImage: "text.bubble",
+                                        description: Text("当前内容只有辅助标签，可切回普通阅读查看原文。"))
+                                }
+                                ForEach(plan.blocks) { block in
+                                    TavernReadingBlockView(block: block, inferredPlayer: plan.firstSpeaker ?? "",
+                                        fontFamily: family, fontSize: fontSize, lineSpacing: lineSpacing * fontSize,
+                                        usesFirstLineIndent: paragraphIndent, compact: displayedWidth < 600)
+                                    .id(ReaderScrollTarget.paragraph(chapterID: entry.chapter.id, index: block.id))
+                                }
+                            } else {
+                                ForEach(paragraphs.indices, id: \.self) { index in
+                                    ReaderParagraphView(
+                                        paragraph: paragraphs[index],
+                                        fontFamily: family,
+                                        fontSize: fontSize,
+                                        lineSpacing: lineSpacing * fontSize,
+                                        usesFirstLineIndent: paragraphIndent
+                                    )
+                                    .id(ReaderScrollTarget.paragraph(chapterID: entry.chapter.id, index: index))
+                                }
                             }
                         }
 
@@ -187,7 +206,7 @@ struct ReaderContentView: View {
                 #endif
             }
         }
-        .background(presentationMode == .academicPaper ? Color(white: 0.88) : theme.background)
+        .background(presentationMode == .academicPaper ? Color(white: 0.88) : (presentationMode == .sillyTavern ? tavernBackground : theme.background))
         .foregroundStyle(presentationMode == .academicPaper ? Color(white: 0.12) : theme.foreground)
         .tint(theme.accent)
         .task {
@@ -284,7 +303,13 @@ struct ReaderContentView: View {
     private func resolvedScrollTarget(for chapter: Chapter, desiredParagraphIndex: Int) -> ReaderScrollTarget {
         let paragraphs = store.readerSession.paragraphs(for: chapter)
         if !paragraphs.isEmpty {
-            let clampedIndex = min(max(desiredParagraphIndex, 0), paragraphs.count - 1)
+            var clampedIndex = min(max(desiredParagraphIndex, 0), paragraphs.count - 1)
+            if presentationModeName == ReaderPresentationMode.sillyTavern.rawValue {
+                guard let visibleIndex = tavernPlanCache.plan(chapter: chapter, paragraphs: paragraphs).anchor(for: clampedIndex) else {
+                    return .chapterHeader(chapter.id)
+                }
+                clampedIndex = visibleIndex
+            }
             return .paragraph(chapterID: chapter.id, index: clampedIndex)
         }
         return .chapterHeader(chapter.id)
@@ -348,6 +373,9 @@ struct ReaderContentView: View {
     }
 
     private func restoredParagraphTarget(for chapter: Chapter) -> ReaderScrollTarget {
+        if presentationModeName == ReaderPresentationMode.sillyTavern.rawValue {
+            return resolvedScrollTarget(for: chapter, desiredParagraphIndex: chapter.topParagraphIndex)
+        }
         let paragraphCount = store.readerSession.paragraphs(for: chapter).count
         return .restoredParagraph(
             chapterID: chapter.id,
@@ -366,7 +394,14 @@ struct ReaderContentView: View {
             setReadingAnchorIfNeeded(chapterID: chapterID, paragraphIndex: index)
             guard let entry = store.readerSession.entries.first(where: { $0.chapter.id == chapterID }) else { return }
             let paragraphCount = entry.paragraphs.count
-            store.updateVisibleReaderPosition(chapterID: chapterID, paragraphIndex: index, total: paragraphCount)
+            if presentationModeName == ReaderPresentationMode.sillyTavern.rawValue {
+                let plan = tavernPlanCache.plan(chapter: entry.chapter, paragraphs: entry.paragraphs)
+                let visibleIndex = plan.blocks.firstIndex(where: { $0.id == index }) ?? 0
+                store.updateVisibleReaderPosition(chapterID: chapterID, paragraphIndex: index,
+                                                  total: plan.blocks.count, progressIndex: visibleIndex)
+            } else {
+                store.updateVisibleReaderPosition(chapterID: chapterID, paragraphIndex: index, total: paragraphCount)
+            }
             if continuousReading, index >= max(paragraphCount - 3, 0) {
                 store.prepareContinuousChapterAttachment(after: chapterID)
             }

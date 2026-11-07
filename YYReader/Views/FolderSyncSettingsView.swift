@@ -10,7 +10,7 @@ struct FolderSyncSettingsView: View {
             Section("文件夹同步") {
                 Toggle("启用", isOn: $sync.isEnabled)
 
-                Text("Mac 只写入 YYReaderSync/mac.json，并读取 Windows 写入的 windows.json。不会同步正文缓存、Cookie 或网页验证状态。")
+                Text("同步书架和阅读进度。本地 TXT 可在书架菜单选择上传正文，另一端同步时自动下载；也可两端分别导入同一 TXT，只同步进度。")
                     .foregroundStyle(.secondary)
 
                 LabeledContent("同步文件夹") {

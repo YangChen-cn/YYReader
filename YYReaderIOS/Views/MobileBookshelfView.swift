@@ -14,6 +14,7 @@ struct MobileBookshelfView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
+        @Bindable var sync = services.folderSync
         GeometryReader { geometry in
             let sidePadding: CGFloat = geometry.size.width >= 700 ? 32 : 16
             let availableWidth = min(geometry.size.width, 1200) - sidePadding * 2
@@ -42,6 +43,13 @@ struct MobileBookshelfView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .contextMenu {
+                                    if book.isLocalText {
+                                        Button("上传正文到同步文件夹", systemImage: "icloud.and.arrow.up") {
+                                            services.folderSync.uploadText(book)
+                                        }
+                                        .disabled(services.folderSync.isUploadingText || services.folderSync.isSyncing)
+                                    }
+
                                     Button("编辑信息", systemImage: "pencil") { editBook(book.id) }
                                     Button("删除", systemImage: "trash", role: .destructive) { deleteBook(book.id) }
                                 }
@@ -57,6 +65,11 @@ struct MobileBookshelfView: View {
             .background(Color(.systemGroupedBackground))
         }
         .navigationTitle("书架")
+        .alert("正文同步", isPresented: $sync.showingTextTransferMessage) {
+            Button("好", role: .cancel) { }
+        } message: {
+            Text(sync.textTransferMessage ?? "")
+        }
         .navigationBarTitleDisplayMode(.large)
     }
 }

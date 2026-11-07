@@ -1,6 +1,139 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "不是本地 TXT" : {
+      "extractionState" : "manual"
+    },
+    "TXT 文件标识无效" : {
+      "extractionState" : "manual"
+    },
+    "正文超过 64 MB" : {
+      "extractionState" : "manual"
+    },
+    "正文文件版本或身份不匹配" : {
+      "extractionState" : "manual"
+    },
+    "正文文件章节无效或过大" : {
+      "extractionState" : "manual"
+    },
+    "请先在设置中选择共享文件夹并启用同步。" : {
+      "extractionState" : "manual"
+    },
+    "正文已上传。另一端选择同一文件夹，点击“立即同步”即可下载并恢复进度。" : {
+      "extractionState" : "manual"
+    },
+    "正文上传失败：" : {
+      "extractionState" : "manual"
+    },
+    "请选择一个文件夹后再启用同步。" : {
+      "extractionState" : "manual"
+    },
+    "%@的头像" : {
+      "extractionState" : "manual"
+    },
+    "SillyTavern" : {
+      "extractionState" : "manual"
+    },
+    "上传正文到同步文件夹" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上传正文到同步文件夹"
+          }
+        }
+      }
+    },
+    "主角" : {
+      "extractionState" : "manual"
+    },
+    "事件进度" : {
+      "extractionState" : "manual"
+    },
+    "保存角色外观失败：%@" : {
+      "extractionState" : "manual"
+    },
+    "剧情选项" : {
+      "extractionState" : "manual"
+    },
+    "同步书架和阅读进度。本地 TXT 可在书架菜单选择上传正文，另一端同步时自动下载；也可两端分别导入同一 TXT，只同步进度。" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步书架和阅读进度。本地 TXT 可在书架菜单选择上传正文，另一端同步时自动下载；也可两端分别导入同一 TXT，只同步进度。"
+          }
+        }
+      }
+    },
+    "外观" : {
+      "extractionState" : "manual"
+    },
+    "导入%@的头像" : {
+      "extractionState" : "manual"
+    },
+    "导入头像" : {
+      "extractionState" : "manual"
+    },
+    "已选择新头像" : {
+      "extractionState" : "manual"
+    },
+    "当前事件" : {
+      "extractionState" : "manual"
+    },
+    "当前内容只有辅助标签，可切回普通阅读查看原文。" : {
+      "extractionState" : "manual"
+    },
+    "旁注" : {
+      "extractionState" : "manual"
+    },
+    "正文同步" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正文同步"
+          }
+        }
+      }
+    },
+    "没有可显示的正文" : {
+      "extractionState" : "manual"
+    },
+    "编辑%@的外观" : {
+      "extractionState" : "manual"
+    },
+    "自动加载图床头像" : {
+      "extractionState" : "manual"
+    },
+    "角色外观" : {
+      "extractionState" : "manual"
+    },
+    "角色颜色" : {
+      "extractionState" : "manual"
+    },
+    "设为主角（右侧对话）" : {
+      "extractionState" : "manual"
+    },
+    "读取头像失败：%@" : {
+      "extractionState" : "manual"
+    },
+    "选择 Mac 使用的共享位置，或直接选择 YYReaderSync 文件夹，进入后点“打开”。不要选择 mac.json 文件。iOS 写入 ios.json，读取 Mac 和 Windows 快照。本地 TXT 可在书架长按选择上传正文，另一端同步时下载；也可分别导入同一 TXT，只同步进度。" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择 Mac 使用的共享位置，或直接选择 YYReaderSync 文件夹，进入后点“打开”。不要选择 mac.json 文件。iOS 写入 ios.json，读取 Mac 和 Windows 快照。本地 TXT 可在书架长按选择上传正文，另一端同步时下载；也可分别导入同一 TXT，只同步进度。"
+          }
+        }
+      }
+    },
+    "选择头像" : {
+      "extractionState" : "manual"
+    },
+    "阅读排版" : {
+      "extractionState" : "manual"
+    },
     "反转目录？" : {
       "extractionState" : "manual"
     },

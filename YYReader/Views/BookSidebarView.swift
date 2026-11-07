@@ -6,14 +6,28 @@ struct BookSidebarView: View {
     @State private var showingUpdateDetails = false
 
     var body: some View {
+        @Bindable var sync = services.folderSync
         List(selection: $store.selectedBookID) {
             ForEach(store.books) { book in
                 BookSidebarRow(book: book)
                     .tag(book.id)
+                    .contextMenu {
+                                    if book.isLocalText {
+                                        Button("上传正文到同步文件夹", systemImage: "icloud.and.arrow.up") {
+                                            services.folderSync.uploadText(book)
+                                        }
+                                        .disabled(services.folderSync.isUploadingText || services.folderSync.isSyncing)
+                                    }
+                    }
             }
         }
         .listStyle(.sidebar)
         .navigationTitle("书架")
+        .alert("正文同步", isPresented: $sync.showingTextTransferMessage) {
+            Button("好", role: .cancel) { }
+        } message: {
+            Text(sync.textTransferMessage ?? "")
+        }
         .onChange(of: store.selectedBookID) { oldValue, newValue in
             Task { @MainActor in
                 await Task.yield()

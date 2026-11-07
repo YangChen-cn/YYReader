@@ -166,7 +166,16 @@ final class LibraryStore {
         rebuildSelectedBookChapters()
         selectInitialChapter(preferredID: nil)
         refreshReaderSession()
+        restoreTavernPresentationIfNeeded()
         prefetchNextContinuousChapterIfNeeded()
+    }
+
+    private func restoreTavernPresentationIfNeeded() {
+        guard let book = selectedBook, book.isLocalText else { return }
+        if catalogOrderDefaults.bool(forKey: "reader.tavernBook." + book.sourceBookURL)
+            || book.chapters.lazy.filter({ $0.title.range(of: #"^第[0-9]+楼$"#, options: .regularExpression) != nil }).prefix(2).count == 2 {
+            catalogOrderDefaults.set(ReaderPresentationMode.sillyTavern.rawValue, forKey: ReaderPreferenceKeys.presentationMode)
+        }
     }
 
     func selectChapter(_ id: UUID?, scrollIntent: ReaderScrollIntent? = nil) {
@@ -434,7 +443,8 @@ final class LibraryStore {
         chapterID: UUID,
         paragraphIndex: Int,
         utf16Offset: Int = 0,
-        total: Int
+        total: Int,
+        progressIndex: Int? = nil
     ) {
         guard let chapter = chapterByID[chapterID] else { return }
         updateProgress(
@@ -442,6 +452,7 @@ final class LibraryStore {
             paragraphIndex: paragraphIndex,
             utf16Offset: utf16Offset,
             total: total,
+            progressIndex: progressIndex,
             updatesCurrentChapter: !continuousReadingEnabled
         )
         guard continuousReadingEnabled else {
@@ -543,7 +554,8 @@ final class LibraryStore {
         _ draft: LocalTextImportDraft,
         title: String,
         author: String,
-        importedAt: Date = .now
+        importedAt: Date = .now,
+        selectAfterImport: Bool = true
     ) throws -> Book {
         guard flushPendingProgress() else {
             throw LocalTextImportError.persistenceFailed
@@ -627,15 +639,42 @@ final class LibraryStore {
             modelContext.rollback()
             throw LocalTextImportError.persistenceFailed
         }
+        if draft.isTavernExport {
+            catalogOrderDefaults.set(true, forKey: "reader.tavernBook." + identity)
+        }
         folderSync?.clearDeletion(sourceURL: identity)
         refreshBooks()
-        selectedBookID = book.id
-        rebuildSelectedBookChapters()
-        selectInitialChapter(preferredID: book.currentChapterID)
-        refreshReaderSession()
-        requestReaderScroll(.restore)
-        folderSync?.scheduleLocalChange()
+        if selectAfterImport || selectedBookID == book.id {
+            selectedBookID = book.id
+            restoreTavernPresentationIfNeeded()
+            rebuildSelectedBookChapters()
+            selectInitialChapter(preferredID: book.currentChapterID)
+            refreshReaderSession()
+            requestReaderScroll(.restore)
+            if selectAfterImport { folderSync?.scheduleLocalChange() }
+        }
         return book
+    }
+
+    func needsCloudText(sourceURL: String) -> Bool {
+        guard let book = books.first(where: { $0.sourceBookURL == sourceURL }) else { return true }
+        return !book.hasCatalog || book.chapters.isEmpty || book.chapters.contains { !$0.isCached }
+    }
+
+    func cloudTextArchive(for book: Book) throws -> CloudTextArchive {
+        guard book.isLocalText, book.hasCatalog, !book.chapters.isEmpty,
+              book.chapters.allSatisfy({ $0.isCached }) else {
+            throw SyncError.invalidBook("请先导入完整 TXT 正文")
+        }
+        let chapters = book.chapters.sorted { $0.sortIndex < $1.sortIndex }.map {
+            LocalTextChapterDraft(title: $0.title, bodyText: $0.bodyText ?? "", sortIndex: $0.sortIndex,
+                                 sourceURL: $0.sourceURL, previousURL: $0.previousURL, nextURL: $0.nextURL)
+        }
+        return CloudTextArchive(draft: LocalTextImportDraft(
+            sourceBookURL: book.sourceBookURL, suggestedTitle: book.title,
+            detectedEncoding: "UTF-8", byteCount: chapters.reduce(0) { $0 + $1.bodyText.utf8.count },
+            chapters: chapters
+        ), author: book.author)
     }
 
     func reverseSelectedCatalog() {
@@ -851,6 +890,7 @@ final class LibraryStore {
         paragraphIndex: Int,
         utf16Offset: Int = 0,
         total: Int,
+        progressIndex: Int? = nil,
         updatesCurrentChapter: Bool
     ) {
         guard paragraphIndex >= 0,
@@ -858,7 +898,7 @@ final class LibraryStore {
         chapter.topParagraphIndex = max(0, paragraphIndex)
         chapter.topUTF16Offset = max(0, utf16Offset)
         chapter.readingProgress = total > 1
-            ? min(max(Double(paragraphIndex) / Double(total - 1), 0), 1)
+            ? min(max(Double(progressIndex ?? paragraphIndex) / Double(total - 1), 0), 1)
             : 0
         chapter.lastReadAt = .now
         if updatesCurrentChapter {

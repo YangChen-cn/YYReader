@@ -27,6 +27,11 @@ struct LibrarySceneView: View {
                 ProgressView("正在打开书架…")
             }
         }
+        .onOpenURL { url in
+            if url.isFileURL, url.pathExtension.lowercased() == "txt" {
+                services.openedLocalTextURL = url
+            }
+        }
         .task(initializeStore)
         .task { await services.updates.check() }
         .onChange(of: scenePhase) { _, newPhase in

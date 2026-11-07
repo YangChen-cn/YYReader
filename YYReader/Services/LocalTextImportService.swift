@@ -81,6 +81,7 @@ actor LocalTextImportService {
     }
 
     private static func split(_ text: String) -> [(title: String, body: String)] {
+        if let floors = splitTavernFloors(text) { return floors }
         let lines = text.components(separatedBy: "\n")
         let candidates = lines.enumerated().compactMap { index, line -> (Int, String)? in
             let title = line.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -123,6 +124,34 @@ actor LocalTextImportService {
             }
         }
         return result.isEmpty ? [("正文", text)] : result
+    }
+
+    private static func splitTavernFloors(_ text: String) -> [(title: String, body: String)]? {
+        // Require both export headers and matching body markers, so ordinary
+        // novel headings or Markdown references are not interpreted as floors.
+        let header = try! NSRegularExpression(pattern: #"(?m)^\[#([0-9]+)\][ \t]*$"#)
+        let source = text as NSString
+        let matches = header.matches(in: text, range: NSRange(location: 0, length: source.length))
+        guard matches.count >= 2 else { return nil }
+        var result: [(title: String, body: String)] = []
+        var matchingBodyMarkers = 0
+        let prefix = source.substring(to: matches[0].range.location).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !prefix.isEmpty { result.append(("前言", prefix)) }
+        for (index, match) in matches.enumerated() {
+            let number = source.substring(with: match.range(at: 1))
+            let start = NSMaxRange(match.range)
+            let end = index + 1 < matches.count ? matches[index + 1].range.location : source.length
+            var body = source.substring(with: NSRange(location: start, length: end - start))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if body.range(of: "(?m)^[（(]第[ \t]*" + number + "[ \t]*楼[）)][ \t]*$", options: .regularExpression) != nil {
+                matchingBodyMarkers += 1
+            }
+            if body.hasSuffix("--------------------") {
+                body = String(body.dropLast(20)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            if !body.isEmpty { result.append(("第" + number + "楼", body)) }
+        }
+        return matchingBodyMarkers >= 2 ? result : nil
     }
 
     private static func isSubstantive(_ lines: [String]) -> Bool {

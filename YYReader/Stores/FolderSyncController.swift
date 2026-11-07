@@ -4,6 +4,8 @@ import Observation
 @MainActor
 @Observable
 final class FolderSyncController {
+    private let cloudTexts = CloudTextStore()
+    private var uploadTask: Task<Void, Never>?
     private var engine: SyncEngine
     private let defaults: UserDefaults
     private var bookmarkStore: any SyncFolderBookmarkAccessing
@@ -37,6 +39,9 @@ final class FolderSyncController {
             isEnabled ? activate() : deactivate()
         }
     }
+    private(set) var isUploadingText = false
+    var textTransferMessage: String?
+    var showingTextTransferMessage = false
     private(set) var isSyncing = false
     private(set) var lastSyncAt: Date?
     private(set) var errorMessage: String?
@@ -161,6 +166,39 @@ final class FolderSyncController {
         }
     }
 
+    func uploadText(_ book: Book) {
+        guard !isUploadingText, !isSyncing else { return }
+        guard isEnabled, let folder = selectedFolderURL, let store else {
+            textTransferMessage = "请先在设置中选择共享文件夹并启用同步。"
+            showingTextTransferMessage = true
+            return
+        }
+        do {
+            let archive = try store.cloudTextArchive(for: book)
+            isUploadingText = true
+            uploadTask = Task { [weak self] in
+                guard let self else { return }
+                defer { self.isUploadingText = false; self.uploadTask = nil }
+                do {
+                    try await self.cloudTexts.upload(archive, selectedFolder: folder)
+                    try Task.checkCancellation()
+                    guard self.isEnabled, self.selectedFolderURL == folder else { return }
+                    self.textTransferMessage = "正文已上传。另一端选择同一文件夹，点击“立即同步”即可下载并恢复进度。"
+                    self.showingTextTransferMessage = true
+                    self.syncNow()
+                } catch is CancellationError {
+                    return
+                } catch {
+                    self.textTransferMessage = "正文上传失败：" + error.localizedDescription
+                    self.showingTextTransferMessage = true
+                }
+            }
+        } catch {
+            textTransferMessage = error.localizedDescription
+            showingTextTransferMessage = true
+        }
+    }
+
     private func activate() {
         guard store != nil else { return }
         startPolling()
@@ -168,6 +206,7 @@ final class FolderSyncController {
     }
 
     private func deactivate() {
+        uploadTask?.cancel()
         debounceTask?.cancel()
         debounceTask = nil
         syncTask?.cancel()
@@ -376,8 +415,21 @@ final class FolderSyncController {
                 localBooks: localBooks,
                 chapterRanksByBook: chapterRanksByBook
             )
-            guard !Task.isCancelled, isEnabled, syncGeneration == generation else { return }
+            guard !Task.isCancelled, isEnabled, syncGeneration == generation,
+                  self.selectedFolderURL == selectedFolderURL else { return }
             try store.applySyncRecords(result.books)
+            // Only explicit uploads create sidecars. Never export bodies from the
+            // ordinary progress publishing path or redownload complete books.
+            for record in result.books where !record.isDeleted && BookSourceKind.resolve(record.sourceURL) == .localText {
+                guard store.needsCloudText(sourceURL: record.sourceURL) else { continue }
+                guard let archive = try await cloudTexts.download(sourceURL: record.sourceURL, selectedFolder: selectedFolderURL) else { continue }
+                guard !Task.isCancelled, isEnabled, syncGeneration == generation,
+                      self.selectedFolderURL == selectedFolderURL else { return }
+                // A user may delete the book while the File Provider is downloading.
+                if tombstones[record.canonicalSourceURL]?.isDeleted == true { continue }
+                _ = try store.importLocalText(archive.draft, title: record.title, author: record.author,
+                                              importedAt: record.updatedAt, selectAfterImport: false)
+            }
             let retainedLocalTombstones = tombstones.filter {
                 BookSourceKind.resolve($0.value.sourceURL) == .localText
                     && !result.remoteCapabilities.contains(SyncEngine.localTextCapability)

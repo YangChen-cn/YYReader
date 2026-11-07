@@ -5,6 +5,40 @@ import Testing
 @testable import YYReader
 
 struct LocalTextImportTests {
+    @Test func tavernFloorsPreserveOriginalNumbersAndIgnoreEmbeddedNovelHeadings() throws {
+        let text = """
+        [#0]
+        （第0楼）
+        【角色创建】
+        --------------------
+        [#2]
+        <konatan_planning~>
+        第一章 假标题
+        </konatan_planning~>
+        （第2楼）
+        {旅人}「出发吧。」
+        --------------------
+        [#338]
+        （第338楼）
+        {向导}「已经到了。」
+        --------------------
+        """
+        let draft = try LocalTextImportService.prepareImport(data: Data(text.utf8), fileName: "完整导出")
+        #expect(draft.chapters.map(\.title) == ["第0楼", "第2楼", "第338楼"])
+        #expect(draft.chapters.map(\.sortIndex) == [1, 2, 3])
+        #expect(draft.chapters[1].nextURL == draft.chapters[2].sourceURL)
+        #expect(!draft.chapters[1].bodyText.hasSuffix("--------------------"))
+        let plan = TavernTextParser.parse(draft.chapters[1].bodyText.split(separator: "\n").map(String.init))
+        #expect(plan.blocks.count == 1)
+        #expect(plan.firstSpeaker == "旅人")
+    }
+
+    @Test func hashtagReferencesAloneDoNotSplitOrdinaryTextIntoFloors() throws {
+        let draft = try LocalTextImportService.prepareImport(data: Data("[#2]\n普通引用内容\n[#5]\n另一处引用内容".utf8), fileName: "普通文章")
+        #expect(draft.chapters.count == 1)
+        #expect(draft.chapters[0].title == "正文")
+    }
+
     @Test
     func splitsSupportedHeadingsAndPreservesOrder() throws {
         let text = """

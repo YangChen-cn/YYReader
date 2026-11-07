@@ -36,7 +36,7 @@ struct ReaderView: View {
                             .id(chapter.id)
                     } else {
                     #if os(iOS)
-                    if pageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue && !isAcademic {
+                    if pageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue && presentationModeName == ReaderPresentationMode.normal.rawValue {
                         MobilePagedReaderView(store: store, chapter: chapter, showsControls: showsPagingControls, toggleControls: togglePagingControls)
                             .id(chapter.id)
                     } else {
@@ -103,7 +103,7 @@ struct ReaderView: View {
     private var showsProgressOverlay: Bool {
         #if os(iOS)
         pageTurnMode != ReaderPageTurnMode.horizontalPages.rawValue
-            || presentationModeName == ReaderPresentationMode.academicPaper.rawValue
+            || presentationModeName != ReaderPresentationMode.normal.rawValue
         #else
         true
         #endif

@@ -61,8 +61,7 @@ actor SyncEngine {
         let remotes = try device.peers.compactMap { peer in
             try readSnapshotIfPresent(at: directory.appendingPathComponent(peer.fileName), expectedDevice: peer)
         }
-        let remoteSupportsLocalText = !remotes.isEmpty
-            && remotes.allSatisfy { $0.capabilities.contains(Self.localTextCapability) }
+        let remoteSupportsLocalText = remotes.allSatisfy { $0.capabilities.contains(Self.localTextCapability) }
         let mergedBooks = SyncMerger.merge(
             filteredBooks(previousLocal?.books ?? [], includeLocalText: remoteSupportsLocalText)
                 + filteredBooks(localBooks, includeLocalText: remoteSupportsLocalText)
