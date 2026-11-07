@@ -10,7 +10,7 @@ struct ReaderView: View {
     var togglePagingControls: () -> Void = {}
     var automaticMangaLandscape = false
     @AppStorage(ReaderPreferenceKeys.theme) private var themeName = ReaderTheme.system.rawValue
-    @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentationModeName = ReaderPresentationMode.normal.rawValue
+    @BookReaderPresentation private var presentationModeName
     @AppStorage(ReaderPreferenceKeys.pageTurnMode) private var pageTurnMode = ReaderPageTurnMode.verticalScroll.rawValue
     #if os(iOS)
     @Environment(\.colorScheme) private var colorScheme

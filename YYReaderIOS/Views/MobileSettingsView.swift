@@ -23,7 +23,7 @@ struct MobileSettingsView: View {
     @AppStorage(ReaderPreferenceKeys.mangaFirstPageAlone) private var mangaFirstPageAlone = true
     @AppStorage(ReaderPreferenceKeys.mangaDarkBackground) private var mangaDarkBackground = false
     @AppStorage(ReaderPreferenceKeys.prefetchNext) private var prefetch = true
-    @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentation = ReaderPresentationMode.normal.rawValue
+    @BookReaderPresentation private var presentation
     @AppStorage(ReaderPreferenceKeys.academicColumnMode) private var columns = AcademicColumnMode.double.rawValue
     @State private var choosingFolder = false
     @State private var pickerError: PresentedError?
@@ -140,11 +140,6 @@ struct MobileSettingsView: View {
             .onChange(of: pageTurnMode) { _, value in
                 if value == ReaderPageTurnMode.horizontalPages.rawValue {
                     presentation = ReaderPresentationMode.normal.rawValue
-                }
-            }
-            .onChange(of: presentation) { _, value in
-                if value != ReaderPresentationMode.normal.rawValue {
-                    pageTurnMode = ReaderPageTurnMode.verticalScroll.rawValue
                 }
             }
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成", action: dismiss.callAsFunction) } }

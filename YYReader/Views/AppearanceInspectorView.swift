@@ -9,7 +9,7 @@ struct AppearanceInspectorView: View {
     @AppStorage(ReaderPreferenceKeys.contentWidth) private var contentWidth = ReaderViewportLayout.defaultPreferredWidthEM
     @AppStorage(ReaderPreferenceKeys.theme) private var theme = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.paragraphIndent) private var paragraphIndent = true
-    @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentationMode = ReaderPresentationMode.normal.rawValue
+    @BookReaderPresentation private var presentationMode
     @AppStorage(ReaderPreferenceKeys.academicColumnMode) private var academicColumnMode = AcademicColumnMode.double.rawValue
     @AppStorage(ReaderPreferenceKeys.academicModeShortcut)
     private var academicModeShortcut = ReaderKeyboardShortcut.defaultValue.storageValue

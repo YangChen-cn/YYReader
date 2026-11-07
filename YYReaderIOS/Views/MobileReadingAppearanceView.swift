@@ -20,7 +20,7 @@ struct MobileReadingAppearanceView: View {
     @AppStorage(ReaderPreferenceKeys.mangaTabletAutoLandscape) private var autoLandscape = true
     @AppStorage(ReaderPreferenceKeys.mangaFirstPageAlone) private var firstPageAlone = true
     @AppStorage(ReaderPreferenceKeys.mangaDarkBackground) private var mangaDarkBackground = false
-    @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentation = ReaderPresentationMode.normal.rawValue
+    @BookReaderPresentation private var presentation
     @AppStorage(ReaderPreferenceKeys.academicColumnMode) private var columns = AcademicColumnMode.double.rawValue
     @AppStorage(ReaderPreferenceKeys.tavernRemoteAvatars) private var remoteAvatars = true
 
@@ -114,9 +114,6 @@ struct MobileReadingAppearanceView: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成", action: dismiss.callAsFunction) } }
             .onChange(of: pageTurnMode) { _, value in
                 if value == ReaderPageTurnMode.horizontalPages.rawValue { presentation = ReaderPresentationMode.normal.rawValue }
-            }
-            .onChange(of: presentation) { _, value in
-                if value != ReaderPresentationMode.normal.rawValue { pageTurnMode = ReaderPageTurnMode.verticalScroll.rawValue }
             }
         }
     }

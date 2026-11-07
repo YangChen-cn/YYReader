@@ -5,7 +5,7 @@ struct LibraryRootView: View {
     @Bindable var store: LibraryStore
     @Environment(AppServices.self) private var services
     @AppStorage(ReaderPreferenceKeys.theme) private var themeName = ReaderTheme.system.rawValue
-    @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentationModeName = ReaderPresentationMode.normal.rawValue
+    @BookReaderPresentation private var presentationModeName
     @AppStorage(ReaderPreferenceKeys.mangaPageTurnMode) private var mangaPageTurnMode = ReaderPageTurnMode.mangaDefault.rawValue
     @State private var libraryColumnVisibility: NavigationSplitViewVisibility = .all
     @State private var readerColumnVisibility: NavigationSplitViewVisibility = .detailOnly

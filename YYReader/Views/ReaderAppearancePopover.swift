@@ -10,7 +10,7 @@ struct ReaderAppearancePopover: View {
     @AppStorage(ReaderPreferenceKeys.theme) private var theme = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.paragraphIndent) private var paragraphIndent = true
     @AppStorage(ReaderPreferenceKeys.continuousReading) private var continuousReading = false
-    @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentationMode = ReaderPresentationMode.normal.rawValue
+    @BookReaderPresentation private var presentationMode
     @AppStorage(ReaderPreferenceKeys.academicColumnMode) private var academicColumnMode = AcademicColumnMode.double.rawValue
 
     let showAdvancedSettings: () -> Void

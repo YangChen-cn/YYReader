@@ -5,7 +5,7 @@ struct MobileReaderView: View {
     let showLibrary: () -> Void
     let showCatalog: () -> Void
     var isCatalogPresented = false
-    @AppStorage(ReaderPreferenceKeys.presentationMode) private var mode = ReaderPresentationMode.normal.rawValue
+    @BookReaderPresentation private var mode
     @AppStorage(ReaderPreferenceKeys.pageTurnMode) private var pageTurnMode = ReaderPageTurnMode.verticalScroll.rawValue
     @AppStorage(ReaderPreferenceKeys.mangaPageTurnMode) private var mangaPageTurnMode = ReaderPageTurnMode.mangaDefault.rawValue
     @AppStorage(ReaderPreferenceKeys.mangaTabletAutoLandscape) private var autoLandscape = true

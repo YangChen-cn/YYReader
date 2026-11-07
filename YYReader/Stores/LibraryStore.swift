@@ -166,16 +166,7 @@ final class LibraryStore {
         rebuildSelectedBookChapters()
         selectInitialChapter(preferredID: nil)
         refreshReaderSession()
-        restoreTavernPresentationIfNeeded()
         prefetchNextContinuousChapterIfNeeded()
-    }
-
-    private func restoreTavernPresentationIfNeeded() {
-        guard let book = selectedBook, book.isLocalText else { return }
-        if catalogOrderDefaults.bool(forKey: "reader.tavernBook." + book.sourceBookURL)
-            || book.chapters.lazy.filter({ $0.title.range(of: #"^第[0-9]+楼$"#, options: .regularExpression) != nil }).prefix(2).count == 2 {
-            catalogOrderDefaults.set(ReaderPresentationMode.sillyTavern.rawValue, forKey: ReaderPreferenceKeys.presentationMode)
-        }
     }
 
     func selectChapter(_ id: UUID?, scrollIntent: ReaderScrollIntent? = nil) {
@@ -639,14 +630,10 @@ final class LibraryStore {
             modelContext.rollback()
             throw LocalTextImportError.persistenceFailed
         }
-        if draft.isTavernExport {
-            catalogOrderDefaults.set(true, forKey: "reader.tavernBook." + identity)
-        }
         folderSync?.clearDeletion(sourceURL: identity)
         refreshBooks()
         if selectAfterImport || selectedBookID == book.id {
             selectedBookID = book.id
-            restoreTavernPresentationIfNeeded()
             rebuildSelectedBookChapters()
             selectInitialChapter(preferredID: book.currentChapterID)
             refreshReaderSession()

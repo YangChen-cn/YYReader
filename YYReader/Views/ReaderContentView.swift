@@ -12,7 +12,7 @@ struct ReaderContentView: View {
     @AppStorage(ReaderPreferenceKeys.theme) private var themeName = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.paragraphIndent) private var paragraphIndent = true
     @AppStorage(ReaderPreferenceKeys.continuousReading) private var continuousReading = false
-    @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentationModeName = ReaderPresentationMode.normal.rawValue
+    @BookReaderPresentation private var presentationModeName
     @AppStorage(ReaderPreferenceKeys.academicColumnMode) private var academicColumnModeName = AcademicColumnMode.double.rawValue
     @State private var scrollPosition = ScrollPosition(idType: ReaderScrollTarget.self)
     @State private var scrollState = ReaderScrollState()

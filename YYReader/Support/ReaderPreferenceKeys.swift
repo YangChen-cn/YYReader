@@ -21,6 +21,7 @@ enum ReaderPreferenceKeys {
     static let tavernRemoteAvatars = "reader.tavernRemoteAvatars"
     static let tavernCharacters = "reader.tavernCharacters"
     static let tavernPlayerName = "reader.tavernPlayerName"
+    static let bookPresentations = "reader.bookPresentations"
     static let presentationMode = "reader.presentationMode"
     static let academicColumnMode = "reader.academicColumnMode"
     static let academicModeShortcut = "reader.academicModeShortcut"

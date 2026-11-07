@@ -55,14 +55,14 @@ struct TavernDialogueView: View {
             .padding(compact ? 16 : 22)
             .background {
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(LinearGradient(colors: [Color(white: 0.135), edge.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .background(Color(white: 0.12), in: RoundedRectangle(cornerRadius: 10))
+                    .fill(LinearGradient(colors: [Color(white: 0.25), Color(white: 0.29)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .background(Color(white: 0.25), in: RoundedRectangle(cornerRadius: 10))
             }
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.white.opacity(0.20), lineWidth: 1))
             .overlay(alignment: isPlayer ? .trailing : .leading) {
                 RoundedRectangle(cornerRadius: 2).fill(edge).frame(width: 4).padding(.vertical, 9)
             }
-            .shadow(color: .black.opacity(0.18), radius: compact ? 8 : 16, y: 8)
+            .shadow(color: .black.opacity(0.10), radius: compact ? 8 : 16, y: 8)
             if isPlayer { Button { editingAppearance = true } label: {
                     TavernAvatarView(speaker: speaker, fileName: appearance.avatarFile, accent: nameColor,
                                      size: compact ? 44 : 68, usesRemoteFallback: !isPlayer)

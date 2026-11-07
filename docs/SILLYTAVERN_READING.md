@@ -1,6 +1,6 @@
 # SillyTavern 阅读模式
 
-Mac、iPhone 和 iPad 共用原生排版。
+Mac、iPhone 和 iPad 共用原生排版。阅读排版按书籍保存，手动选择优先于 SillyTavern 自动识别，切换书籍互不影响。
 
 1. 从书架导入 SillyTavern 导出的 TXT 正文。
 2. 打开书籍，在「阅读设置 → 阅读排版」（iOS 为「排版」）中选择 **SillyTavern**。
