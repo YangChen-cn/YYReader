@@ -23,7 +23,16 @@ struct YYReaderUpdaterApp: App {
             .padding(28)
             .frame(width: 420)
             .fixedSize(horizontal: true, vertical: true)
-            .onAppear { installer.start() }
+            .onAppear {
+                // The helper runs as a background UIElement app; float its window above the
+                // reader and bring it forward so progress and failures are actually visible.
+                NSApp.activate()
+                NSApp.windows.forEach {
+                    $0.level = .floating
+                    $0.makeKeyAndOrderFront(nil)
+                }
+                installer.start()
+            }
         }
         .windowResizability(.contentSize)
     }
@@ -37,6 +46,8 @@ private final class InstallerController {
     private var started = false
     private var target: URL?
     private let worker = MacUpdateInstaller()
+    private let cacheDirectory = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Containers/com.yyreader.app/Data/Library/Caches/YYReaderUpdates", isDirectory: true)
 
     func start() {
         guard !started else { return }
@@ -44,32 +55,54 @@ private final class InstallerController {
         Task { await install() }
     }
 
-    private func install() async {
+    /// Sandboxed hosts cannot pass launch arguments through `NSWorkspace` (LaunchServices
+    /// routes the launch through CoreServicesUIAgent and drops them), so fall back to the
+    /// request file the host writes into the update cache.
+    private func installRequest() throws -> UpdateInstallRequest {
         let args = ProcessInfo.processInfo.arguments
+        if args.count == 9, args[1] == "--install" {
+            guard let pid = Int32(args[6]) else { throw MacUpdateInstaller.Failure.invalidPackage }
+            return UpdateInstallRequest(archivePath: args[2], targetPath: args[3], version: args[4],
+                                        digest: args[5], hostProcessID: pid,
+                                        markerArgument: args[7], markerPath: args[8])
+        }
+        guard let request = UpdateInstallRequest.read(from: cacheDirectory) else {
+            throw MacUpdateInstaller.Failure.invalidPackage
+        }
+        UpdateInstallRequest.remove(from: cacheDirectory)
+        return request
+    }
+
+    private func install() async {
+        let request: UpdateInstallRequest
+        do { request = try installRequest() }
+        catch {
+            self.error = error.localizedDescription
+            return
+        }
+        let download = URL(fileURLWithPath: request.archivePath).resolvingSymlinksInPath()
         var prepared: MacUpdateInstaller.Prepared?
-        var archive: URL?
+        // Resolve the archive before validating so a guard failure is still reported to the host.
+        var archive: URL? = download
         do {
-            guard args.count == 9, args[1] == "--install", let pid = Int32(args[6]),
-                  args[7] == LaunchConfirmation.markerArgument,
-                  LaunchConfirmation.markerURL(in: args) != nil,
-                  let host = NSRunningApplication(processIdentifier: pid) else { throw MacUpdateInstaller.Failure.invalidPackage }
-            let location = URL(fileURLWithPath: args[3]).resolvingSymlinksInPath()
+            guard request.markerArgument == LaunchConfirmation.markerArgument,
+                  let host = NSRunningApplication(processIdentifier: request.hostProcessID) else {
+                throw MacUpdateInstaller.Failure.invalidPackage
+            }
+            let location = URL(fileURLWithPath: request.targetPath).resolvingSymlinksInPath()
             let embeddedHost = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent()
                 .deletingLastPathComponent().resolvingSymlinksInPath()
             guard location == embeddedHost, host.bundleURL?.resolvingSymlinksInPath() == location,
                   host.bundleIdentifier == "com.yyreader.app" else { throw MacUpdateInstaller.Failure.invalidPackage }
             target = location
-            let download = URL(fileURLWithPath: args[2]).resolvingSymlinksInPath()
-            let cache = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/Containers/com.yyreader.app/Data/Library/Caches/YYReaderUpdates")
-                .resolvingSymlinksInPath()
+            let cache = cacheDirectory.resolvingSymlinksInPath()
             guard download.lastPathComponent == "update.dmg",
                   UUID(uuidString: download.deletingLastPathComponent().lastPathComponent) != nil,
                   download.deletingLastPathComponent().deletingLastPathComponent() == cache else {
                 throw MacUpdateInstaller.Failure.invalidPackage
             }
-            archive = download
-            let staged = try await worker.prepare(archive: download, target: location, version: args[4], digest: args[5])
+            let staged = try await worker.prepare(archive: download, target: location,
+                                                  version: request.version, digest: request.digest)
             prepared = staged
             message = "正在保存进度并退出 YYReader…"
             guard host.terminate() else { throw MacUpdateInstaller.Failure.quit }
@@ -80,7 +113,7 @@ private final class InstallerController {
             guard host.isTerminated else { throw MacUpdateInstaller.Failure.quit }
             message = "正在替换并重新打开…"
             try await worker.replace(staged)
-            let marker = LaunchConfirmation.markerURL(in: args)
+            let marker: URL? = request.markerPath.isEmpty ? nil : URL(fileURLWithPath: request.markerPath)
             if let marker { try? FileManager.default.removeItem(at: marker) }
             let launch = NSWorkspace.OpenConfiguration()
             launch.createsNewApplicationInstance = true

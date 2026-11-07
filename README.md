@@ -4,7 +4,7 @@
   <p><strong>小说与漫画，随处接着读。</strong></p>
   <p>macOS、iPhone 与 iPad 的原生小说和漫画阅读器，Windows 提供小说阅读。<br>添加网页或导入 TXT，把书架、离线缓存和阅读进度留在自己的设备上。</p>
   <p>
-    <a href="RELEASE_NOTES.md"><img src="https://img.shields.io/badge/release-1.5.0-6D5CE8?style=flat-square" alt="macOS / iOS 1.5.0"></a>
+    <a href="RELEASE_NOTES.md"><img src="https://img.shields.io/badge/release-1.5.1-6D5CE8?style=flat-square" alt="macOS 1.5.1 / iOS 1.5.0"></a>
     <a href="https://github.com/YangChen-cn/YYReader/stargazers"><img src="https://img.shields.io/github/stars/YangChen-cn/YYReader?style=flat-square&color=E6A23C" alt="GitHub Stars"></a>
     <img src="https://img.shields.io/badge/Swift-6-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 6">
   </p>
@@ -27,18 +27,18 @@
 
 ## 下载与安装
 
-**macOS / iOS 1.5.0 已发布。** 新增 SillyTavern 阅读、本地 TXT 正文同步，精修 iOS 阅读界面，并支持重装后尝试恢复同步授权。[查看 1.5.0 更新说明](RELEASE_NOTES.md)。下表提供各平台正式安装包。
+**macOS 1.5.1 已发布。** 修复应用内更新的下载进度、安装窗口置顶与沙盒环境下的更新误报，增强更新失败的诊断信息。[查看 1.5.1 更新说明](RELEASE_NOTES.md)。iOS 1.5.0 继续提供下载。下表提供各平台正式安装包。
 
 
 | 平台 | 最新版本 | 安装包 | 系统要求 |
 | --- | --- | --- | --- |
-| **macOS** | **1.5.0** | [DMG · arm64](https://github.com/YangChen-cn/YYReader/releases/download/v1.5.0/YYReader-1.5.0-arm64.dmg) | Apple 芯片，macOS 15+ |
+| **macOS** | **1.5.1** | [DMG · arm64](https://github.com/YangChen-cn/YYReader/releases/download/v1.5.1/YYReader-1.5.1-arm64.dmg) | Apple 芯片，macOS 15+ |
 | **iPhone / iPad** | **1.5.0** | [IPA · arm64](https://github.com/YangChen-cn/YYReader/releases/download/ios-v1.5.0/YYReader-iOS-1.5.0-resign.ipa) | iOS / iPadOS 18+ |
 | **Windows** | 1.3.0 | [安装程序 · x64](https://github.com/YangChen-cn/YYReader/releases/download/v1.3.0/YYReader-Setup-x64-1.3.0.exe) | Windows 10 1809+，推荐 Windows 11 |
 
 iOS IPA 需要用 SideStore、Sideloadly 等工具自行签名安装，续签由侧载工具管理；[安装与续签指南](docs/IOS_DEVELOPMENT.md#使用-sidestore-在手机端安装与续签)。作者已完成过 iPhone 真机签名安装、阅读与同步的使用流程。
 
-[macOS 1.5.0 发布说明](https://github.com/YangChen-cn/YYReader/releases/tag/v1.5.0) · [iOS 1.5.0 发布说明](https://github.com/YangChen-cn/YYReader/releases/tag/ios-v1.5.0) · [完整更新记录](RELEASE_NOTES.md)
+[macOS 1.5.1 发布说明](https://github.com/YangChen-cn/YYReader/releases/tag/v1.5.1) · [iOS 1.5.0 发布说明](https://github.com/YangChen-cn/YYReader/releases/tag/ios-v1.5.0) · [完整更新记录](RELEASE_NOTES.md)
 
 ## 界面一览
 

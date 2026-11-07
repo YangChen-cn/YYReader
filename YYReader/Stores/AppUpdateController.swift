@@ -179,12 +179,17 @@ final class AppUpdateController {
         configuration.createsNewApplicationInstance = true
         // The helper keeps the old version as a backup until the new build writes
         // this marker, so a build that cannot open its store is rolled back.
-        configuration.arguments = ["--install", archive.path, target.path, release.version, digest,
-                                   String(ProcessInfo.processInfo.processIdentifier),
-                                   LaunchConfirmation.markerArgument,
-                                   LaunchConfirmation.markerURL(forArchive: archive).path]
+        let request = UpdateInstallRequest(archivePath: archive.path, targetPath: target.path,
+                                           version: release.version, digest: digest,
+                                           hostProcessID: ProcessInfo.processInfo.processIdentifier,
+                                           markerArgument: LaunchConfirmation.markerArgument,
+                                           markerPath: LaunchConfirmation.markerURL(forArchive: archive).path)
+        configuration.arguments = UpdateInstallRequest.arguments(from: request)
         do {
             try await service.resetInstallationStatus(archive)
+            // LaunchServices drops the arguments above when a sandboxed host launches the
+            // helper, so it also reads this request from the update cache.
+            try await service.prepareInstallationRequest(request)
             let application = try await NSWorkspace.shared.openApplication(at: helper, configuration: configuration)
             // The helper stages and verifies before requesting a normal app quit.
             // AppTerminationDelegate flushes the most recent reading progress then.

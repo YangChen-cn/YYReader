@@ -70,8 +70,7 @@ actor AppUpdateService {
             var request = URLRequest(url: release.asset.browserDownloadURL)
             request.cachePolicy = .reloadIgnoringLocalCacheData
             request.timeoutInterval = 60
-            let delegate = UpdateDownloadProgress(expectedSize: release.asset.size, report: progress)
-            let (temporary, response) = try await session.download(for: request, delegate: delegate)
+            let (temporary, response) = try await downloadFile(request, progress: progress)
             try Task.checkCancellation()
             guard (response as? HTTPURLResponse)?.statusCode == 200 else {
                 throw AppUpdateError.request((response as? HTTPURLResponse)?.statusCode ?? 0)
@@ -85,6 +84,41 @@ actor AppUpdateService {
             try? FileManager.default.removeItem(at: folder) // Only our disposable partial download.
             throw error
         }
+    }
+
+    /// The async download API and completion-handler tasks stopped delivering
+    /// `URLSessionDownloadDelegate` progress callbacks on macOS 26+, so observe the
+    /// task's own `Progress` instead.
+    private nonisolated func downloadFile(_ request: URLRequest,
+                                          progress: @escaping @Sendable (Double) -> Void) async throws -> (URL, URLResponse) {
+        let handle = DownloadProgressHandle(report: progress)
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let task = session.downloadTask(with: request) { fileURL, response, error in
+                    handle.finish()
+                    if let error {
+                        continuation.resume(throwing: error)
+                    } else if let fileURL, let response {
+                        continuation.resume(returning: (fileURL, response))
+                    } else {
+                        continuation.resume(throwing: AppUpdateError.invalidDownload)
+                    }
+                }
+                handle.observe(task)
+                task.resume()
+            }
+        } onCancel: {
+            handle.cancel()
+        }
+    }
+
+    /// A sandboxed host cannot pass launch arguments through `NSWorkspace`: LaunchServices
+    /// forwards the request through CoreServicesUIAgent and drops them. The helper falls
+    /// back to this request file, so always keep it next to the downloaded archive.
+    func prepareInstallationRequest(_ request: UpdateInstallRequest) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode(request)
+            .write(to: directory.appendingPathComponent(UpdateInstallRequest.fileName), options: .atomic)
     }
 
     nonisolated static func verify(_ file: URL, size: Int64, digest: String) throws {
@@ -101,6 +135,7 @@ actor AppUpdateService {
     func resetInstallationStatus(_ archive: URL) throws {
         let status = archive.deletingLastPathComponent().appendingPathComponent("failure.txt")
         if FileManager.default.fileExists(atPath: status.path) { try FileManager.default.removeItem(at: status) }
+        UpdateInstallRequest.remove(from: directory)
     }
 
     func installationError(_ archive: URL) throws -> String? {
@@ -110,18 +145,52 @@ actor AppUpdateService {
     }
 }
 
-/// URLSession invokes this immutable delegate on its delegate queue. Mutable UI
-/// state is never shared here; the @Sendable callback hops to MainActor.
-private final class UpdateDownloadProgress: NSObject, URLSessionDownloadDelegate, Sendable {
-    let expectedSize: Int64
-    let report: @Sendable (Double) -> Void
-    init(expectedSize: Int64, report: @escaping @Sendable (Double) -> Void) {
-        self.expectedSize = expectedSize
+/// Bridges a download task's own `Progress` to a throttled fraction callback. Holds no
+/// UI state; the @Sendable callback hops to MainActor in the controller.
+private final class DownloadProgressHandle: @unchecked Sendable {
+    private let report: @Sendable (Double) -> Void
+    private let lock = NSLock()
+    private var observation: NSKeyValueObservation?
+    private var task: URLSessionDownloadTask?
+    private var isCancelled = false
+    private var lastReported = -1.0
+
+    init(report: @escaping @Sendable (Double) -> Void) {
         self.report = report
     }
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {}
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
-                    totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        report(min(0.99, Double(totalBytesWritten) / Double(max(1, expectedSize))))
+
+    func observe(_ task: URLSessionDownloadTask) {
+        lock.lock()
+        self.task = task
+        let cancelled = isCancelled
+        lock.unlock()
+        guard !cancelled else {
+            task.cancel()
+            return
+        }
+        observation = task.progress.observe(\.fractionCompleted, options: [.new]) { [weak self] progress, _ in
+            guard let self else { return }
+            let fraction = min(0.99, max(0, progress.fractionCompleted))
+            self.lock.lock()
+            let shouldReport = fraction - self.lastReported >= 0.01 || fraction >= 0.989
+            if shouldReport { self.lastReported = fraction }
+            self.lock.unlock()
+            if shouldReport { self.report(fraction) }
+        }
+    }
+
+    func cancel() {
+        lock.lock()
+        isCancelled = true
+        let task = self.task
+        lock.unlock()
+        observation?.invalidate()
+        task?.cancel()
+    }
+
+    func finish() {
+        observation?.invalidate()
+        observation = nil
+        task = nil
     }
 }

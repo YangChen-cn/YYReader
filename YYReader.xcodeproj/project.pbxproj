@@ -156,6 +156,7 @@
 		4F0B814DB63919EAA6C2F595 /* ReaderPresentationMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7B99ED4B1C8359B3C5873C /* ReaderPresentationMode.swift */; };
 		4FC4A8375C01AD9B64B28C3D /* MangaImageLoadingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 916A931E712270AB71D46A69 /* MangaImageLoadingTests.swift */; };
 		4FE2D0ED92C5CB711AC1F3EC /* SyncMerger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40A29AE58A765CFBFED7E8E6 /* SyncMerger.swift */; };
+		4FF2A2884B67D0DE6B74D890 /* UpdateInstallRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 490EEB350D48FF196019AC38 /* UpdateInstallRequest.swift */; };
 		5051C67EE17F0AD3B1CFF074 /* MobileReaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D3ACFE32D00300379637DFD /* MobileReaderView.swift */; };
 		506CAA9C1FA2F0C2C77866EB /* HaoduoMangaAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4470C3136D7F4329B0969838 /* HaoduoMangaAdapter.swift */; };
 		51E98DFEC09BC3A522762E2C /* ReleaseVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA7A18F24C34D97E7198A561 /* ReleaseVersion.swift */; };
@@ -405,6 +406,7 @@
 		D266D99E0CC650E28A6CC1F1 /* AppTerminationDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34C73CC9D6681DABF8995E8F /* AppTerminationDelegate.swift */; };
 		D2AEBF65A90FB6826DFD91DB /* MobileLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F705D4DC1C23DD2F4B817B6 /* MobileLibraryView.swift */; };
 		D2F5608E509AE597D0A58A65 /* AboutSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C89A1C4F7C6707B88A753A8 /* AboutSettingsView.swift */; };
+		D4187366D47F9F4F8F80AE81 /* UpdateInstallRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 490EEB350D48FF196019AC38 /* UpdateInstallRequest.swift */; };
 		D41CE19C19B862E0CB642349 /* MangaBlobImageBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C595027022372F4108C9010 /* MangaBlobImageBridge.swift */; };
 		D4859B1CB80BD2D28A6CDCE7 /* MangaChapterCacheRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FF9AD003E58212AF00C06A8 /* MangaChapterCacheRecord.swift */; };
 		D4DFB98207D3F8336B79E2F2 /* TavernAvatarStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D324BF683AF0B1686E945833 /* TavernAvatarStore.swift */; };
@@ -470,6 +472,7 @@
 		F711029E67DE635F87ABB740 /* NovelImportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3787AFBE8EAC539387F397DA /* NovelImportCoordinator.swift */; };
 		F842D815343EE1457D805495 /* ChapterListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8C34013BDE6587DD61D4B05 /* ChapterListView.swift */; };
 		F8B796FC78F95F14B2F9F603 /* ReaderPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7EA497E220CFD1FEB416CEB /* ReaderPresentationTests.swift */; };
+		F8BBFC11E993DF97E3E94D65 /* UpdateInstallRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 490EEB350D48FF196019AC38 /* UpdateInstallRequest.swift */; };
 		F9DDDF3E53DB113C932A3F71 /* UpdateChecksum.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0077C354ECE8210AC664E12D /* UpdateChecksum.swift */; };
 		FA5D97D78B44EBFDD065642C /* MangaReaderLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97F027DF283C9A09C8317748 /* MangaReaderLayoutTests.swift */; };
 		FB419E7A296BF12D33961C0D /* GenericMangaAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 023F93CCDE21D221D117B81E /* GenericMangaAdapter.swift */; };
@@ -606,6 +609,7 @@
 		4470C3136D7F4329B0969838 /* HaoduoMangaAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaoduoMangaAdapter.swift; sourceTree = "<group>"; };
 		48C83535C92E5BDFCA92C7E8 /* YYReader.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = YYReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		48CB842F74BC94B07FAAF23F /* MobileSampleContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileSampleContent.swift; sourceTree = "<group>"; };
+		490EEB350D48FF196019AC38 /* UpdateInstallRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateInstallRequest.swift; sourceTree = "<group>"; };
 		4A2720AFE7B770A3340DC332 /* MangaSnapshotScripts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaSnapshotScripts.swift; sourceTree = "<group>"; };
 		4AC497BA8788DA62E850F74F /* ReaderKeyboardCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderKeyboardCommand.swift; sourceTree = "<group>"; };
 		4B4337F074B548FC6EDC7F63 /* YYReaderCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YYReaderCommands.swift; sourceTree = "<group>"; };
@@ -846,6 +850,7 @@
 				CA7A18F24C34D97E7198A561 /* ReleaseVersion.swift */,
 				B7C16CEB3C257222668A2402 /* SyncPreferenceKeys.swift */,
 				0077C354ECE8210AC664E12D /* UpdateChecksum.swift */,
+				490EEB350D48FF196019AC38 /* UpdateInstallRequest.swift */,
 				81DC6021EBE5DB155B7804B0 /* URLCanonicalizer.swift */,
 			);
 			path = Support;
@@ -1688,6 +1693,7 @@
 				3DD475C44975E983DA27B453 /* URLCanonicalizer.swift in Sources */,
 				8B580A7CBF7E1DD56044708E /* URLSessionHTMLLoader.swift in Sources */,
 				F9DDDF3E53DB113C932A3F71 /* UpdateChecksum.swift in Sources */,
+				4FF2A2884B67D0DE6B74D890 /* UpdateInstallRequest.swift in Sources */,
 				CE0DF3B1BB48CA5D6A8516DD /* VerificationRequest.swift in Sources */,
 				1BC0694779A074253BE1822F /* WebKitHTMLLoader.swift in Sources */,
 				359237AAFCCA7F72EE876A84 /* WebKitHostSession.swift in Sources */,
@@ -1708,6 +1714,7 @@
 				57561A91EC49D0750C9BB1B8 /* MacUpdateInstaller.swift in Sources */,
 				FC4E14E9A77B4F5862FEC866 /* ReleaseVersion.swift in Sources */,
 				3DE2EC2E1B5DCCA381405733 /* UpdateChecksum.swift in Sources */,
+				F8BBFC11E993DF97E3E94D65 /* UpdateInstallRequest.swift in Sources */,
 				C66D94BDA8E17D7EAE162431 /* YYReaderUpdaterApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1949,6 +1956,7 @@
 				0FB1EDD1BF0EB8B55CB5FFF1 /* URLCanonicalizer.swift in Sources */,
 				86CC293FC8FB7D8C5797CC9F /* URLSessionHTMLLoader.swift in Sources */,
 				926612FDAB43E0AEF1EC7017 /* UpdateChecksum.swift in Sources */,
+				D4187366D47F9F4F8F80AE81 /* UpdateInstallRequest.swift in Sources */,
 				0C7B923397845DCA3BE819D2 /* VerificationRequest.swift in Sources */,
 				868998649C9D31B98AFCFB70 /* WebKitHTMLLoader.swift in Sources */,
 				C0267DB91381639EAC39A6AD /* WebKitHostSession.swift in Sources */,
@@ -2145,7 +2153,7 @@
 				CODE_SIGN_ENTITLEMENTS = YYReader/YYReader.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YYReader/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = YYReader;
@@ -2155,7 +2163,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.5.0;
+				MARKETING_VERSION = 1.5.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yyreader.app;
 				PRODUCT_NAME = YYReader;
 				SDKROOT = macosx;
@@ -2291,7 +2299,7 @@
 				CODE_SIGN_ENTITLEMENTS = YYReader/YYReader.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YYReader/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = YYReader;
@@ -2301,7 +2309,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.5.0;
+				MARKETING_VERSION = 1.5.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yyreader.app;
 				PRODUCT_NAME = YYReader;
 				SDKROOT = macosx;

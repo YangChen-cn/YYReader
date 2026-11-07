@@ -29,8 +29,8 @@
     macos: {
       name: "macOS",
       label: "下载 macOS 版",
-      meta: "arm64 DMG · 6.4 MB · 1.5.0",
-      href: "https://github.com/YangChen-cn/YYReader/releases/download/v1.5.0/YYReader-1.5.0-arm64.dmg",
+      meta: "arm64 DMG · 6.4 MB · 1.5.1",
+      href: "https://github.com/YangChen-cn/YYReader/releases/download/v1.5.1/YYReader-1.5.1-arm64.dmg",
       frame: "macos",
       shots: [
         { src: "images/yyreader-macos-library.png", title: "YYReader · 书架、目录与正文并排", alt: "YYReader macOS 界面：书架、目录与正文并排" },
