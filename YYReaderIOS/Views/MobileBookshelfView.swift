@@ -32,8 +32,8 @@ struct MobileBookshelfView: View {
                             .frame(minHeight: max(360, geometry.size.height - (services.updates.showsBanner ? 400 : 48)))
                             .frame(maxWidth: .infinity)
                     } else {
-                        Text("\(store.books.count) 本藏书 · 轻点打开，长按管理")
-                            .font(.subheadline)
+                        Text("\(store.books.count) 本藏书")
+                            .font(.subheadline.weight(.medium))
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: 18, alignment: .top), count: count), spacing: 18) {

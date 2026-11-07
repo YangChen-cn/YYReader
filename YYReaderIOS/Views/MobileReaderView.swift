@@ -10,6 +10,8 @@ struct MobileReaderView: View {
     @AppStorage(ReaderPreferenceKeys.mangaPageTurnMode) private var mangaPageTurnMode = ReaderPageTurnMode.mangaDefault.rawValue
     @AppStorage(ReaderPreferenceKeys.mangaTabletAutoLandscape) private var autoLandscape = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    @Environment(\.accessibilitySwitchControlEnabled) private var switchControlEnabled
     @State private var viewportSize = CGSize.zero
     @State private var showingAppearance = false
     @State private var showingMore = false
@@ -45,7 +47,8 @@ struct MobileReaderView: View {
 
     private var hideState: AutoHideState {
         AutoHideState(enabled: controlsVisible && !showingAppearance && !showingMore && !isCatalogPresented
-                      && !isScrubbing && !isMangaScrubbing, activity: controlActivity)
+                      && !isScrubbing && !isMangaScrubbing && !voiceOverEnabled && !switchControlEnabled,
+                      activity: controlActivity)
     }
 
     var body: some View {
@@ -56,6 +59,7 @@ struct MobileReaderView: View {
                        loadsChapterAutomatically: false, togglePagingControls: toggleControls,
                        automaticMangaLandscape: automaticMangaLandscape)
                 .accessibilityAction(named: "显示阅读选项") { showControls() }
+                .accessibilityAction(named: "隐藏阅读选项") { controlsVisible = false }
                 .simultaneousGesture(TapGesture(count: 2).exclusively(before: SpatialTapGesture())
                     .onEnded { value in
                         guard !usesPages, case let .second(tap) = value,
@@ -138,8 +142,9 @@ struct MobileReaderView: View {
                 .labelStyle(.iconOnly)
             VStack(alignment: .leading, spacing: 2) {
                 Text(store.selectedBook?.title ?? "阅读").font(.subheadline.weight(.semibold)).lineLimit(1)
-                Text(store.selectedChapter?.title ?? "") .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(store.selectedChapter?.title ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
+            .accessibilityElement(children: .combine)
             .frame(maxWidth: .infinity, alignment: .leading)
             Button("目录", systemImage: "list.bullet") { noteActivity(); showCatalog() }
                 .labelStyle(.iconOnly)
@@ -163,28 +168,23 @@ struct MobileReaderView: View {
         VStack(spacing: 2) {
             if store.selectedChapter?.isManga != true {
                 HStack(spacing: 10) {
-                    Text("\(Int((isScrubbing && paragraphCount > 1 ? sliderIndex / Double(paragraphCount - 1) : (store.selectedChapter?.readingProgress ?? 0)) * 100))%")
+                    Text("\(progressPercentage)%")
                         .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
                         .frame(minWidth: 38, alignment: .trailing)
+                        .accessibilityHidden(true)
                     Slider(value: $sliderIndex, in: 0...Double(max(paragraphCount - 1, 1)), step: 1,
                            onEditingChanged: scrubProgress) { Text("阅读进度") }
                         .disabled(paragraphCount < 2)
+                        .accessibilityValue(Text("\(progressPercentage)%"))
                         .accessibilityIdentifier("ios.readerProgressSlider")
                 }
                 .padding(.horizontal, 10)
             }
-            HStack {
-                Button("上一章", systemImage: "chevron.left") { noteActivity(); store.goToPreviousChapter() }
-                    .disabled(!store.chapterNavigationSnapshot.hasPrevious)
-                Spacer(minLength: 4)
-                Text(store.chapterNavigationSnapshot.positionText).font(.caption.monospacedDigit()).lineLimit(1)
-                Spacer(minLength: 4)
-                Button("下一章", systemImage: "chevron.right") { noteActivity(); store.goToNextChapter() }
-                    .disabled(!store.chapterNavigationSnapshot.hasNext)
+            ViewThatFits(in: .horizontal) {
+                chapterNavigation(showLabels: true)
+                chapterNavigation(showLabels: false)
             }
-            .font(.callout)
-            .buttonStyle(.borderless)
-            .frame(minHeight: 44)
             .padding(.horizontal, 10)
             if store.offlineDownloads.isDownloading || store.offlineDownloads.failureMessage != nil {
                 HStack {
@@ -206,6 +206,56 @@ struct MobileReaderView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
         .padding(.horizontal, 10)
         .padding(.bottom, 4)
+    }
+
+    private var progressPercentage: Int {
+        let progress = isScrubbing && paragraphCount > 1
+            ? sliderIndex / Double(paragraphCount - 1)
+            : (store.selectedChapter?.readingProgress ?? 0)
+        return Int((min(max(progress, 0), 1) * 100).rounded())
+    }
+
+    private func chapterNavigation(showLabels: Bool) -> some View {
+        HStack(spacing: 4) {
+            Button {
+                noteActivity()
+                store.goToPreviousChapter()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left").accessibilityHidden(true)
+                    if showLabels { Text("上一章") }
+                }
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .accessibilityLabel("上一章")
+            .disabled(!store.chapterNavigationSnapshot.hasPrevious)
+
+            Spacer(minLength: 4)
+            Text(store.chapterNavigationSnapshot.positionText)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: showLabels, vertical: false)
+            Spacer(minLength: 4)
+
+            Button {
+                noteActivity()
+                store.goToNextChapter()
+            } label: {
+                HStack(spacing: 4) {
+                    if showLabels { Text("下一章") }
+                    Image(systemName: "chevron.right").accessibilityHidden(true)
+                }
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .accessibilityLabel("下一章")
+            .disabled(!store.chapterNavigationSnapshot.hasNext)
+        }
+        .font(.callout)
+        .buttonStyle(.borderless)
+        .frame(minHeight: 44)
     }
 
     private func scrubProgress(_ editing: Bool) {
@@ -253,7 +303,7 @@ private struct ReaderControlButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.body.weight(.medium))
-            .frame(minWidth: 40, minHeight: 44)
+            .frame(minWidth: 44, minHeight: 44)
             .contentShape(Rectangle())
             .opacity(configuration.isPressed ? 0.5 : 1)
     }

@@ -1,6 +1,48 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "隐藏阅读选项" : {
+      "extractionState" : "manual"
+    },
+    "%lld 本藏书" : {
+      "extractionState" : "manual"
+    },
+    "轻点打开，长按管理" : {
+      "extractionState" : "manual"
+    },
+    "添加网页或导入 TXT，开始阅读。" : {
+      "extractionState" : "manual"
+    },
+    "阅读效果预览" : {
+      "extractionState" : "manual"
+    },
+    "翻开书页，故事缓缓展开。" : {
+      "extractionState" : "manual"
+    },
+    "此刻，就慢慢读下去。" : {
+      "extractionState" : "manual"
+    },
+    "减小字号" : {
+      "extractionState" : "manual"
+    },
+    "增大字号" : {
+      "extractionState" : "manual"
+    },
+    "定位当前章节" : {
+      "extractionState" : "manual"
+    },
+    "目录选项" : {
+      "extractionState" : "manual"
+    },
+    "请选择书籍" : {
+      "extractionState" : "manual"
+    },
+    "添加书籍" : {
+      "extractionState" : "manual"
+    },
+    "删除书籍及其离线缓存？" : {
+      "extractionState" : "manual"
+    },
     "返回书架" : {
       "extractionState" : "manual"
     },

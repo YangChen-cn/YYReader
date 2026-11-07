@@ -7,24 +7,52 @@ struct MobileEmptyBookshelfView: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label("从一本好书开始", systemImage: "books.vertical")
-                .foregroundStyle(.tint)
+            Label {
+                Text("从一本好书开始")
+            } icon: {
+                Image(systemName: "books.vertical")
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.tint)
+            }
         } description: {
-            Text("把喜欢的故事放进书架。\n添加小说网址，或导入自己的 TXT 文件。")
+            Text("添加网页或导入 TXT，开始阅读。")
+                .multilineTextAlignment(.center)
         } actions: {
-            VStack(spacing: 12) {
-                Button("添加小说网址", systemImage: "link", action: addWeb)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                Button("导入 TXT", systemImage: "doc.text", action: importText)
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
+            VStack(spacing: 10) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        addWebButton
+                        importTextButton
+                    }
+                    .fixedSize(horizontal: true, vertical: false)
+                    VStack(spacing: 8) {
+                        addWebButton
+                        importTextButton
+                    }
+                }
                 Button("导入已有书架", systemImage: "square.and.arrow.down", action: importBookshelf)
                     .font(.subheadline)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .labelStyle(.titleAndIcon)
-            .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityIdentifier("ios.emptyBookshelf")
+    }
+
+    private var addWebButton: some View {
+        Button(action: addWeb) {
+            Label("添加网页", systemImage: "link")
+                .frame(minHeight: 30)
+        }
+        .buttonStyle(.borderedProminent)
+    }
+
+    private var importTextButton: some View {
+        Button(action: importText) {
+            Label("导入 TXT", systemImage: "doc.text")
+                .frame(minHeight: 30)
+        }
+        .buttonStyle(.bordered)
     }
 }

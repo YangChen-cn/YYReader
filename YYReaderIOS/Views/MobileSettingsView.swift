@@ -129,7 +129,6 @@ struct MobileSettingsView: View {
                 Section("关于") {
                     LabeledContent("YYReader", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")
                     LabeledContent("作者", value: "YangChen")
-                    LabeledContent("本次更新", value: "iPad 双页与解析优化")
                     if let repositoryURL = URL(string: "https://github.com/YangChen-cn/YYReader") {
                         Link("github.com/YangChen-cn/YYReader", destination: repositoryURL)
                     }
@@ -186,6 +185,7 @@ struct MobileSettingsView: View {
 
     private var continuousReadingToggle: some View {
         Toggle("连续阅读", isOn: $continuous)
-            .disabled(pageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue)
+            .disabled(pageTurnMode == ReaderPageTurnMode.horizontalPages.rawValue
+                      && presentation == ReaderPresentationMode.normal.rawValue)
     }
 }

@@ -5,6 +5,7 @@ struct MobileChapterListView: View {
     let openChapter: (UUID) -> Void
     @State private var showingReverseConfirmation = false
     @State private var search = ""
+    @State private var locateRequest = UUID()
 
     private var chapters: [Chapter] {
         search.isEmpty ? store.sortedChapters : store.sortedChapters.filter { $0.title.localizedStandardContains(search) }
@@ -46,9 +47,29 @@ struct MobileChapterListView: View {
                             }
                             openChapter(chapter.id)
                         } label: {
-                            ChapterListRow(chapter: chapter)
-                                .foregroundStyle(chapter.id == store.selectedChapterID ? Color.accentColor : Color.primary)
+                            HStack(spacing: 12) {
+                                if chapter.id == store.selectedChapterID {
+                                    Image(systemName: "book.pages.fill")
+                                        .foregroundStyle(Color.accentColor)
+                                        .accessibilityHidden(true)
+                                }
+                                Text(chapter.title)
+                                    .font(.body.weight(chapter.id == store.selectedChapterID ? .medium : .regular))
+                                    .foregroundStyle(chapter.id == store.selectedChapterID ? Color.accentColor : Color.primary)
+                                    .lineLimit(3)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                if chapter.isAvailableOffline {
+                                    Image(systemName: "checkmark.circle")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                        .accessibilityLabel("已缓存")
+                                }
+                            }
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
                     }
+                    .listRowBackground(chapter.id == store.selectedChapterID
+                        ? Color.accentColor.opacity(0.07) : Color(.secondarySystemGroupedBackground))
+                    .accessibilityAddTraits(chapter.id == store.selectedChapterID ? .isSelected : [])
                     .id(chapter.id)
                     .accessibilityIdentifier("ios.chapter.\(chapter.sortIndex)")
                     }
@@ -59,12 +80,16 @@ struct MobileChapterListView: View {
                 await Task.yield()
                 if let id = store.selectedChapterID { proxy.scrollTo(id, anchor: .center) }
             }
-            .onChange(of: chapters.map(\.id)) { _, _ in
+            .onChange(of: locateRequest) { _, _ in
                 if let id = store.selectedChapterID { proxy.scrollTo(id, anchor: .center) }
             }
+            .onChange(of: store.selectedChapterID) { _, id in
+                if search.isEmpty, let id { proxy.scrollTo(id, anchor: .center) }
+            }
+            .scrollDismissesKeyboard(.interactively)
             .overlay {
                 if store.selectedBook == nil {
-                    ContentUnavailableView("请选择小说", systemImage: "book")
+                    ContentUnavailableView("请选择书籍", systemImage: "book")
                 } else if chapters.isEmpty {
                     if search.isEmpty {
                         ContentUnavailableView("没有识别到章节", systemImage: "list.bullet")
@@ -85,14 +110,23 @@ struct MobileChapterListView: View {
         .navigationTitle(store.selectedBook?.title ?? "目录")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button("反转目录", systemImage: "arrow.up.arrow.down") { showingReverseConfirmation = true }
-                    .disabled(store.sortedChapters.count < 2 || store.isLoading)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                if store.selectedBook?.sourceKind == .web {
-                    Button("刷新目录", systemImage: "arrow.clockwise", action: store.startRefreshSelectedCatalog)
-                        .disabled(!store.canRefreshSelectedCatalog || store.isLoading)
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button("定位当前章节", systemImage: "location") {
+                    search = ""
+                    // Allow the unfiltered list to lay out before locating it.
+                    Task { @MainActor in
+                        await Task.yield()
+                        locateRequest = UUID()
+                    }
+                }
+                .disabled(store.selectedChapterID == nil)
+                Menu("目录选项", systemImage: "ellipsis.circle") {
+                    if store.selectedBook?.sourceKind == .web {
+                        Button("刷新目录", systemImage: "arrow.clockwise", action: store.startRefreshSelectedCatalog)
+                            .disabled(!store.canRefreshSelectedCatalog || store.isLoading)
+                    }
+                    Button("反转目录", systemImage: "arrow.up.arrow.down") { showingReverseConfirmation = true }
+                        .disabled(store.sortedChapters.count < 2 || store.isLoading)
                 }
             }
         }

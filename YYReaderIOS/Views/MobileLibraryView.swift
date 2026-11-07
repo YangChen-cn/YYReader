@@ -106,7 +106,7 @@ struct MobileLibraryView: View {
                 activeNotice = BookshelfTransferNotice(title: "导入 TXT 失败", message: message)
                 textImport.errorMessage = nil
             }
-            .confirmationDialog("删除小说及其离线缓存？", isPresented: $confirmingDelete) {
+            .confirmationDialog("删除书籍及其离线缓存？", isPresented: $confirmingDelete) {
                 Button("删除", role: .destructive) {
                     if store.deleteSelectedBook() { showLibrary() }
                 }
@@ -153,7 +153,7 @@ struct MobileLibraryView: View {
                     }
                     ToolbarItem(placement: .primaryAction) {
                         Menu("添加", systemImage: "plus") {
-                            Section("添加小说") {
+                            Section("添加书籍") {
                                 Button("添加网页", systemImage: "link") { showingURL = true }
                                 Button("导入 TXT", systemImage: "doc.text") { chooseFile(text: true) }
                             }
