@@ -90,6 +90,23 @@ struct MobileLibrarySceneView: View {
             services.folderSync.attach(to: library)
             #if DEBUG
             let arguments = ProcessInfo.processInfo.arguments
+            // Developer-assisted import uses the normal codec and persistent
+            // library. The file must be staged in this app's Documents folder.
+            if let index = arguments.firstIndex(of: "--import-bookshelf-file"),
+               arguments.indices.contains(index + 1),
+               !arguments.contains("--ui-testing"), !arguments.contains("--preview-library") {
+                do {
+                    let name = URL(fileURLWithPath: arguments[index + 1]).lastPathComponent
+                    let url = URL.documentsDirectory.appendingPathComponent(name)
+                    let document = try await BookshelfTransferFileService().readDocument(from: url)
+                    let result = try library.importBookshelfTransfer(document)
+                    if result.failed > 0 {
+                        library.presentedError = PresentedError(message: result.failures.joined(separator: "\n"))
+                    }
+                } catch {
+                    library.presentedError = PresentedError(message: error.localizedDescription)
+                }
+            }
             if let index = arguments.firstIndex(of: "--preview-url"), arguments.indices.contains(index + 1) {
                 library.startImportURL(arguments[index + 1])
             }
