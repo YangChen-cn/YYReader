@@ -71,6 +71,7 @@
 		214F6E752FCE4800EEB1F162 /* TavernAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAF9A93EF21C7CD41042C54A /* TavernAvatarView.swift */; };
 		23FFB62B67ACFAFA4A5C5FC6 /* HybridHTMLLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 766B2107CD7A9B981E5514CB /* HybridHTMLLoaderTests.swift */; };
 		25195BBF44C1637453F8BDBA /* BookshelfTransferController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8B3905CA149469DAA4C2EFD /* BookshelfTransferController.swift */; };
+		2664CFE2441D4C4A069A165D /* SyncRecoveryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC949A1AFE7326CBC368DC83 /* SyncRecoveryStore.swift */; };
 		26E474C7C37244B44AE1A28D /* MobileReadingAppearanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 273E5106608137AB887A92F9 /* MobileReadingAppearanceView.swift */; };
 		281C2085565F0335AF5B93B3 /* ReaderContinuationBoundary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19E103150D25F39DC4650368 /* ReaderContinuationBoundary.swift */; };
 		28D576D7E6D292AFF744FBAB /* ReaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD05D6CF260ED4D8F4170A55 /* ReaderView.swift */; };
@@ -108,6 +109,7 @@
 		37FA5D5426EE6A138FAB2347 /* BrowserHTMLLoading.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B051F7BA1876915BF0B9C42 /* BrowserHTMLLoading.swift */; };
 		38848FC13AC5E371D71B7F7D /* StaticHTMLLoading.swift in Sources */ = {isa = PBXBuildFile; fileRef = A754BF62E89043E19297471E /* StaticHTMLLoading.swift */; };
 		38CC8901F677F2116F8475AC /* KeyboardShortcutRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95B30317BAECDCA4E83BCE77 /* KeyboardShortcutRecorder.swift */; };
+		3994CAB7866BE1FA12187375 /* SyncRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71A5016DAEE7F7C9DFBE2D07 /* SyncRecoveryTests.swift */; };
 		3A05F9150F25D3ACD6A5F647 /* ReaderContinuationStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B98B644A465B742F91718E49 /* ReaderContinuationStatus.swift */; };
 		3BACD28FF6B8EFB95229F0CE /* SyncBookRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57BDD4722C2FA5C218DDA134 /* SyncBookRecord.swift */; };
 		3CB81885E4A0251BC00B478D /* NovelProcessingWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A435F89F2732D573991B67B4 /* NovelProcessingWorker.swift */; };
@@ -248,6 +250,7 @@
 		80836DE40202A74E0D669513 /* ReaderPresentationMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7B99ED4B1C8359B3C5873C /* ReaderPresentationMode.swift */; };
 		8139A60D958DFA2CCC6ED76A /* MockHTMLLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A84805A6C3E6F8B7D1A31E1A /* MockHTMLLoader.swift */; };
 		81AD425EF5145DAC431C8DD4 /* AcademicPaperPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51A38D4B668B847545406232 /* AcademicPaperPlannerTests.swift */; };
+		81FE41AE6E82FED7DB654EB0 /* SyncRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71A5016DAEE7F7C9DFBE2D07 /* SyncRecoveryTests.swift */; };
 		823B338F3556039A51F54D80 /* ReaderScrollTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62425632BD988CD26DE778EF /* ReaderScrollTarget.swift */; };
 		825D4220335FE8A631576835 /* AcademicColumnMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FCADA4EAD8596868CA5EE67 /* AcademicColumnMode.swift */; };
 		83A5A49F88D383F0A373E376 /* SyncDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9F1E05BD047DDB7D17946B2 /* SyncDevice.swift */; };
@@ -305,6 +308,7 @@
 		A0E2C19ECD32532D1B33B1B0 /* BrowserHTMLLoading.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B051F7BA1876915BF0B9C42 /* BrowserHTMLLoading.swift */; };
 		A1E8066AAF120121E68B780C /* HybridHTMLLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 640BD2FB3A2FBFF1931C4B8D /* HybridHTMLLoader.swift */; };
 		A24269756760A3B7E4ED9C0C /* TavernCharacterEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82517BD35F9846C989C9EF41 /* TavernCharacterEditor.swift */; };
+		A28ACF84D21C08BD787892CB /* SyncRecoveryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC949A1AFE7326CBC368DC83 /* SyncRecoveryStore.swift */; };
 		A340678736A96A9B4102912B /* CatalogExpansionScripts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A456C23721731CD2BE21EAF /* CatalogExpansionScripts.swift */; };
 		A3884BCA4E0A3A3950048015 /* BookPresentationPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBFA67505AAFA2698126864F /* BookPresentationPreferences.swift */; };
 		A426977DF21B6A14E61B2AB6 /* MangaWindowWidthBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E88381EA0FF389654D5FFC9 /* MangaWindowWidthBridge.swift */; };
@@ -643,6 +647,7 @@
 		6D8A326E44CFA0D87F3AFE6A /* LocalCacheSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalCacheSummary.swift; sourceTree = "<group>"; };
 		6F9110E7A204803ED2901655 /* SyncSnapshotCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncSnapshotCodec.swift; sourceTree = "<group>"; };
 		6FD51C7589B5F294D12D85C5 /* NovelSourceAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelSourceAdapter.swift; sourceTree = "<group>"; };
+		71A5016DAEE7F7C9DFBE2D07 /* SyncRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncRecoveryTests.swift; sourceTree = "<group>"; };
 		73920F9768402D318E6192DC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		741FDEEC4FCA8EB97C7261EC /* BookshelfTransferPreviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookshelfTransferPreviewSheet.swift; sourceTree = "<group>"; };
 		766B2107CD7A9B981E5514CB /* HybridHTMLLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HybridHTMLLoaderTests.swift; sourceTree = "<group>"; };
@@ -725,6 +730,7 @@
 		B97E1B3F536A57CADFC312D2 /* BookshelfTransferFileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookshelfTransferFileService.swift; sourceTree = "<group>"; };
 		B98B644A465B742F91718E49 /* ReaderContinuationStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderContinuationStatus.swift; sourceTree = "<group>"; };
 		BBFA67505AAFA2698126864F /* BookPresentationPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookPresentationPreferences.swift; sourceTree = "<group>"; };
+		BC949A1AFE7326CBC368DC83 /* SyncRecoveryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncRecoveryStore.swift; sourceTree = "<group>"; };
 		BD9BFE86A9B07EB705452A27 /* SyncFolderMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncFolderMonitor.swift; sourceTree = "<group>"; };
 		BDFE85C46C8BAFC0F8382B7D /* MangaBlobSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaBlobSource.swift; sourceTree = "<group>"; };
 		C032037EA6AE636E72AB438D /* ZaiMangaAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZaiMangaAdapter.swift; sourceTree = "<group>"; };
@@ -1140,6 +1146,7 @@
 				BD9BFE86A9B07EB705452A27 /* SyncFolderMonitor.swift */,
 				9401982DF8B12D10143A2221 /* SyncFolderPicker.swift */,
 				40A29AE58A765CFBFED7E8E6 /* SyncMerger.swift */,
+				BC949A1AFE7326CBC368DC83 /* SyncRecoveryStore.swift */,
 				6F9110E7A204803ED2901655 /* SyncSnapshotCodec.swift */,
 				D324BF683AF0B1686E945833 /* TavernAvatarStore.swift */,
 				1BF1A7EE7FD930325126B08D /* URLSessionHTMLLoader.swift */,
@@ -1211,6 +1218,7 @@
 				F7EA497E220CFD1FEB416CEB /* ReaderPresentationTests.swift */,
 				EDF7ECF8490FD7F56690B0FC /* SyncEngineTests.swift */,
 				8D8E3835CAD5A8E461282D18 /* SyncFolderBookmarkStoreTests.swift */,
+				71A5016DAEE7F7C9DFBE2D07 /* SyncRecoveryTests.swift */,
 				EE00D693D5E2A430179C7AF0 /* TavernAvatarTests.swift */,
 				127529CE6A0F9BB594DF4D2A /* TavernTextParserTests.swift */,
 				E7ED0B9992F36F0EC7E5204E /* TestFixture.swift */,
@@ -1488,6 +1496,7 @@
 				F8B796FC78F95F14B2F9F603 /* ReaderPresentationTests.swift in Sources */,
 				B6C95BB32FC609968F5EB533 /* SyncEngineTests.swift in Sources */,
 				0E3A41F7E2CC789ABFE17AFF /* SyncFolderBookmarkStoreTests.swift in Sources */,
+				81FE41AE6E82FED7DB654EB0 /* SyncRecoveryTests.swift in Sources */,
 				6F8575AD7F2AD245D848B54E /* TavernAvatarTests.swift in Sources */,
 				B6124ACEB03B4B0A7F221342 /* TavernTextParserTests.swift in Sources */,
 				28EEF515B9B61FF5AF0BCD89 /* TestFixture.swift in Sources */,
@@ -1663,6 +1672,7 @@
 				CC086B6579B227FFABBD47BE /* SyncFolderPicker.swift in Sources */,
 				4FE2D0ED92C5CB711AC1F3EC /* SyncMerger.swift in Sources */,
 				8FC4DC558F64F6D363D86AB2 /* SyncPreferenceKeys.swift in Sources */,
+				2664CFE2441D4C4A069A165D /* SyncRecoveryStore.swift in Sources */,
 				73091E680DEB90730E71EBE5 /* SyncResult.swift in Sources */,
 				74CE1D84871BD0C0F925F640 /* SyncSnapshot.swift in Sources */,
 				AC49CA2472CB956DC279A7D6 /* SyncSnapshotCodec.swift in Sources */,
@@ -1740,6 +1750,7 @@
 				85054915981B68AB5454F536 /* QidiySourceAdapterTests.swift in Sources */,
 				2A264CEB68387FE7BB634105 /* SyncEngineTests.swift in Sources */,
 				294EAC961657AD1122A66874 /* SyncFolderBookmarkStoreTests.swift in Sources */,
+				3994CAB7866BE1FA12187375 /* SyncRecoveryTests.swift in Sources */,
 				FC2E9DE1FD47810DF5C7F3DD /* TavernAvatarTests.swift in Sources */,
 				AF22A82F9095AD3D33DD0103 /* TavernTextParserTests.swift in Sources */,
 				C7E128FC565964F05DBF63AA /* TestFixture.swift in Sources */,
@@ -1922,6 +1933,7 @@
 				3E1C3610FE2D86AFA45B3436 /* SyncFolderMonitor.swift in Sources */,
 				BDF064834D0644CB8A5F581A /* SyncMerger.swift in Sources */,
 				9B8C019167F886425B237D0D /* SyncPreferenceKeys.swift in Sources */,
+				A28ACF84D21C08BD787892CB /* SyncRecoveryStore.swift in Sources */,
 				04A08627C08F774B9ABE51CE /* SyncResult.swift in Sources */,
 				F4FE34C33F5C2F29A17E29DF /* SyncSnapshot.swift in Sources */,
 				DE45A2D9A60FDCB09CE86321 /* SyncSnapshotCodec.swift in Sources */,
@@ -2051,13 +2063,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				INFOPLIST_FILE = YYReaderIOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.4.1;
+				MARKETING_VERSION = 1.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yyreader.ios;
 				PRODUCT_MODULE_NAME = YYReader;
 				PRODUCT_NAME = YYReader;
@@ -2133,7 +2145,7 @@
 				CODE_SIGN_ENTITLEMENTS = YYReader/YYReader.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YYReader/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = YYReader;
@@ -2143,7 +2155,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.4.1;
+				MARKETING_VERSION = 1.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yyreader.app;
 				PRODUCT_NAME = YYReader;
 				SDKROOT = macosx;
@@ -2254,13 +2266,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				INFOPLIST_FILE = YYReaderIOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.4.1;
+				MARKETING_VERSION = 1.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yyreader.ios;
 				PRODUCT_MODULE_NAME = YYReader;
 				PRODUCT_NAME = YYReader;
@@ -2279,7 +2291,7 @@
 				CODE_SIGN_ENTITLEMENTS = YYReader/YYReader.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YYReader/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = YYReader;
@@ -2289,7 +2301,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.4.1;
+				MARKETING_VERSION = 1.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yyreader.app;
 				PRODUCT_NAME = YYReader;
 				SDKROOT = macosx;

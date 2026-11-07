@@ -1,6 +1,48 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "版本 1.5.0" : {
+      "extractionState" : "manual"
+    },
+    "新增 SillyTavern 对话排版与角色头像。" : {
+      "extractionState" : "manual"
+    },
+    "按书籍保存阅读排版，手动选择优先。" : {
+      "extractionState" : "manual"
+    },
+    "本地 TXT 可选上传正文并跨设备接续阅读。" : {
+      "extractionState" : "manual"
+    },
+    "优化阅读布局、对话卡片和进度恢复。" : {
+      "extractionState" : "manual"
+    },
+    "解除文件夹绑定" : {
+      "extractionState" : "manual"
+    },
+    "解除文件夹绑定？" : {
+      "extractionState" : "manual"
+    },
+    "解除绑定" : {
+      "extractionState" : "manual"
+    },
+    "清除这台设备的同步授权和恢复信息，保留书架与阅读记录。" : {
+      "extractionState" : "manual"
+    },
+    "无法读取或迁移同步恢复信息，请稍后重试。原配置已保留。" : {
+      "extractionState" : "manual"
+    },
+    "无法保存同步恢复信息，请稍后重试。" : {
+      "extractionState" : "manual"
+    },
+    "无法解除同步绑定，请稍后重试。" : {
+      "extractionState" : "manual"
+    },
+    "同步授权已失效，请重新选择文件夹。" : {
+      "extractionState" : "manual"
+    },
+    "同步文件夹暂时不可用，请稍后重试或重新选择。恢复信息已保留。" : {
+      "extractionState" : "manual"
+    },
     "隐藏阅读选项" : {
       "extractionState" : "manual"
     },
@@ -741,9 +783,6 @@
       "extractionState" : "manual"
     },
     "原生小说与漫画阅读器" : {
-      "extractionState" : "manual"
-    },
-    "版本 1.4.1" : {
       "extractionState" : "manual"
     },
     "自动检查更新，下载后安装并重启。" : {

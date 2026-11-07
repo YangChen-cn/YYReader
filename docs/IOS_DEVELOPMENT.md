@@ -51,7 +51,7 @@ iOS 直接编译 `YYReader/Models`、`Parsing`、`Services`、`Stores`、`Suppor
 ./script/package_ios.sh unsigned
 ```
 
-输出 `dist/iOS/YYReader-iOS-1.4.1-resign.ipa`，仅 arm64；上述日常构建命令默认 Debug，GitHub iOS 1.4.1 发布资产使用 Release。脚本检查图标、架构和 ZIP 完整性。**未签名 IPA 不能直接安装**；在侧载工具中使用自己的 Apple ID / 证书和描述文件签名后安装。普通 macOS ad-hoc 自签名不能代替 iOS 的设备签名。
+输出 `dist/iOS/YYReader-iOS-1.5.0-resign.ipa`，仅 arm64；上述日常构建命令默认 Debug，GitHub iOS 1.4.1 发布资产使用 Release。脚本检查图标、架构和 ZIP 完整性。**未签名 IPA 不能直接安装**；在侧载工具中使用自己的 Apple ID / 证书和描述文件签名后安装。普通 macOS ad-hoc 自签名不能代替 iOS 的设备签名。
 
 本机具备 Apple 开发者签名资源时，也可导出 development IPA：
 
@@ -66,7 +66,7 @@ YYREADER_IOS_TEAM_ID=你的TeamID ./script/package_ios.sh signed
 YYReader 的 `resign.ipa` 可以交给 SideStore 重新签名。SideStore 的 [官方 FAQ](https://docs.sidestore.io/docs/faq) 说明普通 App 无需专门修改；续签由 SideStore 管理，YYReader 不需要内置签名服务。
 
 1. 首次按 [SideStore 官方安装说明](https://docs.sidestore.io/docs/installation/install) 使用电脑安装并配置 SideStore，完成开发者信任、开发者模式、配对文件及 LocalDevVPN 设置。
-2. 把 `YYReader-iOS-1.4.1-resign.ipa` 保存到 iPhone 的“文件”。在 SideStore 的 My Apps 页面导入该 IPA，使用自己的 Apple Account 签名安装。
+2. 把发布后的 `YYReader-iOS-1.5.0-resign.ipa` 保存到 iPhone 的“文件”。在 SideStore 的 My Apps 页面导入该 IPA，使用自己的 Apple Account 签名安装。
 3. SideStore 会尝试后台刷新已安装 App；免费账号签名通常为7天，仍需确保其后台刷新与 LocalDevVPN 配置可用，定期检查 My Apps 中的剩余天数，也可点剩余天数手动刷新。iOS 的后台调度不保证每次自动刷新成功。
 4. 更新 YYReader 时使用同一账号，在 SideStore 导入新版 IPA 覆盖安装，保留已有 App。对于已由其他工具安装的版本，官方 FAQ 也建议保留原 App 再导入同一或新版 IPA；迁移前可先导出 `.yyreader` 书架文件。
 
@@ -100,3 +100,16 @@ YYReader 的 `resign.ipa` 可以交给 SideStore 重新签名。SideStore 的 [�
 - 验证：真实网站要求人工验证时手动完成，取消和超时能结束；不循环弹窗。
 
 日常 UI 不使用 Computer Use 自动点击或截图。真实网站和主观视觉效果由用户在设备上验收，测试使用精简 fixture。
+
+
+## 1.5.0 同步授权恢复（待发布）
+
+iOS 将文件夹 Bookmark、同步开关和显示路径保存在本机 Keychain，使用 `AfterFirstUnlockThisDeviceOnly`，不通过 iCloud 钥匙串同步。现有 UserDefaults 配置在写入 Keychain 成功后才清理；保存失败时保留本地配置并提示重试。
+
+重装后会尝试读取恢复信息。原同步开关为关闭时继续关闭；开启时先解析 Bookmark、取得访问权限并检查文件夹，再执行同步。失效授权提示重新选择；云盘尚未就绪时保留恢复信息，回到前台或手动同步可重试。设置中的「解除文件夹绑定」会清除本机授权及 Keychain 恢复信息，保留书架和阅读记录。
+
+自动恢复属于 best-effort：Keychain 在卸载后的保留、侧载签名身份 / Team 是否一致，以及 File Provider 是否继续接受原 Bookmark 都可能影响恢复，仍保留手动选择共享文件夹入口。无需额外云服务或签名权限。
+
+当前只准备 1.5.0 源码、版本号与说明，未创建 GitHub Release 或上传 1.5.0 安装包。
+
+Keychain 模拟器测试需要带应用身份及自身 Keychain 访问组的开发签名；完全不签名的测试产物会返回 `errSecMissingEntitlement (-34018)`。真机由 Xcode 或侧载工具的有效重签名提供应用身份，恢复信息只能由同一签名身份访问。

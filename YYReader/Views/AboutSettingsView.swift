@@ -83,12 +83,12 @@ struct AboutSettingsView: View {
             Text("最新改进")
                 .font(.headline)
 
-            GroupBox("版本 1.4.1") {
+            GroupBox("版本 1.5.0") {
                 VStack(alignment: .leading, spacing: 10) {
-                    Label("自动检查更新，下载后安装并重启。", systemImage: "link")
-                    Label("优化通用漫画识别与图片读取。", systemImage: "rectangle.split.2x1")
-                    Label("改进懒加载、缓存与阅读位置恢复。", systemImage: "internaldrive")
-                    Label("更新提醒可暂时忽略，设置中再次检查。", systemImage: "arrow.triangle.2.circlepath")
+                    Label("新增 SillyTavern 对话排版与角色头像。", systemImage: "link")
+                    Label("按书籍保存阅读排版，手动选择优先。", systemImage: "rectangle.split.2x1")
+                    Label("本地 TXT 可选上传正文并跨设备接续阅读。", systemImage: "internaldrive")
+                    Label("优化阅读布局、对话卡片和进度恢复。", systemImage: "arrow.triangle.2.circlepath")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }

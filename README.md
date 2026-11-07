@@ -4,7 +4,7 @@
   <p><strong>小说与漫画，随处接着读。</strong></p>
   <p>macOS、iPhone 与 iPad 的原生小说和漫画阅读器，Windows 提供小说阅读。<br>添加网页或导入 TXT，把书架、离线缓存和阅读进度留在自己的设备上。</p>
   <p>
-    <a href="https://github.com/YangChen-cn/YYReader/releases/tag/v1.4.1"><img src="https://img.shields.io/badge/release-1.4.1-6D5CE8?style=flat-square" alt="macOS / iOS 1.4.1"></a>
+    <a href="RELEASE_NOTES.md"><img src="https://img.shields.io/badge/next-1.5.0-6D5CE8?style=flat-square" alt="macOS / iOS 1.5.0 待发布"></a>
     <a href="https://github.com/YangChen-cn/YYReader/stargazers"><img src="https://img.shields.io/github/stars/YangChen-cn/YYReader?style=flat-square&color=E6A23C" alt="GitHub Stars"></a>
     <img src="https://img.shields.io/badge/Swift-6-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 6">
   </p>
@@ -26,6 +26,9 @@
 </div>
 
 ## 下载与安装
+
+**macOS / iOS 1.5.0 已进入发布准备，尚未发布安装包。** 新增 SillyTavern 阅读、本地 TXT 正文同步，精修 iOS 阅读界面，并支持重装后尝试恢复同步授权。[查看 1.5.0 更新说明](RELEASE_NOTES.md)。下表为当前可下载的正式版本。
+
 
 | 平台 | 最新版本 | 安装包 | 系统要求 |
 | --- | --- | --- | --- |
@@ -90,7 +93,7 @@ iOS IPA 需要用 SideStore、Sideloadly 等工具自行签名安装，续签由
 
 ## 阅读体验
 
-以下功能以 Mac / iOS 1.4.1 为准，Windows 的支持范围在对应条目中说明。
+以下功能以 Mac / iOS 当前主分支为准，Windows 的支持范围在对应条目中说明。
 
 | 功能 | 使用方式 |
 | --- | --- |
@@ -194,7 +197,7 @@ YYREADER_SIMULATOR_ID=当前模拟器UDID ./script/build_ios.sh simulator
 ./script/build_ios.sh release
 ```
 
-Release IPA 位于 `dist/iOS/YYReader-iOS-1.4.1-resign.ipa`。模拟器无需开发者证书；IPA 需要自己的 Apple ID / 证书重新签名。真机调试在 Signing & Capabilities 选择 Team，并在手机开启开发者模式。
+Release IPA 位于 `dist/iOS/YYReader-iOS-1.5.0-resign.ipa`。模拟器无需开发者证书；IPA 需要自己的 Apple ID / 证书重新签名。真机调试在 Signing & Capabilities 选择 Team，并在手机开启开发者模式。
 
 已有签名资源时可使用 `YYREADER_IOS_TEAM_ID=你的TeamID ./script/build_ios.sh signed`。完整操作见 [iOS 开发说明](docs/IOS_DEVELOPMENT.md)。
 

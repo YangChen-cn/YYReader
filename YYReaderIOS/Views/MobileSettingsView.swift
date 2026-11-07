@@ -26,6 +26,7 @@ struct MobileSettingsView: View {
     @BookReaderPresentation private var presentation
     @AppStorage(ReaderPreferenceKeys.academicColumnMode) private var columns = AcademicColumnMode.double.rawValue
     @State private var choosingFolder = false
+    @State private var confirmingUnbind = false
     @State private var pickerError: PresentedError?
 
     var body: some View {
@@ -119,6 +120,9 @@ struct MobileSettingsView: View {
                         .disabled(!sync.hasSelectedFolder)
                     Button("立即同步", systemImage: "arrow.triangle.2.circlepath", action: sync.syncNow)
                         .disabled(!sync.isEnabled || sync.isSyncing)
+                    if sync.hasSelectedFolder {
+                        Button("解除文件夹绑定", role: .destructive) { confirmingUnbind = true }
+                    }
                     if sync.isSyncing { ProgressView("正在同步…") }
                     if let date = sync.lastSyncAt { LabeledContent("上次同步", value: date.formatted(date: .abbreviated, time: .shortened)) }
                     if let error = sync.errorMessage { Label(error, systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.red) }
@@ -143,6 +147,10 @@ struct MobileSettingsView: View {
             }
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成", action: dismiss.callAsFunction) } }
         }
+        .confirmationDialog("解除文件夹绑定？", isPresented: $confirmingUnbind, titleVisibility: .visible) {
+            Button("解除绑定", role: .destructive, action: services.folderSync.forgetFolder)
+            Button("取消", role: .cancel) { }
+        } message: { Text("清除这台设备的同步授权和恢复信息，保留书架与阅读记录。") }
         .fileImporter(isPresented: $choosingFolder, allowedContentTypes: [.folder]) { result in
             switch result {
             case .success(let url): services.folderSync.selectFolder(url)

@@ -7,6 +7,10 @@ final class FolderSyncController {
     private let cloudTexts = CloudTextStore()
     private var uploadTask: Task<Void, Never>?
     private var engine: SyncEngine
+    private let recoveryStore: (any SyncRecoveryPersisting)?
+    private var configurationTask: Task<Void, Never>?
+    private var restoringConfiguration = false
+    private var recoveryLoaded = false
     private let defaults: UserDefaults
     private var bookmarkStore: any SyncFolderBookmarkAccessing
     private let monitor = SyncFolderMonitor()
@@ -35,7 +39,9 @@ final class FolderSyncController {
     var isEnabled: Bool {
         didSet {
             guard isEnabled != oldValue else { return }
+            guard !restoringConfiguration else { return }
             defaults.set(isEnabled, forKey: SyncPreferenceKeys.enabled)
+            persistRecoveryConfiguration()
             isEnabled ? activate() : deactivate()
         }
     }
@@ -49,10 +55,16 @@ final class FolderSyncController {
     init(
         engine: SyncEngine = SyncEngine(),
         defaults: UserDefaults = .standard,
-        bookmarkStore: (any SyncFolderBookmarkAccessing)? = nil
+        bookmarkStore: (any SyncFolderBookmarkAccessing)? = nil,
+        recoveryStore: (any SyncRecoveryPersisting)? = nil
     ) {
         self.engine = engine
         self.defaults = defaults
+        #if os(iOS)
+        self.recoveryStore = recoveryStore ?? SyncRecoveryStore()
+        #else
+        self.recoveryStore = recoveryStore
+        #endif
         self.bookmarkStore = bookmarkStore ?? SyncFolderBookmarkStore()
         self.isEnabled = defaults.bool(forKey: SyncPreferenceKeys.enabled)
         self.lastSyncAt = defaults.object(forKey: SyncPreferenceKeys.lastSyncAt) as? Date
@@ -73,13 +85,81 @@ final class FolderSyncController {
 
     func attach(to store: LibraryStore) {
         self.store = store
-        if isEnabled {
-            // Defer permission restoration until the scene task has returned and
-            // SwiftUI has had an opportunity to present the local library.
-            Task { [weak self] in
-                await Task.yield()
-                self?.activate()
+        configurationTask?.cancel()
+        configurationTask = Task { [weak self] in
+            guard let self else { return }
+            await self.restoreRecoveryConfiguration()
+            guard !Task.isCancelled else { return }
+            if self.isEnabled { self.activate() }
+        }
+    }
+
+    private func restoreRecoveryConfiguration() async {
+        guard let recoveryStore else { return }
+        do {
+            if let bookmarkData {
+                try await recoveryStore.save(.init(bookmark: bookmarkData, enabled: isEnabled, displayPath: persistedFolderDisplayPath))
+                guard !Task.isCancelled else { return }
+                clearLegacyConfiguration()
+            } else if let saved = try await recoveryStore.load() {
+                guard !Task.isCancelled else { return }
+                restoringConfiguration = true
+                bookmarkData = saved.bookmark
+                persistedFolderDisplayPath = saved.displayPath
+                isEnabled = saved.enabled
+                restoringConfiguration = false
+                clearLegacyConfiguration()
             }
+            recoveryLoaded = true
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = "无法读取或迁移同步恢复信息，请稍后重试。原配置已保留。"
+        }
+    }
+
+    private func clearLegacyConfiguration() {
+        defaults.removeObject(forKey: SyncPreferenceKeys.bookmark)
+        defaults.removeObject(forKey: SyncPreferenceKeys.folderDisplayPath)
+        defaults.removeObject(forKey: SyncPreferenceKeys.enabled)
+    }
+
+    private func persistRecoveryConfiguration() {
+        guard let recoveryStore, let bookmarkData else { return }
+        let configuration = SyncRecoveryConfiguration(bookmark: bookmarkData, enabled: isEnabled, displayPath: persistedFolderDisplayPath)
+        // Retain a pending fallback until Keychain confirms the latest state.
+        defaults.set(bookmarkData, forKey: SyncPreferenceKeys.bookmark)
+        defaults.set(isEnabled, forKey: SyncPreferenceKeys.enabled)
+        defaults.set(persistedFolderDisplayPath, forKey: SyncPreferenceKeys.folderDisplayPath)
+        configurationTask?.cancel()
+        configurationTask = Task { [weak self] in
+            do {
+                try await recoveryStore.save(configuration)
+                guard !Task.isCancelled else { return }
+                self?.recoveryLoaded = true
+                self?.clearLegacyConfiguration()
+            } catch is CancellationError { return }
+            catch { self?.errorMessage = "无法保存同步恢复信息，请稍后重试。" }
+        }
+    }
+
+    func forgetFolder() {
+        configurationTask?.cancel()
+        configurationTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.recoveryStore?.clear()
+                guard !Task.isCancelled else { return }
+                self.restoringConfiguration = true
+                self.isEnabled = false
+                self.restoringConfiguration = false
+                self.deactivate()
+                self.bookmarkData = nil
+                self.persistedFolderDisplayPath = nil
+                self.clearLegacyConfiguration()
+                self.errorMessage = nil
+            } catch is CancellationError { return }
+            catch { self.errorMessage = "无法解除同步绑定，请稍后重试。" }
         }
     }
 
@@ -91,6 +171,7 @@ final class FolderSyncController {
     }
 
     func selectFolder(_ url: URL) {
+        configurationTask?.cancel()
         folderAccessTask?.cancel()
         folderAccessTimeoutTask?.cancel()
         let generation = UUID()
@@ -127,6 +208,10 @@ final class FolderSyncController {
     }
 
     func appBecameActive() {
+        if recoveryStore != nil, !recoveryLoaded, let store {
+            attach(to: store)
+            return
+        }
         guard isEnabled, store != nil else { return }
         if selectedFolderURL != nil {
             syncNow()
@@ -276,7 +361,14 @@ final class FolderSyncController {
             } catch is CancellationError {
                 return
             } catch {
-                self.errorMessage = SyncError.folderUnavailable.localizedDescription
+                await bookmarkStore.stopAccessing()
+                guard self.folderAccessGeneration == generation else { return }
+                let code = (error as NSError).code
+                let invalid = (error as NSError).domain == NSCocoaErrorDomain
+                    && [CocoaError.fileReadCorruptFile.rawValue, CocoaError.fileReadNoPermission.rawValue].contains(code)
+                self.errorMessage = invalid
+                    ? "同步授权已失效，请重新选择文件夹。"
+                    : "同步文件夹暂时不可用，请稍后重试或重新选择。恢复信息已保留。"
             }
         }
     }
@@ -317,6 +409,7 @@ final class FolderSyncController {
         defaults.set(bookmarkData, forKey: SyncPreferenceKeys.bookmark)
         defaults.set(persistedFolderDisplayPath, forKey: SyncPreferenceKeys.folderDisplayPath)
         errorMessage = nil
+        persistRecoveryConfiguration()
     }
 
     private func scheduleSync(after delay: Duration, applyMergedRecords: Bool) {

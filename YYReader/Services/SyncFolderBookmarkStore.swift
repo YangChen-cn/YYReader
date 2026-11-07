@@ -57,6 +57,13 @@ actor SyncFolderBookmarkStore: SyncFolderBookmarkAccessing {
         )
         let started = startAccess(url)
         do {
+            #if os(iOS)
+            try SyncFileAccess.coordinate(at: url, writing: false) { url in
+                guard try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else {
+                    throw CocoaError(.fileReadNoSuchFile)
+                }
+            }
+            #endif
             let refreshedBookmarkData = isStale ? try bookmarkData(url) : nil
             try Task.checkCancellation()
             replaceAccess(with: url, started: started)
