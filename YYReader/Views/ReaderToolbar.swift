@@ -4,6 +4,7 @@ struct ReaderToolbar: ToolbarContent {
     @Binding var showingAppearancePopover: Bool
     @Binding var showingDownloadProgress: Bool
     let canManageBook: Bool
+    let isTavernMode: Bool
     let isAcademicMode: Bool
     let isManga: Bool
     let canRefreshCatalog: Bool
@@ -35,7 +36,7 @@ struct ReaderToolbar: ToolbarContent {
         }
 
         ToolbarItemGroup(placement: .primaryAction) {
-            if !isManga { Button(
+            if !isManga && !isTavernMode { Button(
                 isAcademicMode ? "退出论文伪装" : "论文伪装模式",
                 systemImage: isAcademicMode ? "graduationcap.fill" : "graduationcap",
                 action: toggleAcademicMode

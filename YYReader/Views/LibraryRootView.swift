@@ -47,6 +47,7 @@ struct LibraryRootView: View {
                     showingAppearancePopover: $showingAppearancePopover,
                     showingDownloadProgress: $showingDownloadProgress,
                     canManageBook: store.selectedBook != nil,
+                    isTavernMode: presentationModeName == ReaderPresentationMode.sillyTavern.rawValue,
                     isAcademicMode: isAcademicMode,
                     isManga: store.selectedChapter?.isManga == true,
                     canRefreshCatalog: store.canRefreshSelectedCatalog,
@@ -188,7 +189,7 @@ struct LibraryRootView: View {
             canNavigateNextChapter: isReading && store.chapterNavigationSnapshot.hasNext && !store.isLoading,
             canToggleCatalog: isReading,
             canChangeAppearance: isReading,
-            canToggleAcademicMode: isReading,
+            canToggleAcademicMode: isReading && presentationModeName != ReaderPresentationMode.sillyTavern.rawValue,
             addURL: showAddURL,
             refreshCatalog: refreshCatalog,
             previousChapter: store.goToPreviousChapter,
@@ -255,6 +256,7 @@ struct LibraryRootView: View {
     }
 
     private func toggleAcademicMode() {
+        guard presentationModeName != ReaderPresentationMode.sillyTavern.rawValue else { return }
         presentationModeName = isAcademicMode
             ? ReaderPresentationMode.normal.rawValue
             : ReaderPresentationMode.academicPaper.rawValue
