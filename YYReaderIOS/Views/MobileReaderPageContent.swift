@@ -17,7 +17,7 @@ struct MobileReaderPageContent: View {
         }
         .frame(width: max(layout.width - 2, 1), alignment: .leading)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
+        .padding(.vertical, 8)
         .textSelection(.enabled)
     }
 }

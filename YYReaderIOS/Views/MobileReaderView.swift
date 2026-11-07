@@ -173,7 +173,7 @@ struct MobileReaderView: View {
                         .foregroundStyle(.secondary)
                         .frame(minWidth: 38, alignment: .trailing)
                         .accessibilityHidden(true)
-                    Slider(value: $sliderIndex, in: 0...Double(max(paragraphCount - 1, 1)), step: 1,
+                    Slider(value: $sliderIndex, in: 0...Double(max(paragraphCount - 1, 1)),
                            onEditingChanged: scrubProgress) { Text("阅读进度") }
                         .disabled(paragraphCount < 2)
                         .accessibilityValue(Text("\(progressPercentage)%"))

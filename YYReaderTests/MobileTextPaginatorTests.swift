@@ -74,6 +74,19 @@ struct MobileTextPaginatorTests {
         await #expect(throws: CancellationError.self) { try await task.value }
     }
 
+    @Test
+    func shortParagraphsDoNotAccumulateTrailingLineSpacing() async throws {
+        let font = MobileReadingFont.resolve(.system, size: 20)
+        let gap = 12.0
+        let height = font.lineHeight * 8 + gap * 7 + 2
+        let config = MobilePaginationLayout(width: 300, height: height, fontName: font.fontName,
+            fontSize: 20, lineHeight: font.lineHeight, lineSpacing: 8,
+            paragraphSpacing: gap, usesFirstLineIndent: false)
+        let pages = try await MobileTextPaginator().pages(paragraphs: Array(repeating: "A", count: 16), layout: config)
+        #expect(pages.count == 2)
+        #expect(pages.allSatisfy { $0.fragments.count == 8 })
+    }
+
     private func layout(width: Double, height: Double, size: Double = 20) -> MobilePaginationLayout {
         let font = MobileReadingFont.resolve(.system, size: size)
         return MobilePaginationLayout(width: width, height: height, fontName: font.fontName,

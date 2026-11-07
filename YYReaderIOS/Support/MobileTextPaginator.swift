@@ -50,29 +50,34 @@ actor MobileTextPaginator {
                 try Task.checkCancellation()
                 let gap = fragments.isEmpty ? 0 : layout.paragraphSpacing
                 let available = max(remainingHeight - gap, 0)
-                let path = CGPath(rect: CGRect(x: 0, y: 0, width: width, height: available), transform: nil)
-                let frame = CTFramesetterCreateFrame(setter, CFRange(location: offset, length: 0), path, nil)
-                var length = CTFrameGetVisibleStringRange(frame).length
-                if length == 0, !fragments.isEmpty {
+                // SwiftUI adds lineSpacing between lines, never after the final
+                // line of a Text. Framesetter heights include trailing leading,
+                // which accumulated across paragraphs and left a large blank.
+                if available < layout.lineHeight, !fragments.isEmpty {
                     finishPage()
                     continue
                 }
-                // Do not split emoji, combining marks or a surrogate pair. Even
-                // very narrow viewports must advance by at least one whole character.
-                if length > 0 {
-                    let end = offset + length
-                    if end < source.length {
-                        let character = source.rangeOfComposedCharacterSequence(at: end)
-                        if character.location < end { length = character.location - offset }
+                let lineAdvance = max(layout.lineHeight + layout.lineSpacing, 1)
+                let capacity = max(1, Int(floor((available + layout.lineSpacing + 0.001) / lineAdvance)))
+                let typesetter = CTFramesetterGetTypesetter(setter)
+                var end = offset
+                var lines = 0
+                while end < source.length, lines < capacity {
+                    try Task.checkCancellation()
+                    var count = CTTypesetterSuggestLineBreak(typesetter, end, width)
+                    if count > 0, end + count < source.length {
+                        let character = source.rangeOfComposedCharacterSequence(at: end + count)
+                        if character.location < end + count { count = character.location - end }
                     }
+                    if count == 0 { count = source.rangeOfComposedCharacterSequence(at: end).length }
+                    end += count
+                    lines += 1
                 }
-                if length == 0 { length = source.rangeOfComposedCharacterSequence(at: offset).length }
-                let range = CFRange(location: offset, length: length)
-                let size = CTFramesetterSuggestFrameSizeWithConstraints(setter, range, nil,
-                                                                       CGSize(width: width, height: .greatestFiniteMagnitude), nil)
+                let length = end - offset
+                let usedHeight = Double(lines) * layout.lineHeight + Double(max(lines - 1, 0)) * layout.lineSpacing
                 fragments.append(.init(paragraphIndex: index, utf16Offset: offset,
                                        text: source.substring(with: NSRange(location: offset, length: length))))
-                remainingHeight -= ceil(size.height) + gap
+                remainingHeight -= usedHeight + gap
                 offset += length
                 if offset < source.length { finishPage() }
             }

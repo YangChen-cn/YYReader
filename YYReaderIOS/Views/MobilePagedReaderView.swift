@@ -30,7 +30,7 @@ struct MobilePagedReaderView: View {
                     width: ReaderViewportLayout.effectiveContentWidth(preferredWidthEM: contentWidth,
                                                                       fontSize: fontSize * textScale,
                                                                       viewportWidth: geometry.size.width).rounded(.down),
-                    height: max((geometry.size.height * displayScale).rounded(.down) / displayScale - 24, 1), fontName: font.fontName,
+                    height: max((geometry.size.height * displayScale).rounded(.down) / displayScale - 16, 1), fontName: font.fontName,
                     fontSize: font.pointSize, lineHeight: font.lineHeight,
                     lineSpacing: lineSpacing * fontSize * textScale,
                     paragraphSpacing: paragraphSpacing * fontSize * textScale, usesFirstLineIndent: indent
