@@ -92,6 +92,16 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
             )
             #endif
         case .light:
+            #if os(iOS)
+            (
+                Color(red: 0.978, green: 0.974, blue: 0.958),
+                Color(red: 0.280, green: 0.440, blue: 0.610),
+                Color(red: 0.150, green: 0.150, blue: 0.140),
+                Color(red: 0.380, green: 0.370, blue: 0.350),
+                Color(red: 0.540, green: 0.530, blue: 0.500),
+                Color(red: 0.860, green: 0.850, blue: 0.820)
+            )
+            #else
             (
                 Color(red: 0.975, green: 0.978, blue: 0.973),
                 Color(red: 0.180, green: 0.440, blue: 0.720),
@@ -100,6 +110,7 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
                 Color(red: 0.520, green: 0.540, blue: 0.560),
                 Color(red: 0.850, green: 0.860, blue: 0.870)
             )
+            #endif
         case .rose:
             (
                 Color(red: 0.965, green: 0.925, blue: 0.930),
@@ -110,6 +121,16 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
                 Color(red: 0.870, green: 0.780, blue: 0.800)
             )
         case .sepia:
+            #if os(iOS)
+            (
+                Color(red: 0.945, green: 0.918, blue: 0.867),
+                Color(red: 0.640, green: 0.390, blue: 0.280),
+                Color(red: 0.230, green: 0.190, blue: 0.150),
+                Color(red: 0.440, green: 0.390, blue: 0.340),
+                Color(red: 0.580, green: 0.530, blue: 0.470),
+                Color(red: 0.840, green: 0.800, blue: 0.730)
+            )
+            #else
             (
                 Color(red: 0.949, green: 0.925, blue: 0.878),
                 Color(red: 0.700, green: 0.400, blue: 0.280),
@@ -118,6 +139,7 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
                 Color(red: 0.580, green: 0.510, blue: 0.440),
                 Color(red: 0.850, green: 0.800, blue: 0.720)
             )
+            #endif
         case .mist:
             (
                 Color(red: 0.928, green: 0.938, blue: 0.937),
@@ -137,6 +159,16 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
                 Color(red: 0.790, green: 0.850, blue: 0.810)
             )
         case .dark:
+            #if os(iOS)
+            (
+                Color(red: 0.130, green: 0.140, blue: 0.145),
+                Color(red: 0.740, green: 0.650, blue: 0.480),
+                Color(red: 0.880, green: 0.880, blue: 0.860),
+                Color(red: 0.660, green: 0.670, blue: 0.660),
+                Color(red: 0.500, green: 0.520, blue: 0.510),
+                Color(red: 0.250, green: 0.270, blue: 0.270)
+            )
+            #else
             (
                 Color(red: 0.145, green: 0.145, blue: 0.137),
                 Color(red: 0.780, green: 0.620, blue: 0.360),
@@ -145,6 +177,7 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
                 Color(red: 0.522, green: 0.510, blue: 0.482),
                 Color(red: 0.255, green: 0.255, blue: 0.243)
             )
+            #endif
         case .midnight:
             (
                 Color(red: 0.114, green: 0.133, blue: 0.157),

@@ -1,6 +1,27 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "返回书架" : {
+      "extractionState" : "manual"
+    },
+    "阅读主题" : {
+      "extractionState" : "manual"
+    },
+    "字体与排版" : {
+      "extractionState" : "manual"
+    },
+    "段距" : {
+      "extractionState" : "manual"
+    },
+    "阅读进度" : {
+      "extractionState" : "manual"
+    },
+    "主题：%@" : {
+      "extractionState" : "manual"
+    },
+    "更多" : {
+      "extractionState" : "manual"
+    },
     "不是本地 TXT" : {
       "extractionState" : "manual"
     },

@@ -4,12 +4,17 @@ struct ReaderView: View {
     @Bindable var store: LibraryStore
     let keyboardNavigationEnabled: Bool
     var showsPagingControls = true
+    var mangaControlsVisible: Bool? = nil
+    var onMangaScrubbingChanged: (Bool) -> Void = { _ in }
     var loadsChapterAutomatically = true
     var togglePagingControls: () -> Void = {}
     var automaticMangaLandscape = false
     @AppStorage(ReaderPreferenceKeys.theme) private var themeName = ReaderTheme.system.rawValue
     @AppStorage(ReaderPreferenceKeys.presentationMode) private var presentationModeName = ReaderPresentationMode.normal.rawValue
     @AppStorage(ReaderPreferenceKeys.pageTurnMode) private var pageTurnMode = ReaderPageTurnMode.verticalScroll.rawValue
+    #if os(iOS)
+    @Environment(\.colorScheme) private var colorScheme
+    #endif
 
     var body: some View {
         let theme = ReaderTheme(rawValue: themeName) ?? .system
@@ -30,9 +35,9 @@ struct ReaderView: View {
             Group {
                 if let chapter, chapter.isCached {
                     if chapter.isManga {
-                        MangaReaderView(store: store, chapter: chapter, showsControls: showsPagingControls,
+                        MangaReaderView(store: store, chapter: chapter, showsControls: mangaControlsVisible ?? showsPagingControls,
                                         keyboardNavigationEnabled: keyboardNavigationEnabled, toggleControls: togglePagingControls,
-                                        automaticLandscape: automaticMangaLandscape)
+                                        automaticLandscape: automaticMangaLandscape, onScrubbingChanged: onMangaScrubbingChanged)
                             .id(chapter.id)
                     } else {
                     #if os(iOS)
@@ -92,6 +97,9 @@ struct ReaderView: View {
                 )
             }
         }
+        #if os(iOS)
+        .environment(\.colorScheme, theme.preferredColorScheme ?? colorScheme)
+        #endif
     }
 
     private func retrySelectedChapter() {

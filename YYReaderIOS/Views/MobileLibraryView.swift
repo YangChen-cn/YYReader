@@ -44,7 +44,7 @@ struct MobileLibraryView: View {
                             }
                         }
                 }
-                .presentationDetents([.large])
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
             }
             .sheet(item: $transfer.pendingImport) { pending in
@@ -175,7 +175,8 @@ struct MobileLibraryView: View {
                 }
             }
             .navigationDestination(for: Destination.self) { _ in
-                MobileReaderView(store: store, showLibrary: showLibrary, showCatalog: showCatalog)
+                MobileReaderView(store: store, showLibrary: showLibrary, showCatalog: showCatalog,
+                                 isCatalogPresented: showingCatalog)
                     .navigationBarBackButtonHidden(true)
             }
         }

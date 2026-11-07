@@ -5,7 +5,6 @@ import SwiftUI
 struct YYReaderIOSApp: App {
     private let container: ModelContainer
     @State private var services = AppServices()
-    @AppStorage(ReaderPreferenceKeys.theme) private var themeName = ReaderTheme.system.rawValue
 
     init() {
         let inMemory = ProcessInfo.processInfo.arguments.contains("--ui-testing")
@@ -31,7 +30,6 @@ struct YYReaderIOSApp: App {
         }
         #endif
         ReaderPreferenceMigration.migrateIfNeeded()
-        _themeName = AppStorage(wrappedValue: ReaderTheme.system.rawValue, ReaderPreferenceKeys.theme)
         do {
             let configuration: ModelConfiguration
             #if DEBUG
@@ -66,7 +64,6 @@ struct YYReaderIOSApp: App {
                 #endif
             }
                 .environment(services)
-                .preferredColorScheme(ReaderTheme(rawValue: themeName)?.preferredColorScheme)
         }
         .modelContainer(container)
     }

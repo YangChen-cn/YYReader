@@ -8,6 +8,7 @@ struct MangaReaderView: View {
     let imageCache: MangaImageCache
     var toggleControls: () -> Void = {}
     let automaticLandscape: Bool
+    let onScrubbingChanged: (Bool) -> Void
     @AppStorage(ReaderPreferenceKeys.mangaPageTurnMode) private var pageTurnMode = ReaderPageTurnMode.mangaDefault.rawValue
     @AppStorage(ReaderPreferenceKeys.prefetchNext) private var prefetch = true
     @AppStorage(ReaderPreferenceKeys.mangaPageLayout) private var layoutName = MangaPageLayout.Mode.automatic.rawValue
@@ -43,7 +44,8 @@ struct MangaReaderView: View {
 
     init(store: LibraryStore, chapter: Chapter, showsControls: Bool = true,
          keyboardNavigationEnabled: Bool = true, imageCache: MangaImageCache = .shared,
-         toggleControls: @escaping () -> Void = {}, automaticLandscape: Bool = false) {
+         toggleControls: @escaping () -> Void = {}, automaticLandscape: Bool = false,
+         onScrubbingChanged: @escaping (Bool) -> Void = { _ in }) {
         self.store = store
         self.chapter = chapter
         self.showsControls = showsControls
@@ -51,6 +53,7 @@ struct MangaReaderView: View {
         self.toggleControls = toggleControls
         self.imageCache = imageCache
         self.automaticLandscape = automaticLandscape
+        self.onScrubbingChanged = onScrubbingChanged
         let index = Self.resolvedPageIndex(request: store.readerScrollRequest, chapter: chapter,
                                           total: chapter.imageSourceURLs.count)
             ?? min(max(chapter.topParagraphIndex, 0), max(chapter.imageSourceURLs.count - 1, 0))
@@ -118,10 +121,22 @@ struct MangaReaderView: View {
                 }
             }
             .onGeometryChange(for: CGSize.self) { $0.size } action: { canvasSize = $0 }
+            #if os(macOS)
             if showsControls {
                 pagingControls(layout: layout, group: group, total: pages.count)
             }
+            #endif
         }
+        #if os(iOS)
+        .overlay(alignment: .bottom) {
+            if showsControls {
+                pagingControls(layout: layout, group: group, total: pages.count)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 94)
+            }
+        }
+        #endif
         .task(id: prefetchKey(group: group)) {
             await prefetchImages(after: usesPages ? max(group.upperBound - 1, pageIndex) : pageIndex, pages: pages, referer: referer)
         }
@@ -273,6 +288,7 @@ struct MangaReaderView: View {
                 .accessibilityIdentifier("manga.pageCount")
             Slider(value: $sliderValue, in: 1...Double(max(2, total)), step: 1, onEditingChanged: { editing in
                 isScrubbing = editing
+                onScrubbingChanged(editing)
                 if !editing { seek(to: Int(sliderValue.rounded()) - 1) }
             }) { Text("跳到图片") }
             .disabled(total <= 1)

@@ -17,10 +17,14 @@ enum ReaderFontFamily: String, CaseIterable, Identifiable {
         }
     }
 
-    func font(size: Double) -> Font {
+    @MainActor func font(size: Double) -> Font {
         switch self {
         case .system: .system(size: size)
+        #if os(iOS)
+        case .serif: Font(MobileReadingFont.resolve(.serif, size: size))
+        #else
         case .serif: .system(size: size, design: .serif)
+        #endif
         case .rounded: .system(size: size, design: .rounded)
         case .kaiti: .custom("Kaiti SC", fixedSize: size)
         }
