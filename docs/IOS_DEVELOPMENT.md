@@ -102,7 +102,7 @@ YYReader 的 `resign.ipa` 可以交给 SideStore 重新签名。SideStore 的 [�
 日常 UI 不使用 Computer Use 自动点击或截图。真实网站和主观视觉效果由用户在设备上验收，测试使用精简 fixture。
 
 
-## 1.5.0 同步授权恢复（待发布）
+## 1.5.0 同步授权恢复
 
 iOS 将文件夹 Bookmark、同步开关和显示路径保存在本机 Keychain，使用 `AfterFirstUnlockThisDeviceOnly`，不通过 iCloud 钥匙串同步。现有 UserDefaults 配置在写入 Keychain 成功后才清理；保存失败时保留本地配置并提示重试。
 
@@ -110,6 +110,6 @@ iOS 将文件夹 Bookmark、同步开关和显示路径保存在本机 Keychain�
 
 自动恢复属于 best-effort：Keychain 在卸载后的保留、侧载签名身份 / Team 是否一致，以及 File Provider 是否继续接受原 Bookmark 都可能影响恢复，仍保留手动选择共享文件夹入口。无需额外云服务或签名权限。
 
-当前只准备 1.5.0 源码、版本号与说明，未创建 GitHub Release 或上传 1.5.0 安装包。
+1.5.0 的 Mac DMG 和 iOS IPA 分别在 GitHub Releases 发布，iOS IPA 需使用侧载工具重新签名。
 
 Keychain 模拟器测试需要带应用身份及自身 Keychain 访问组的开发签名；完全不签名的测试产物会返回 `errSecMissingEntitlement (-34018)`。真机由 Xcode 或侧载工具的有效重签名提供应用身份，恢复信息只能由同一签名身份访问。
