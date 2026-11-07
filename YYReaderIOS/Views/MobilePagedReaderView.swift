@@ -31,7 +31,7 @@ struct MobilePagedReaderView: View {
                                                                       fontSize: fontSize * textScale,
                                                                       viewportWidth: geometry.size.width).rounded(.down),
                     height: max((geometry.size.height * displayScale).rounded(.down) / displayScale - 16, 1), fontName: font.fontName,
-                    fontSize: font.pointSize, lineHeight: font.lineHeight,
+                    fontSize: font.pointSize, lineHeight: MobileReadingFont.paginationLineHeight(font, displayScale: displayScale),
                     lineSpacing: lineSpacing * fontSize * textScale,
                     paragraphSpacing: paragraphSpacing * fontSize * textScale, usesFirstLineIndent: indent
                 )

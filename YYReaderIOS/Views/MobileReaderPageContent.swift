@@ -5,7 +5,9 @@ struct MobileReaderPageContent: View {
     let layout: MobilePaginationLayout
 
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: layout.paragraphSpacing) {
+        // A page has only a handful of fragments; eager layout keeps its height
+        // exact. The outer pager still lazily creates only nearby pages.
+        VStack(alignment: .leading, spacing: layout.paragraphSpacing) {
             ForEach(page.fragments) { fragment in
                 Text(fragment.text)
                     .font(.custom(layout.fontName, fixedSize: layout.fontSize))
