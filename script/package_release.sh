@@ -4,6 +4,7 @@ set -euo pipefail
 APP_NAME="YYReader"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
+SIGNING_IDENTITY="${YYREADER_MAC_SIGN_IDENTITY:--}"
 ENTITLEMENTS="$ROOT_DIR/YYReader/YYReader.entitlements"
 SWIFT_PATH_MAP="-file-prefix-map $ROOT_DIR=YYReaderBuild"
 # Normal releases are Apple-silicon only. Intel was built once for v1.0.0
@@ -30,6 +31,22 @@ cleanup() {
 }
 
 trap cleanup EXIT
+
+if [[ "$SIGNING_IDENTITY" != "-" ]]; then
+  identities="$(/usr/bin/security find-identity -v -p codesigning)"
+  if ! /usr/bin/awk -v wanted="$SIGNING_IDENTITY" '
+    /^[[:space:]]*[0-9]+\)/ {
+      name = $0
+      sub(/^[^"]*"/, "", name)
+      sub(/"$/, "", name)
+      if (name == wanted || tolower($2) == tolower(wanted)) found = 1
+    }
+    END { exit !found }
+  ' <<< "$identities"; then
+    echo "Code-signing identity is unavailable or untrusted: $SIGNING_IDENTITY" >&2
+    exit 1
+  fi
+fi
 
 cd "$ROOT_DIR"
 xcodegen generate
@@ -74,7 +91,7 @@ for ARCHITECTURE in "${ARCHITECTURES[@]}"; do
 
   /usr/bin/ditto "$SOURCE_APP" "$APP_COPY"
   sanitize_portable_bundle "$APP_COPY"
-  sign_portable_bundle "$APP_COPY" "$ENTITLEMENTS"
+  sign_portable_bundle "$APP_COPY" "$ENTITLEMENTS" "$SIGNING_IDENTITY"
   /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP_COPY"
   verify_portable_bundle "$APP_COPY" "$ROOT_DIR"
 

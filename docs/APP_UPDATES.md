@@ -16,7 +16,7 @@
 
 运行在 DMG、App Translocation、临时 Debug 启动副本或不可写目录时，不覆盖其他 App；改为提示移动 App 或使用发布页手动安装。安装不会更换数据目录，也不会清理书架和阅读缓存。导入或离线下载未结束时暂不安装。
 
-SHA-256 验证文件与 GitHub 元数据一致，代码签名验证包完整性；当前发布采用 ad-hoc 签名，校验不等于 Apple 公证或独立的发布者数字签名。可信来源仍依赖 GitHub 账户和 HTTPS。
+SHA-256 验证文件与 GitHub 元数据一致，代码签名验证包完整性；已有发布采用 ad-hoc 签名。打包时可用 `YYREADER_MAC_SIGN_IDENTITY` 指定钥匙串里的代码签名证书名称或指纹，主 App 和安装助手使用同一身份。自签证书依赖本机信任设置。面向其他 Mac 的 Apple 验证需要 Developer ID 签名与公证。
 
 ## iOS / iPadOS
 

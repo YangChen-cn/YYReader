@@ -45,6 +45,7 @@ sanitize_portable_bundle() {
 sign_portable_bundle() {
   local app_bundle="$1"
   local entitlements="$2"
+  local signing_identity="${3:--}"
   local executable_name
   local main_executable
   local macho_file
@@ -56,20 +57,20 @@ sign_portable_bundle() {
   # code first so the outer app signature seals the final nested-code state.
   while IFS= read -r -d '' macho_file; do
     if [[ "$macho_file" != "$main_executable" ]]; then
-      /usr/bin/codesign --force --sign - --timestamp=none "$macho_file"
+      /usr/bin/codesign --force --sign "$signing_identity" --timestamp=none "$macho_file"
     fi
   done < <(portable_bundle_macho_files "$app_bundle")
 
   # Seal the install helper's resources after sanitizing/signing its executable.
   # It runs independently; never apply the reader's sandbox entitlements to it.
   if [[ -d "$app_bundle/Contents/Helpers/YYReaderUpdater.app" ]]; then
-    /usr/bin/codesign --force --sign - --timestamp=none \
+    /usr/bin/codesign --force --sign "$signing_identity" --timestamp=none \
       "$app_bundle/Contents/Helpers/YYReaderUpdater.app"
   fi
 
   /usr/bin/codesign \
     --force \
-    --sign - \
+    --sign "$signing_identity" \
     --timestamp=none \
     --entitlements "$entitlements" \
     "$app_bundle"
