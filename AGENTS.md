@@ -73,7 +73,7 @@ Mac Debug 必须经现有脚本便携化、签名后交付 `dist/YYReader.app`�
 - 不提交 `DerivedData/`、`dist/`、Xcode 用户状态、网页抓取内容、Cookie 或临时文件；工程配置与生成的 `.xcodeproj` 保持一致。
 - 测试只覆盖本次风险与回归，fixture 使用精简自造内容，不依赖实时第三方网站、不提交完整版权章节。主观 UI 验收交给用户，不能声称编译通过等于界面通过。
 - 发布只更新指定平台版本，同步维护 `project.yml`、README、RELEASE_NOTES 和 About 可见内容，生成工程后提交，再推送 `main` 与对应版本标签。发布前确认仓库可见性。
-- Mac 发布 arm64 DMG。本机后续打包用 `YYREADER_MAC_SIGN_IDENTITY=yang ./script/package_release.sh`，签名身份不可用时先解决钥匙串配置。产物需通过 `codesign --verify --strict` 和 DMG 完整性检查；iOS IPA 供 SideStore 等侧载工具自行重新签名。只检查目标平台版本、架构、资源、包完整性和校验值，不重复构建已有产物。
+- Mac 发布 arm64 DMG。本机后续打包用 `YYREADER_MAC_SIGN_IDENTITY=CardPilot ./script/package_release.sh`，签名身份不可用时先解决钥匙串配置。产物需通过 `codesign --verify --strict` 和 DMG 完整性检查；iOS IPA 供 SideStore 等侧载工具自行重新签名。只检查目标平台版本、架构、资源、包完整性和校验值，不重复构建已有产物。
 - 图标与 Asset Catalog 必须进入目标资源；Mac 发布包含 `AppIcon.icns`、`Assets.car`，保持 `AppIcon` 配置。交付说明实际改动、必要检查结果和仍需人工验收的部分。
 
 更多实现细节按任务查阅 `docs/IOS_DEVELOPMENT.md`、`docs/MANGA_SUPPORT.md` 和 `shared/` 协议文档，不把全部说明堆进本文件。
