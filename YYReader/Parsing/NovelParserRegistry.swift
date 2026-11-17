@@ -3,6 +3,7 @@ import Foundation
 actor NovelParserRegistry {
     private let adapters: [any NovelSourceAdapter] = [
         WebtoonMangaAdapter(),
+        TWMangaAdapter(),
         GuaziMangaAdapter(),
         ZaiMangaAdapter(),
         HaoduoMangaAdapter(),
@@ -11,7 +12,7 @@ actor NovelParserRegistry {
         QidiySourceAdapter(),
         GenericNovelAdapter()
     ]
-    private let mangaAdapters: [any NovelSourceAdapter] = [WebtoonMangaAdapter(), GuaziMangaAdapter(), ZaiMangaAdapter(), HaoduoMangaAdapter(), DuokanMangaAdapter(), ManhuazhanMangaAdapter(), GenericMangaAdapter()]
+    private let mangaAdapters: [any NovelSourceAdapter] = [WebtoonMangaAdapter(), TWMangaAdapter(), GuaziMangaAdapter(), ZaiMangaAdapter(), HaoduoMangaAdapter(), DuokanMangaAdapter(), ManhuazhanMangaAdapter(), GenericMangaAdapter()]
     private let novelAdapters: [any NovelSourceAdapter] = [QidiySourceAdapter(), GenericNovelAdapter()]
 
     private func adapters(for type: BookContentType) -> [any NovelSourceAdapter] {
