@@ -80,7 +80,9 @@ Windows 交接：沿用上述章节 URL + 原始图片索引的稳定键，在�
 
 ## 实现与后续交接
 
-Mac 与 iOS 共用 `GuaziMangaAdapter`、`ZaiMangaAdapter`、`HaoduoMangaAdapter`、`ManhuazhanMangaAdapter`、`DuokanMangaAdapter`、`GenericMangaAdapter`、`MangaImageCache` 和 `MangaReaderView`。适配器沿用 `NovelSourceAdapter` 接口，解析结果增加 `imageURLs`，小说调用默认传空数组。
+Mac 与 iOS 共用 `GuaziMangaAdapter`、`ZaiMangaAdapter`、`HaoduoMangaAdapter`、`ManhuazhanMangaAdapter`、`DuokanMangaAdapter`、`WebtoonMangaAdapter`、`GenericMangaAdapter`、`MangaImageCache` 和 `MangaReaderView`。适配器沿用 `NovelSourceAdapter` 接口，解析结果增加 `imageURLs`，小说调用默认传空数组。
+
+WEBTOON 支持从公开作品目录或单话链接导入。图片只从正文阅读区读取，保留原顺序与上下话链接。导入时读取首个目录页，“刷新目录”按相邻页补齐章节。
 
 `Book.importContentType` 保存用户选择的 `auto / novel / manga`，`resolvedContentType` 记录实际解析结果；两字段均有 `auto` 默认值，供 SwiftData 对旧数据库自动迁移。章节是否有缓存仍以实际文字或图片列表判断，不能因用户选择“漫画”就标成已缓存。重新选择类型导入同一本书后，不符合该类型的旧章节缓存会重新加载，解析失败不覆盖旧内容。
 
